@@ -2,11 +2,9 @@
   "metadata": {
     "title": "OPDS Test Catalog"
   },
-  
   "links": [
     {"rel": "self", "href": "https://edrlab.github.io/opds-test-catalog/index.json", "type": "application/opds+json"}
   ],
-  
   "catalogs": [
     {
       "metadata": {
