@@ -26,6 +26,19 @@
     },
     {
       "metadata": {
+        "title": "Test Case for A11Y Metadata",
+        "description": "Contains every possible a11y metadata."
+      },
+      "links": [
+        {
+          "href": "https://rawcdn.githack.com/edrlab/thorium-reader-epub-tests/main/EPUB_Feeds_for_testing_purpose/opds-rare-epub-suit.json",
+          "type": "application/opds+json",
+          "rel": "http://opds-spec.org/catalog"
+        }
+      ]
+    },
+    {
+      "metadata": {
         "title": "Lirtuel",
         "country": "BEL",
         "description": "Lirtuel is useful for testing OPDS Authentication based on OAuth Implicit Grant."
