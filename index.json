@@ -8,37 +8,6 @@
   "catalogs": [
     {
       "metadata": {
-        "title": "EPUB Accessibility Test Suite",
-        "description": "Contains EPUB publications from DAISY, useful for testing reading systems."
-      },
-      "links": [
-        {
-          "href": "https://rawcdn.githack.com/daisy/epub-accessibility-tests/main/feeds/opds.json",
-          "type": "application/opds+json",
-          "rel": "http://opds-spec.org/catalog"
-        },
-        {
-          "href": "https://epubtest.org/test-books",
-          "type": "text/html",
-          "rel": "alternate"
-        }
-      ]
-    },
-    {
-      "metadata": {
-        "title": "Test Case for A11Y Metadata",
-        "description": "Contains every possible a11y metadata."
-      },
-      "links": [
-        {
-          "href": "https://rawcdn.githack.com/edrlab/thorium-reader-epub-tests/main/EPUB_Feeds_for_testing_purpose/opds-rare-epub-suit.json",
-          "type": "application/opds+json",
-          "rel": "http://opds-spec.org/catalog"
-        }
-      ]
-    },
-    {
-      "metadata": {
         "title": "Lirtuel",
         "country": "BEL",
         "description": "Lirtuel is useful for testing OPDS Authentication based on OAuth Implicit Grant."
@@ -73,7 +42,7 @@
     },
     {
       "metadata": {
-        "title": "Madrid",
+        "title": "eBiblio Madrid",
         "country": "ESP",
         "description": "Madrid is useful for testing OPDS Authentication based on OAuth Resource Owner Credentials Grant."
       },
@@ -91,6 +60,51 @@
           "href": "https://madrid.ebiblio.es/home",
           "type": "text/html",
           "rel": "alternate"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Bibliothèques de la Ville de Paris",
+        "country": "FRA",
+        "description": "Paris is an example of how we can also include libraries who only offer a website for their portal."
+      },
+      "links": [
+        {
+          "href": "https://bibliotheques.paris.fr/numerique/",
+          "type": "text/html",
+          "rel": "http://opds-spec.org/catalog"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "EPUB Accessibility Test Suite",
+        "description": "Contains EPUB publications from DAISY, useful for testing reading systems."
+      },
+      "links": [
+        {
+          "href": "https://rawcdn.githack.com/daisy/epub-accessibility-tests/main/feeds/opds.json",
+          "type": "application/opds+json",
+          "rel": "http://opds-spec.org/catalog"
+        },
+        {
+          "href": "https://epubtest.org/test-books",
+          "type": "text/html",
+          "rel": "alternate"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Test Case for A11Y Metadata",
+        "description": "Contains every possible a11y metadata."
+      },
+      "links": [
+        {
+          "href": "https://rawcdn.githack.com/edrlab/thorium-reader-epub-tests/main/EPUB_Feeds_for_testing_purpose/opds-rare-epub-suit.json",
+          "type": "application/opds+json",
+          "rel": "http://opds-spec.org/catalog"
         }
       ]
     }
