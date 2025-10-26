@@ -1,9 +1,9 @@
 {
   "metadata": {
-    "title": "OPDS Test Catalog"
+    "title": "OPDS Catalog Registry"
   },
   "links": [
-    {"rel": "self", "href": "https://edrlab.github.io/opds-test-catalog/index.json", "type": "application/opds+json"}
+    {"rel": "self", "href": "https://edrlab.github.io/catalog-registry/index.json", "type": "application/opds+json"}
   ],
   "catalogs": [
     {
@@ -50,8 +50,19 @@
           "rel": "http://opds-spec.org/catalog"
         },
         {
+          "href": "https://www.lirtuel.be/v1/my_profile/activity.opds2",
+          "type": "application/opds+json",
+          "rel": "http://opds-spec.org/shelf"
+        },
+        {
           "href": "https://www.lirtuel.be/v1/sign_in.opds2",
-          "type": "application/opds-authentication+json"
+          "type": "application/opds-authentication+json",
+          "rel": "authenticate"
+        },
+        {
+          "href": "https://www.lirtuel.be/v1/my_profile.opds2",
+          "type": "application/opds-profile+json",
+          "rel": "profile"
         },
         {
           "href": "http://www.lirtuel.be/home",
