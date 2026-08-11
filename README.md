@@ -1,8 +1,8 @@
-# OPDS Catalog Registry
+# Catalog Registry
 
 This project is part of EDRLab's OPDS Interoperability Task Force.
 
-For the time being, this will be a static list of catalogs containing:
+The Catalog Registry will contain:
 
 - public libraries
 - academic libraries
@@ -11,14 +11,12 @@ For the time being, this will be a static list of catalogs containing:
 - public domain publications
 - and open access publications
 
-## 2026 and beyond
+This Catalog Registry will be pre-loaded in Thorium Reader (all platforms) and dedicated reading devices, providing discoverability for libraries and their patrons on a wide variety of platforms.
 
-We'll move beyond a static list in 2026, turning this repository into a full fledged application where users will be able to:
+## User-facing features
 
-- browse
-- search
-- or geolocate catalogs that are near them
+This project will serve a registry using both OPDS 2.0 and HTML with the following feature-set:
 
-## `opds://` callback
-
-<a href="opds://edrlab.github.io/catalog-registry/index.json">Click on this link to add the registry in a compatible app</a>
+- List of recommended catalogs (language specific)
+- Full-text search
+- Geo-based search
