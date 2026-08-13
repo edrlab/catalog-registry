@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "title": "Project Gutenberg",
+    "kind": ["open"],
+    "publicationTypes": ["ebook"],
+    "color": "red"
+  },
+  "links": [
+    {
+      "href": "https://opds-test.pglaf.org/opds/",
+      "type": "application/opds+json",
+      "rel": "catalog"
+    },
+    {
+      "href": "https://gutenberg.org/apple-touch-icon.png",
+      "type": "image/png",
+      "rel": "icon"
+    },
+    {
+      "href": "https://gutenberg.org",
+      "type": "text/html",
+      "rel": "alternate"
+    }
+  ]
+}

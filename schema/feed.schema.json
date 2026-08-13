@@ -65,5 +65,10 @@
       },
       "uniqueItems": true
     }
-  }
+  },
+  "required": [
+    "metadata",
+    "links",
+    "catalogs"
+  ]
 }

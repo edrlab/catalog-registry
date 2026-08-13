@@ -1,0 +1,15 @@
+{
+  "metadata": {
+    "title": "Librivox",
+    "kind": ["open"],
+    "publicationTypes": ["audiobook"],
+    "color": "gray"
+  },
+  "links": [
+    {
+      "href": "https://librivox.org/",
+      "type": "text/html",
+      "rel": "catalog"
+    }
+  ]
+}

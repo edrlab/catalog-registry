@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "title": "Recommended Catalogs"
+  },
+  "links": [
+    {
+      "rel": "self", 
+      "href": "https://edrlab.github.io/catalog-registry/demo/index.json", 
+      "type": "application/opds+json"
+    },
+    {
+      "rel": "search", 
+      "href": "https://edrlab.github.io/catalog-registry/demo/search.json{?query}", 
+      "type": "application/opds+json",
+      "templated": true
+    }
+  ],
+  "catalogs": [
+    {
+      "metadata": {
+        "title": "Project Gutenberg",
+        "kind": ["open"],
+        "publicationTypes": ["ebook"],
+        "color": "red"
+      },
+      "links": [
+        {
+          "href": "https://opds-test.pglaf.org/opds/",
+          "type": "application/opds+json",
+          "rel": "catalog"
+        },
+        {
+          "href": "https://gutenberg.org/apple-touch-icon.png",
+          "type": "image/png",
+          "rel": "icon"
+        },
+        {
+          "href": "https://gutenberg.org",
+          "type": "text/html",
+          "rel": "alternate"
+        },
+        {
+          "href": "https://edrlab.github.io/catalog-registry/demo/catalogs/gutenberg.json",
+          "type": "application/thorium-reader-catalog+json",
+          "rel": "self"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Librivox",
+        "kind": ["open"],
+        "publicationTypes": ["audiobook"],
+        "color": "gray"
+      },
+      "links": [
+        {
+          "href": "https://librivox.org/",
+          "type": "text/html",
+          "rel": "catalog"
+        },
+        {
+          "href": "https://edrlab.github.io/catalog-registry/demo/catalogs/librivox.json",
+          "type": "application/thorium-reader-catalog+json",
+          "rel": "self"
+        }
+      ]
+    }
+  ]
+}

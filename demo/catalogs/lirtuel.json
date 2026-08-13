@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "title": "Lirtuel",
+    "kind": ["public"],
+    "color": "red",
+    "supportedLanguages": ["FR", "EN"],
+    "publicationTypes": ["ebook", "comic"],
+    "country": "BE",
+    "subdivisions": ["BE-WAL", "BE-BRU"],
+    "coverage": "subdivisions"
+  },
+  "links": [
+    {
+      "href": "https://www.lirtuel.be/v1/home.opds2",
+      "type": "application/opds+json",
+      "rel": "catalog"
+    },
+    {
+      "href": "https://www.lirtuel.be/v1/my_profile/activity.opds2",
+      "type": "application/opds+json",
+      "rel": "shelf"
+    },
+    {
+      "href": "https://www.lirtuel.be/v1/sign_in.opds2",
+      "type": "application/opds-authentication+json",
+      "rel": "authenticate"
+    },
+    {
+      "href": "https://www.lirtuel.be/v1/my_profile.opds2",
+      "type": "application/opds-profile+json",
+      "rel": "profile"
+    },
+    {
+      "href": "https://www.lirtuel.be/v1/resources.opds2{?query}",
+      "type": "application/opds+json",
+      "rel": "search",
+      "templated": true
+    },
+    {
+      "href": "https://www.lirtuel.be",
+      "type": "text/html",
+      "rel": "alternate"
+    },
+    {
+      "href": "https://edrlab.github.io/catalog-registry/demo/catalogs/lirtuel.json",
+      "type": "application/thorium-catalog+json",
+      "rel": "self"
+    }
+  ]
+}
