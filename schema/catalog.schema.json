@@ -30,7 +30,7 @@
           "type": "string",
         },
         "color": {
-          "type": "array",
+          "type": "string",
           "enum": [
             "gray",
             "red",
@@ -51,15 +51,18 @@
         },
         "publicationTypes": {
           "type": "array",
-          "enum": [
-            "ebook",
-            "audiobook",
-            "comic",
-            "newspaper",
-            "magazine",
-            "journal",
-            "article"
-          ]
+          "items": {
+            "type": "string",
+            "enum": [
+              "ebook",
+              "audiobook",
+              "comic",
+              "newspaper",
+              "magazine",
+              "journal",
+              "article"
+            ]
+          }
         },
         "country": {
           "type": "string",
