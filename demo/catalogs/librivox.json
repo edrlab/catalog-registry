@@ -10,6 +10,11 @@
       "href": "https://librivox.org/",
       "type": "text/html",
       "rel": "catalog"
+    },
+    {
+      "href": "https://edrlab.github.io/catalog-registry/demo/catalogs/librivox.json",
+      "type": "application/opds-catalog+json",
+      "rel": "self"
     }
   ]
 }

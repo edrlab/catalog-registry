@@ -42,7 +42,7 @@
         },
         {
           "href": "https://edrlab.github.io/catalog-registry/demo/catalogs/gutenberg.json",
-          "type": "application/thorium-reader-catalog+json",
+          "type": "application/opds-catalog+json",
           "rel": "self"
         }
       ]
@@ -62,7 +62,7 @@
         },
         {
           "href": "https://edrlab.github.io/catalog-registry/demo/catalogs/librivox.json",
-          "type": "application/thorium-reader-catalog+json",
+          "type": "application/opds-catalog+json",
           "rel": "self"
         }
       ]

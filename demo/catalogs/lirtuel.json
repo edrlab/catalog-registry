@@ -43,7 +43,7 @@
     },
     {
       "href": "https://edrlab.github.io/catalog-registry/demo/catalogs/lirtuel.json",
-      "type": "application/thorium-reader-catalog+json",
+      "type": "application/opds-catalog+json",
       "rel": "self"
     }
   ]

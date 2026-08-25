@@ -20,6 +20,11 @@
       "href": "https://gutenberg.org",
       "type": "text/html",
       "rel": "alternate"
+    },
+    {
+      "href": "https://edrlab.github.io/catalog-registry/demo/catalogs/gutenberg.json",
+      "type": "application/opds-catalog+json",
+      "rel": "self"
     }
   ]
 }
