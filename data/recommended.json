@@ -33,7 +33,8 @@
         "title": "Standard Ebooks",
         "kind": ["open"],
         "publicationTypes": ["ebook"],
-        "color": "gray"
+        "color": "gray",
+        "supportedLanguages": ["EN"]
       },
       "links": [
         {
