@@ -1,0 +1,83 @@
+{
+  "metadata": {
+    "title": "Recommended Catalogs"
+  },
+  "catalogs": [
+    {
+      "metadata": {
+        "title": "Project Gutenberg",
+        "kind": ["open"],
+        "publicationTypes": ["ebook"],
+        "color": "red"
+      },
+      "links": [
+        {
+          "href": "https://opds-test.pglaf.org/opds/",
+          "type": "application/opds+json",
+          "rel": "catalog"
+        },
+        {
+          "href": "https://gutenberg.org/apple-touch-icon.png",
+          "type": "image/png",
+          "rel": "icon"
+        },
+        {
+          "href": "https://gutenberg.org",
+          "type": "text/html",
+          "rel": "alternate"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Standard Ebooks",
+        "kind": ["open"],
+        "publicationTypes": ["ebook"],
+        "color": "gray"
+      },
+      "links": [
+        {
+          "href": "https://standardebooks.org/",
+          "type": "text/html",
+          "rel": "catalog"
+        },
+        {
+          "href": "https://standardebooks.org/images/favicons/apple-touch-icon.png",
+          "type": "image/png",
+          "rel": "icon"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Ebooks libres et gratuits",
+        "kind": ["open"],
+        "publicationTypes": ["ebook"],
+        "color": "blue",
+        "supportedLanguages": ["FR"]
+      },
+      "links": [
+        {
+          "href": "https://www.ebooksgratuits.com/",
+          "type": "text/html",
+          "rel": "catalog"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Librivox",
+        "kind": ["open"],
+        "publicationTypes": ["audiobook"],
+        "color": "gray"
+      },
+      "links": [
+        {
+          "href": "https://librivox.org/",
+          "type": "text/html",
+          "rel": "catalog"
+        }
+      ]
+    }
+  ]
+}
