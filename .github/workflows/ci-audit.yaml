@@ -1,6 +1,9 @@
 name: ci-audit
 on:
-  # No `push`: the advisory set does not change between a push and its pull request.
+  # `push` as well as `pull_request`, which does duplicate a run on a branch that has a PR
+  # open. That is the price of a working status badge: a badge reads the default branch, and
+  # a workflow that never runs there has no status to report.
+  push:
   pull_request:
   schedule:
     # An advisory published today should not wait for the next pull request.
@@ -19,9 +22,9 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
         with:
           enable-cache: true
-      # Runtime dependencies only. `conventions/security.md` §8: review, do not gate — a
-      # blocking check on a two-person project mostly stalls PRs over advisories in
-      # transitive test dependencies that production never reaches.
+      # Runtime dependencies only, and reporting rather than gating. A blocking check on a
+      # two-person project mostly stalls pull requests over advisories in transitive test
+      # dependencies that production never reaches.
       - run: uv export --frozen --no-dev --no-hashes --no-emit-project > runtime-requirements.txt
       - run: uvx pip-audit -r runtime-requirements.txt
         continue-on-error: true
