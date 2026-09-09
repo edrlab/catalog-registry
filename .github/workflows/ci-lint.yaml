@@ -1,0 +1,21 @@
+name: ci-lint
+on: [pull_request, push]
+
+# Least privilege: these jobs read the repository and nothing else.
+# Actions are pinned by commit digest, not by tag: a tag can be moved to point at
+# different code, a digest cannot.
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy src/

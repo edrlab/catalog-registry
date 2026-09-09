@@ -2,8 +2,8 @@
   "metadata": {
     "title": "Librivox",
     "kind": ["open"],
-    "publicationTypes": ["audiobook"],
-    "color": "gray"
+    "color": "gray",
+    "publicationTypes": ["audiobook"]
   },
   "links": [
     {

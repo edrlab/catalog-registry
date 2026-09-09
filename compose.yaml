@@ -1,0 +1,30 @@
+name: catalog-registry
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: registry
+      POSTGRES_PASSWORD: registry
+      POSTGRES_DB: registry
+    volumes:
+      - ./docker/postgres/init-extensions.sql:/docker-entrypoint-initdb.d/10-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U registry -d registry"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: runtime
+    environment:
+      REGISTRY_DATABASE_URL: postgresql+asyncpg://registry:registry@db:5432/registry
+    # condition: service_healthy, not a bare depends_on — Compose otherwise starts the API
+    # as soon as the container exists, seconds before Postgres accepts connections.
+    depends_on:
+      db:
+        condition: service_healthy
