@@ -1,0 +1,34 @@
+name: ci-test
+on: [pull_request, push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: registry
+          POSTGRES_PASSWORD: registry
+          POSTGRES_DB: registry_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U registry"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      # Actions already provides the container network and health-check wiring, so
+      # testcontainers would be a second layer doing the same job. conftest.py switches on
+      # this variable; locally, with it unset, testcontainers starts a container instead.
+      TEST_DATABASE_URL: postgresql+asyncpg://registry:registry@localhost:5432/registry_test
+      REGISTRY_DATABASE_URL: postgresql+asyncpg://registry:registry@localhost:5432/registry_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Create extensions
+        run: |
+          PGPASSWORD=registry psql -h localhost -U registry -d registry_test \
+            -f docker/postgres/init-extensions.sql
+      - run: uv run pytest
