@@ -1,7 +1,11 @@
 """The pure half of `registry.cli.add`, no network, no database."""
 
+import sys
+
 import pytest
 
+from registry.cli.__main__ import COMMANDS
+from registry.cli.__main__ import main as cli_main
 from registry.cli.add import build_catalog_document, normalise_remote_rel
 from registry.core.errors import ValidationError
 from registry.domain.enums import LinkRel
@@ -74,3 +78,32 @@ def test_templated_survives_and_empty_editorial_fields_are_dropped() -> None:
 def test_a_feed_without_a_title_is_refused() -> None:
     with pytest.raises(ValidationError, match="nothing to name it"):
         build_catalog_document({"metadata": {}, "links": []}, FEED_URL, kind=["public"])
+
+
+def test_a_deliberate_error_is_printed_as_a_message(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`make add` on a bad URL should say what is wrong, not print a stack trace."""
+    monkeypatch.setattr(
+        sys, "argv", ["registry.cli", "add", "file:///etc/passwd", "--kind", "open"]
+    )
+
+    assert cli_main() == 1
+    assert "not an http(s) URL" in capsys.readouterr().err
+
+
+def test_an_unreachable_database_explains_itself(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The commonest failure is that the stack is down, which a traceback does not say."""
+    monkeypatch.setattr(sys, "argv", ["registry.cli", "seed"])
+
+    def refuse(_arguments: object) -> int:
+        raise ConnectionRefusedError(61, "Connection refused")
+
+    monkeypatch.setitem(COMMANDS, "seed", refuse)
+
+    assert cli_main() == 1
+    reported = capsys.readouterr().err
+    assert "Cannot reach the database" in reported
+    assert "make up" in reported

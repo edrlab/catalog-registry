@@ -155,17 +155,27 @@ docker-build:  ## Build the runtime image
 # `make up` runs the *development* target, with your source bind-mounted. This runs the
 # runtime image, the artifact that actually deploys. Against the same database, which is
 # the only way to catch "works locally, missing from the image" before a deploy does.
+# The compose network is only needed when the DSN names `db`, the host compose provides. Give
+# your own IMAGE_DSN and the container runs unattached, which is what makes it possible to
+# point the runtime image at Cloud SQL through the proxy.
 docker-run: docker-build  ## Run the deployable image, not the dev one (needs make up)
-	@docker network inspect $(NETWORK) >/dev/null 2>&1 || { \
-		echo "The compose database is not running. Start it first:"; \
-		echo "    make up"; \
-		echo "Or point the image at another database:"; \
-		echo "    make docker-run IMAGE_DSN=postgresql+asyncpg://user:pass@host:5432/db"; \
-		exit 1; }
-	@docker rm -f $(IMAGE) >/dev/null 2>&1 || true
-	@docker run --rm -d --name $(IMAGE) --network $(NETWORK) -p $(IMAGE_PORT):8000 \
-		-e REGISTRY_DATABASE_URL="$(IMAGE_DSN)" $(IMAGE) >/dev/null
-	@echo "$(IMAGE) on http://localhost:$(IMAGE_PORT). 'make logs' to follow, 'make stop' to stop"
+	@set -e; \
+	if echo "$(IMAGE_DSN)" | grep -q "@db:"; then \
+		docker network inspect $(NETWORK) >/dev/null 2>&1 || { \
+			echo "The compose database is not running. Start it first:"; \
+			echo "    make up"; \
+			echo "Or point the image at another database, which needs no compose network:"; \
+			echo "    make docker-run IMAGE_DSN=postgresql+asyncpg://user:pass@host.docker.internal:5432/db"; \
+			exit 1; }; \
+		network="--network $(NETWORK)"; \
+	else \
+		network=""; \
+		echo "Using IMAGE_DSN, so not attaching to the compose network."; \
+	fi; \
+	docker rm -f $(IMAGE) >/dev/null 2>&1 || true; \
+	docker run --rm -d --name $(IMAGE) $$network -p $(IMAGE_PORT):8000 \
+		-e REGISTRY_DATABASE_URL="$(IMAGE_DSN)" $(IMAGE) >/dev/null; \
+	echo "$(IMAGE) on http://localhost:$(IMAGE_PORT). 'make logs' to follow, 'make stop' to stop"
 
 # Two things can be running, and which one you meant is not worth having to remember:
 # `make docker-run` starts a standalone container named $(IMAGE), while `make up` starts

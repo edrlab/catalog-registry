@@ -56,6 +56,10 @@ async def test_an_unexpected_error_is_a_problem_document_and_leaks_nothing(app) 
 
     assert response.status_code == 500
     assert response.headers["content-type"].startswith("application/problem+json")
+    # Starlette sends a 500 past every middleware the application adds, so the headers have
+    # to come from the problem response itself.
+    for name, value in SECURITY_HEADERS.items():
+        assert response.headers[name] == value
     assert secret not in response.text
     assert "hunter2" not in response.text
     assert response.json()["title"] == "Internal Server Error"

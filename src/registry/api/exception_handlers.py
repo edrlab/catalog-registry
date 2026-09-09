@@ -4,16 +4,24 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
+from registry.api.middleware import SECURITY_HEADERS
 from registry.core.constants import PROBLEM_JSON_MEDIA_TYPE
 from registry.core.errors import RegistryError
 
 
 def build_problem_response(*, status: int, title: str, detail: str) -> JSONResponse:
-    """RFC 9457 §3 problem details."""
+    """RFC 9457 §3 problem details.
+
+    The security headers are set here as well as in the middleware, and that is not
+    redundant. Starlette always installs `ServerErrorMiddleware` outermost, so a 500 is sent
+    past every middleware the application adds. Without this, the one response most likely to
+    be inspected by hand is the one response with no `nosniff` on it.
+    """
     return JSONResponse(
         status_code=status,
         media_type=PROBLEM_JSON_MEDIA_TYPE,
         content={"type": "about:blank", "title": title, "status": status, "detail": detail},
+        headers=dict(SECURITY_HEADERS),
     )
 
 
