@@ -1,0 +1,18 @@
+# fsync=off is safe only because this data lives in tmpfs and is discarded at the end of the
+# run. Never use this file for anything that matters.
+services:
+  db:
+    tmpfs: [/var/lib/postgresql]
+    command: >
+      postgres -c fsync=off -c synchronous_commit=off
+               -c full_page_writes=off
+    environment:
+      POSTGRES_DB: registry_test
+
+  api:
+    build: { target: development }
+    environment:
+      REGISTRY_DATABASE_URL: postgresql+asyncpg://registry:registry@db:5432/registry_test
+      REGISTRY_ENVIRONMENT: test
+      TEST_DATABASE_URL: postgresql+asyncpg://registry:registry@db:5432/registry_test
+    command: ["pytest"]

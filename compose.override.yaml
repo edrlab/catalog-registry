@@ -1,0 +1,36 @@
+# Applied automatically by `docker compose up`. Holds what is right locally and wrong in CI,
+# which is why CI names its files explicitly and never loads this one.
+services:
+  db:
+    # Overridable: 5432 is often already taken by another project on a developer machine.
+    # Pass it in the shell — `DB_PORT=55432 make up` — not in .env: Settings uses
+    # extra="forbid" and reads every key in that file, so a non-REGISTRY_ key fails at boot.
+    ports: ["${DB_PORT:-5432}:5432"]
+    volumes:
+      # postgres:18 wants a single mount at /var/lib/postgresql, not at .../data —
+      # the image refuses to start otherwise. (docker-library/postgres#37)
+      - registry-pgdata:/var/lib/postgresql
+
+  api:
+    build: { target: development }
+    command:
+      - uvicorn
+      - registry.main:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+    # Read-only: hot reload only needs to read, and a writable mount lets a container
+    # process write into your working tree.
+    volumes:
+      - ./src:/app/src:ro
+      - ./migrations:/app/migrations:ro
+      - ./data:/app/data:ro
+    ports: ["8000:8000"]
+    environment:
+      REGISTRY_ENVIRONMENT: local
+
+volumes:
+  registry-pgdata:
