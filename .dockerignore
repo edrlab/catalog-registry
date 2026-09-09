@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+.env
+tests
+docs
+opds-registry-all-plans
+__pycache__
+*.md
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
