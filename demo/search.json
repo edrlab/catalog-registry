@@ -24,7 +24,7 @@
         "title": "Lirtuel",
         "kind": ["public"],
         "color": "red",
-        "supportedLanguages": ["FR", "EN"],
+        "supportedLanguages": ["fr", "en"],
         "publicationTypes": ["ebook", "comic"],
         "country": "BE",
         "subdivisions": ["BE-WAL", "BE-BRU"],

@@ -1,0 +1,124 @@
+{
+  "metadata": {
+    "title": "Development sample"
+  },
+  "catalogs": [
+    {
+      "metadata": {
+        "title": "AA Unscoped Global",
+        "kind": ["open"],
+        "description": "Declares no language, so it is never filtered out and always sorts first.",
+        "color": "gray",
+        "publicationTypes": ["ebook"]
+      },
+      "links": [
+        {"href": "https://example.org/unscoped-a/opds", "type": "application/opds+json", "rel": "catalog"}
+      ]
+    },
+    {
+      "metadata": {
+        "title": "US Public Library",
+        "kind": ["public"],
+        "description": "en-US — exact match for the first range, depth 2.",
+        "color": "blue",
+        "supportedLanguages": ["en-us"],
+        "publicationTypes": ["ebook"],
+        "country": "US",
+        "coverage": "country"
+      },
+      "links": [
+        {"href": "https://example.org/us/opds", "type": "application/opds+json", "rel": "catalog"}
+      ]
+    },
+    {
+      "metadata": {
+        "title": "India Digital Library",
+        "kind": ["public"],
+        "description": "en-IN — exact match for the second range, depth 2.",
+        "color": "orange",
+        "supportedLanguages": ["en-in", "hi"],
+        "publicationTypes": ["ebook", "journal"],
+        "country": "IN",
+        "coverage": "country"
+      },
+      "links": [
+        {"href": "https://example.org/in/opds", "type": "application/opds+json", "rel": "catalog"}
+      ]
+    },
+    {
+      "metadata": {
+        "title": "British Library Feed",
+        "kind": ["academic"],
+        "description": "en-GB — exact match for the third range, depth 2.",
+        "color": "purple",
+        "supportedLanguages": ["en-gb"],
+        "publicationTypes": ["ebook", "journal"],
+        "country": "GB",
+        "coverage": "country"
+      },
+      "links": [
+        {"href": "https://example.org/gb/opds", "type": "application/opds+json", "rel": "catalog"}
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Plain English Collection",
+        "kind": ["open"],
+        "description": "Declares `en`. Every en-* range narrows onto it, so it matches the FIRST range at depth 1.",
+        "color": "green",
+        "supportedLanguages": ["en"],
+        "publicationTypes": ["ebook"]
+      },
+      "links": [
+        {"href": "https://example.org/en/opds", "type": "application/opds+json", "rel": "catalog"}
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Canadian Bilingual Library",
+        "kind": ["public"],
+        "description": "en-CA and fr-CA. Neither is a prefix of en-US, so it only reaches the plain `en` range.",
+        "color": "red",
+        "supportedLanguages": ["en-ca", "fr-ca"],
+        "publicationTypes": ["ebook", "audiobook"],
+        "country": "CA",
+        "coverage": "country"
+      },
+      "links": [
+        {"href": "https://example.org/ca/opds", "type": "application/opds+json", "rel": "catalog"},
+        {"href": "https://example.org/ca/shelf", "type": "application/opds+json", "rel": "shelf"}
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Australian Reading Service",
+        "kind": ["public"],
+        "description": "en-AU. Same story as Canada — reachable only through the plain `en` range.",
+        "color": "yellow",
+        "supportedLanguages": ["en-au"],
+        "publicationTypes": ["ebook"],
+        "country": "AU",
+        "coverage": "country"
+      },
+      "links": [
+        {"href": "https://example.org/au/opds", "type": "application/opds+json", "rel": "catalog"}
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Bibliotheque Municipale",
+        "kind": ["public"],
+        "description": "French only. Excluded entirely by an English-only header.",
+        "color": "blue",
+        "supportedLanguages": ["fr", "fr-fr"],
+        "publicationTypes": ["ebook", "comic"],
+        "country": "FR",
+        "city": "Lyon",
+        "coverage": "local"
+      },
+      "links": [
+        {"href": "https://example.org/fr/opds", "type": "application/opds+json", "rel": "catalog"}
+      ]
+    }
+  ]
+}

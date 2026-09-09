@@ -2,8 +2,8 @@
   "metadata": {
     "title": "Project Gutenberg",
     "kind": ["open"],
-    "publicationTypes": ["ebook"],
-    "color": "red"
+    "color": "red",
+    "publicationTypes": ["ebook"]
   },
   "links": [
     {
