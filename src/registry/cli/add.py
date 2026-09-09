@@ -15,11 +15,13 @@ file. The back office (v1.0) will drive that same path from a browser.
 
 import argparse
 import asyncio
+import ipaddress
 import json
+import socket
 import sys
 import urllib.request
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, override
 from urllib.parse import urlsplit
 
 from registry.cli.seed import import_feed_document
@@ -33,6 +35,9 @@ from registry.domain.enums import (
     LinkRel,
     PublicationType,
 )
+
+#: Checked on the URL given and again on every redirect hop.
+ALLOWED_SCHEMES = frozenset({"http", "https"})
 
 #: A registry entry is metadata, not a mirror. Twelve seconds and two megabytes is a generous
 #: ceiling for a feed's first page, and it bounds a hostile or broken origin.
@@ -57,20 +62,74 @@ REL_ALIASES = {"http://opds-spec.org/shelf": LinkRel.SHELF}
 NEVER_IMPORTED = {LinkRel.SELF, LinkRel.CATALOG}
 
 
+def assert_publicly_reachable(url: str) -> None:
+    """Refuse a URL no reader could follow. Raises `ValidationError`.
+
+    Two things at once, and the second is why this exists. A catalog in a public registry has
+    to be reachable from the public internet, so a loopback or private address is not a
+    catalog anyone can use. And an address that is not globally routable is the shape of an
+    SSRF target: `169.254.169.254` is the cloud metadata service, which hands credentials to
+    anything that asks. Harmless while this runs on a laptop, not harmless the day it runs
+    inside GCP, and that is a change nobody would think to re-audit this for.
+
+    Checked on the URL given and again on every redirect hop, because a public host is free
+    to redirect to a private one.
+    """
+    host = urlsplit(url).hostname
+    if not host:
+        raise ValidationError(f"{url} names no host")
+    try:
+        resolved = socket.getaddrinfo(host, None)
+    except OSError as error:
+        raise ValidationError(f"could not resolve {host}. {error}") from error
+
+    for entry in resolved:
+        address = ipaddress.ip_address(entry[4][0])
+        if not address.is_global:
+            raise ValidationError(
+                f"{host} resolves to {address}, which is not a public address. A catalog in "
+                "the registry has to be reachable by readers."
+            )
+
+
+class _HTTPOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-check the scheme on every hop, not just the first.
+
+    `urllib` already refuses to redirect to `file:`, but it permits `ftp:`, and a public host
+    is free to redirect to a private one. Checking the URL the operator typed is not the same
+    as checking where the request ends up.
+    """
+
+    @override
+    def redirect_request(
+        self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str
+    ) -> Any:
+        if urlsplit(newurl).scheme not in ALLOWED_SCHEMES:
+            raise ValidationError(f"refusing to follow a redirect to {newurl}")
+        assert_publicly_reachable(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _http_only_opener() -> urllib.request.OpenerDirector:
+    return urllib.request.build_opener(_HTTPOnlyRedirectHandler)
+
+
 def download_feed_document(url: str) -> dict[str, Any]:
     """Fetch and parse an OPDS feed. Raises `ValidationError` on anything unusable.
 
-    Scheme is checked before the request: `urlopen` also speaks `file:` and `ftp:`, so an
-    unchecked URL turns this command into a local-file reader.
+    Scheme and destination are checked before the request. `urlopen` also speaks `file:` and
+    `ftp:`, so an unchecked URL turns this command into a local-file reader, and an unchecked
+    host turns it into a way to read whatever the machine can reach.
     """
-    if urlsplit(url).scheme not in {"http", "https"}:
+    if urlsplit(url).scheme not in ALLOWED_SCHEMES:
         raise ValidationError(f"{url} is not an http(s) URL")
+    assert_publicly_reachable(url)
 
     request = urllib.request.Request(
         url, headers={"Accept": "application/opds+json, application/json"}
     )
     try:
-        with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
+        with _http_only_opener().open(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
             payload = response.read(MAX_FEED_BYTES + 1)
     except OSError as error:  # URLError, HTTPError, socket timeouts
         raise ValidationError(f"could not fetch {url}. {error}") from error
@@ -131,6 +190,10 @@ def build_catalog_document(feed: dict[str, Any], url: str, **editorial: Any) -> 
 
     links = [{"href": url, "type": "application/opds+json", "rel": LinkRel.CATALOG.value}]
     for link in feed.get("links", []):
+        # A remote document is untrusted, and `links: [null]` is valid JSON. Reaching `.get`
+        # on it raises before the schema ever sees the document.
+        if not isinstance(link, dict):
+            continue
         resolved = normalise_remote_rel(link.get("rel"))
         href = link.get("href")
         if resolved is None or not isinstance(href, str):

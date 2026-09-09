@@ -1,4 +1,4 @@
-"""The seed path against real Postgres. the conventions.6."""
+"""The seed path, against real Postgres."""
 
 import json
 from pathlib import Path
@@ -12,7 +12,7 @@ from registry.core.errors import ValidationError
 from registry.core.schema_validation import build_schema_validator
 from registry.db.models.catalog import Catalog, CatalogLanguageRow
 from registry.db.models.link import Link
-from registry.domain.enums import CoverageScope
+from registry.domain.enums import CatalogStatus, CoverageScope, LinkRel
 from tests.conftest import SEED_CATALOG_COUNT, SEED_FILE
 
 pytestmark = pytest.mark.integration
@@ -167,3 +167,90 @@ def test_a_catalog_with_no_identity_link_is_rejected() -> None:
 
     with pytest.raises(ValidationError, match="no stable identity"):
         resolve_identity_href(document)
+
+
+async def test_a_catalog_removed_from_the_file_stays_recommended(
+    db_session: AsyncSession, tmp_path: Path
+) -> None:
+    """The known gap, asserted rather than described.
+
+    Presence in the file is meant to be the recommended flag, but `add` writes rows the file
+    never mentions, and nothing on the row says where it came from. Reconciling would
+    unrecommend those. If this test ever fails, provenance has been added and
+    `seed_catalogs` should reconcile.
+    """
+    await seed_catalogs(db_session, SEED_FILE)
+    await db_session.commit()
+
+    feed = json.loads(SEED_FILE.read_text(encoding="utf-8"))
+    dropped = feed["catalogs"].pop()["metadata"]["title"]
+    shortened = tmp_path / "recommended.json"
+    shortened.write_text(json.dumps(feed), encoding="utf-8")
+
+    await seed_catalogs(db_session, shortened)
+    await db_session.commit()
+
+    rows = dict((await db_session.execute(select(Catalog.title, Catalog.recommended))).all())
+    assert rows[dropped] is True, "unrecommending needs provenance; see seed_catalogs"
+
+
+async def test_seeding_leaves_a_separately_added_catalog_alone(
+    db_session: AsyncSession,
+) -> None:
+    """The reason the gap above is not closed by reconciling.
+
+    `add` writes a recommended row the seed file has never heard of. A later `make seed` must
+    not touch it, which is what an unconditional reconciliation would do.
+    """
+    await import_catalog_document(
+        db_session,
+        {
+            "metadata": {"title": "Added Separately", "kind": ["public"]},
+            "links": [{"href": "https://example.org/opds", "rel": "catalog"}],
+        },
+        recommended=True,
+    )
+    await db_session.commit()
+
+    await seed_catalogs(db_session, SEED_FILE)
+    await db_session.commit()
+
+    recommended = (await db_session.scalars(select(Catalog.title).where(Catalog.recommended))).all()
+    assert "Added Separately" in recommended
+    assert len(recommended) == SEED_CATALOG_COUNT + 1
+
+
+async def test_a_reactivated_catalog_gets_a_publication_date(db_session: AsyncSession) -> None:
+    """ck_catalogs_published_when_active. A suggested row has none, and activating it without
+    one fails the constraint at commit rather than in the code."""
+    document = {
+        "metadata": {"title": "Was Suggested", "kind": ["public"]},
+        "links": [{"href": "https://example.org/opds", "rel": "catalog"}],
+    }
+    catalog, _ = await import_catalog_document(db_session, document, recommended=False)
+    catalog.status = CatalogStatus.SUGGESTED
+    catalog.published_at = None
+    await db_session.commit()
+
+    await import_catalog_document(db_session, document, recommended=True)
+    await db_session.commit()
+
+    row = (
+        await db_session.execute(select(Catalog).where(Catalog.title == "Was Suggested"))
+    ).scalar_one()
+    assert row.status == CatalogStatus.ACTIVE
+    assert row.published_at is not None
+
+
+async def test_a_rel_array_is_accepted(db_session: AsyncSession) -> None:
+    """Readium's link schema allows `rel` to be an array, so the seed path must read one."""
+    document = {
+        "metadata": {"title": "Array Rel", "kind": ["open"]},
+        "links": [{"href": "https://example.org/opds", "rel": ["catalog", "start"]}],
+    }
+    assert resolve_identity_href(document) == "https://example.org/opds"
+
+    catalog, _ = await import_catalog_document(db_session, document, recommended=True)
+    await db_session.commit()
+
+    assert {link.rel for link in catalog.links} == {LinkRel.CATALOG}

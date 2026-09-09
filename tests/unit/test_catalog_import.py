@@ -6,7 +6,12 @@ import pytest
 
 from registry.cli.__main__ import COMMANDS
 from registry.cli.__main__ import main as cli_main
-from registry.cli.add import build_catalog_document, normalise_remote_rel
+from registry.cli.add import (
+    _HTTPOnlyRedirectHandler,
+    assert_publicly_reachable,
+    build_catalog_document,
+    normalise_remote_rel,
+)
 from registry.core.errors import ValidationError
 from registry.domain.enums import LinkRel
 
@@ -107,3 +112,47 @@ def test_an_unreachable_database_explains_itself(
     reported = capsys.readouterr().err
     assert "Cannot reach the database" in reported
     assert "make up" in reported
+
+
+def test_a_malformed_link_entry_does_not_crash_the_import() -> None:
+    """`links: [null]` is valid JSON, and a remote document is untrusted."""
+    feed = {
+        "metadata": {"title": "Broken Links"},
+        "links": [None, "not an object", {"href": "https://example.org/s", "rel": "shelf"}],
+    }
+
+    document = build_catalog_document(feed, FEED_URL, kind=["public"])
+
+    assert {link["rel"] for link in document["links"]} == {"catalog", "shelf"}
+
+
+def test_a_redirect_off_http_is_refused() -> None:
+    """The scheme is checked on every hop. `urllib` blocks `file:` itself but allows `ftp:`."""
+    handler = _HTTPOnlyRedirectHandler()
+
+    with pytest.raises(ValidationError, match="refusing to follow a redirect"):
+        handler.redirect_request(None, None, 302, "Found", {}, "ftp://example.org/passwd")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://169.254.169.254/latest/meta-data",  # the cloud metadata service
+        "http://127.0.0.1:8000/opds",
+        "http://10.0.0.5/opds",
+        "http://192.168.1.1/opds",
+        "http://[::1]/opds",
+    ],
+)
+def test_a_non_public_address_is_refused(url: str) -> None:
+    """A catalog readers cannot reach is not a catalog, and this is the SSRF shape."""
+    with pytest.raises(ValidationError, match="not a public address"):
+        assert_publicly_reachable(url)
+
+
+def test_a_redirect_to_a_private_address_is_refused() -> None:
+    """A public host is free to redirect to a private one, so every hop is checked."""
+    handler = _HTTPOnlyRedirectHandler()
+
+    with pytest.raises(ValidationError, match="not a public address"):
+        handler.redirect_request(None, None, 302, "Found", {}, "http://169.254.169.254/")

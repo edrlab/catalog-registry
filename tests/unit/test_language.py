@@ -1,4 +1,4 @@
-"""Every row of the conventions.1 and §5.2."""
+"""Parsing an `Accept-Language` header, and matching it against a catalog's tags."""
 
 import pytest
 
@@ -50,8 +50,15 @@ def test_parse_accept_language_equal_quality_preserves_header_order() -> None:
     assert tags("fr, de") == ["fr", "de"]
 
 
-def test_parse_accept_language_zero_quality_range_is_dropped() -> None:
-    assert tags("fr;q=0, en") == ["en"]
+def test_parse_accept_language_keeps_a_zero_quality_range() -> None:
+    """`q=0` is "not acceptable", which is a statement. Dropping it at parse time would make
+    `fr;q=0` indistinguishable from no header at all, and the client would be served French."""
+    assert [(r.tag, r.quality) for r in parse_accept_language("fr;q=0")] == [("fr", 0.0)]
+    assert tags("fr;q=0, en") == ["en", "fr"]
+
+
+def test_parse_accept_language_zero_quality_range_never_matches() -> None:
+    assert match_language_ranges(parse_accept_language("fr;q=0"), ["fr"]) == ()
 
 
 def test_parse_accept_language_quality_above_one_is_clamped() -> None:
@@ -261,11 +268,19 @@ def test_a_leading_wildcard_still_loses_to_a_specific_match_on_the_same_language
 
 
 def test_a_zero_quality_range_cannot_rank_anything() -> None:
-    """`q=0` means not acceptable, so the range is dropped before ranking (RFC 9110)."""
+    """`q=0` means not acceptable (RFC 9110 §12.4.2), so it never ranks a catalog."""
     ranges = parse_accept_language("fr;q=0, en")
 
-    assert [range_.tag for range_ in ranges] == ["en"]
+    assert [range_.tag for range_ in ranges] == ["en", "fr"]
     assert rank_language_match(ranges, ["fr"]) is None
+    assert rank_language_match(ranges, ["en"]) == LanguageMatch(rank=0, depth=1)
+
+
+def test_rejecting_every_language_is_not_the_same_as_stating_nothing() -> None:
+    """`*;q=0` says "none of these", which must still filter. `;;;,,,` says nothing."""
+    assert parse_accept_language("*;q=0") != ()
+    assert rank_language_match(parse_accept_language("*;q=0"), ["fr"]) is None
+    assert parse_accept_language(";;;,,,") == ()
 
 
 def test_no_ranges_matches_nothing() -> None:

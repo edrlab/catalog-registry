@@ -66,11 +66,24 @@ SEED_INPUT_SCHEMA = "generated/seed-input.schema.json"
 IDENTITY_RELS = (LinkRel.CATALOG, LinkRel.SHELF)
 
 
+def link_rels(link: dict[str, Any]) -> list[LinkRel]:
+    """The rels on *link* that this registry stores, in the order they were written.
+
+    A Readium link's ``rel`` is a string *or* an array (`link.schema.json`), and it may name
+    relations the registry has no column for. `start` is a real OPDS rel and not one of ours;
+    it is skipped rather than raising, exactly as the `add` path skips it. A link left with no
+    known rel contributes nothing, which is what `next` and `self` already do.
+    """
+    rel = link.get("rel")
+    written = rel if isinstance(rel, list) else [rel]
+    return [LinkRel(value) for value in written if value in set(LinkRel)]
+
+
 def resolve_identity_href(document: dict[str, Any]) -> str:
     """The externally owned URL this catalog is matched on across seed runs."""
     for rel in IDENTITY_RELS:
         for link in document["links"]:
-            if link.get("rel") == rel.value:
+            if rel in link_rels(link):
                 return str(link["href"])
     raise ValidationError(
         f"{document['metadata']['title']} has neither a `catalog` nor a `shelf` link, "
@@ -82,7 +95,7 @@ def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
     metadata = document["metadata"]
     # `self` is not required on input; it is synthesised at render time. What the
     # registry cannot synthesise is somewhere to actually browse or borrow.
-    rels = [LinkRel(link["rel"]) for link in document["links"]]
+    rels = [rel for link in document["links"] for rel in link_rels(link)]
     if not has_browsable_rel(rels):
         raise ValidationError(f"{metadata['title']} needs a `catalog` or `shelf` link")
 
@@ -115,15 +128,18 @@ def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
             CatalogSubdivisionRow(subdivision_code=value.upper())
             for value in metadata.get("subdivisions", ())
         ],
+        # One row per rel: a link declaring `["catalog", "start"]` is two relations to the
+        # same href, and the wire contract carries a single rel per link.
         links=[
             Link(
                 href=link["href"],
                 media_type=link.get("type"),
-                rel=LinkRel(link["rel"]),
+                rel=rel,
                 templated=bool(link.get("templated", False)),
                 title=link.get("title"),
             )
             for link in document["links"]
+            for rel in link_rels(link)
         ],
     )
 
@@ -136,7 +152,7 @@ async def import_catalog_document(
     from sqlalchemy import func  # noqa: PLC0415
 
     identity = resolve_identity_href(document)
-    existing = await CatalogRepository(session).fetch_catalog_by_self_href(identity)
+    existing = await CatalogRepository(session).fetch_catalog_by_identity_href(identity)
     built = build_catalog(document, recommended=recommended)
 
     if existing is None:
@@ -162,6 +178,10 @@ async def import_catalog_document(
     existing.city = built.city
     existing.coverage = built.coverage
     existing.recommended = recommended
+    # ck_catalogs_published_when_active. A row that was `suggested` has no publication date,
+    # and activating it without one fails the constraint at commit.
+    if existing.published_at is None:
+        existing.published_at = func.now()
     existing.status = built.status
     existing.kinds = built.kinds
     existing.publication_types = built.publication_types
@@ -201,7 +221,20 @@ async def import_feed_document(
 async def seed_catalogs(
     session: AsyncSession, seed_file: Path, *, recommended: bool = RECOMMENDED_AT_LAUNCH
 ) -> tuple[int, int]:
-    """Upsert every catalog in *seed_file*. See `import_feed_document`."""
+    """Upsert every catalog in *seed_file*. See `import_feed_document`.
+
+    **Removing a catalog from the file does not unrecommend it.** The module says presence in
+    the file *is* the recommended flag, and that was true when the file was the only way in.
+    `add` broke the premise: the database now holds rows the file has never mentioned, and
+    nothing distinguishes "was seeded, then removed from the file" from "was never in the
+    file". Reconciling against everything recommended unrecommends catalogs added by `add`,
+    which is worse than the gap it closes.
+
+    Closing it properly needs provenance on the row, a column recording where a catalog came
+    from, which is a schema change and a decision for the project lead rather than something
+    to infer here. Until then, unrecommending is a manual step. There is a test asserting the
+    current behaviour so the gap is executable rather than a comment.
+    """
     return await import_feed_document(
         session,
         json.loads(seed_file.read_text(encoding="utf-8")),

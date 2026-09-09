@@ -1,4 +1,4 @@
-"""Headers and error shape on the public surface. the conventions."""
+"""Headers and error shape on the public surface."""
 
 import pytest
 from httpx import ASGITransport, AsyncClient

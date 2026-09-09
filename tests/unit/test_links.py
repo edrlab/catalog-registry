@@ -1,4 +1,4 @@
-"""the conventions.3. Link ordering and validation."""
+"""Link ordering and validation."""
 
 import pytest
 

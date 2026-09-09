@@ -213,6 +213,14 @@ file is the `recommended` flag**. `demo/` is example *output* and the contract-t
 make seed        # idempotent; run it as often as you like
 ```
 
+**Removing a catalog from the file does not unrecommend it.** Presence in the file is meant
+to be the recommended flag, and that held while the file was the only way in. `make add`
+broke the premise: the database now holds rows the file has never mentioned, and nothing on a
+row says where it came from, so reconciling would unrecommend catalogs added by `add`.
+Unrecommending is a manual step until a catalog records its provenance, which is a schema
+change and not the implementer's to decide. `tests/integration/test_seed.py` asserts the
+current behaviour, so the gap fails loudly the day it is closed.
+
 To import a catalog from its live feed instead of the file, use `make add`.
 See [`importing.md`](importing.md). `make seed-sample` loads `data/dev-sample.json`, invented
 catalogs covering the regional-English cases a browser sends, for trying ranking out by hand.

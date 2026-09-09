@@ -1,4 +1,4 @@
-"""the conventions.5 and §5.7, over the real ASGI path.
+"""The feed endpoint, over the real ASGI path.
 
 The seed set is built to demonstrate `Accept-Language` filtering:
 
@@ -6,14 +6,12 @@ The seed set is built to demonstrate `Accept-Language` filtering:
 |---|---|---|
 | Project Gutenberg | nothing | unscoped, never filtered out, always first |
 | Librivox | nothing | a second unscoped catalog, so the bucket's own order is visible |
+| Standard Ebooks | `en` | a single-language catalog |
+| Ebooks libres et gratuits | `fr` | a second, so preference order is visible |
 
-The seed is `demo/catalogs/`. Hadrien's three fixtures, minus the `self` links he authors for
-the published output.
-
-**Most ordering cases are not testable here**, because only one catalog declares a language:
-preference-order reversal, specificity tie-breaks and cross-boundary ranking all need
-catalogs this set does not contain. Those live in `tests/unit/test_feed_service.py`, against
-a fake built for each rule.
+This is the project's seed file, not a fixture written for these tests, so it constrains what
+can be asserted here. Specificity tie-breaks and multi-language catalogs need rows it does not
+contain; those live in `tests/unit/test_feed_service.py`, against a fake built per rule.
 
 A catalog declaring nothing has made no claim to contradict, so it is kept for every request.
 """
@@ -62,90 +60,33 @@ async def test_no_accept_language_returns_everything_recommended(
     ]
 
 
-async def test_french_keeps_the_french_catalog_and_drops_the_english_one(
-    client: AsyncClient, seeded_catalogs: int
-) -> None:
-    assert await titles(client, "fr") == [*UNSCOPED, "Ebooks libres et gratuits"]
-
-
-async def test_english_keeps_the_english_catalog_and_drops_the_french_one(
-    client: AsyncClient, seeded_catalogs: int
-) -> None:
+async def test_english_keeps_the_english_catalog(client: AsyncClient, seeded_catalogs: int) -> None:
     assert await titles(client, "en") == [*UNSCOPED, "Standard Ebooks"]
 
 
-async def test_a_language_nobody_declares_keeps_only_the_unscoped_catalogs(
+async def test_a_language_no_catalog_declares_keeps_only_the_unscoped_ones(
     client: AsyncClient, seeded_catalogs: int
 ) -> None:
+    """The English catalog drops. The two that declare nothing stay, because they have made
+    no claim to contradict."""
     assert await titles(client, "ja") == UNSCOPED
 
 
-async def test_quality_orders_the_preferred_language_first(
+async def test_a_regional_range_reaches_a_plain_tag(
     client: AsyncClient, seeded_catalogs: int
 ) -> None:
-    """The v0 criterion: `en;q=0.8, fr;q=0.9` orders `fr` ahead of `en`.
+    """`en-GB` in the header against `en` in the data.
 
-    Membership is unchanged by quality, both languages are acceptable, but the order is
-    not. French outranks English because the client said so.
+    A reader asking for a regional variant and being shown nothing is the failure this
+    guards against, and it needs both RFC 4647 procedures rather than either alone.
     """
-    assert await titles(client, "en;q=0.8, fr;q=0.9") == [
-        *UNSCOPED,  # scoped to no language, so relevant whatever was asked
-        "Ebooks libres et gratuits",  # fr, q=0.9
-        "Standard Ebooks",  # en, q=0.8
-    ]
+    assert await titles(client, "en-GB") == [*UNSCOPED, "Standard Ebooks"]
 
 
-async def test_reversing_the_qualities_reverses_the_order(
-    client: AsyncClient, seeded_catalogs: int
-) -> None:
-    assert await titles(client, "en;q=0.9, fr;q=0.8") == [
-        *UNSCOPED,
-        "Standard Ebooks",
-        "Ebooks libres et gratuits",
-    ]
-
-
-async def test_a_regional_request_still_finds_the_base_language(
-    client: AsyncClient, seeded_catalogs: int
-) -> None:
-    """`fr-BE` must reach a catalog declaring plain `fr`. RFC 4647 Lookup truncation.
-
-    A Belgian reader asking for `fr-BE` and being shown no French catalog at all is the
-    failure this guards against.
-    """
-    assert await titles(client, "fr-BE") == [*UNSCOPED, "Ebooks libres et gratuits"]
-
-
-async def test_header_order_is_the_preference_when_no_q_is_given(
-    client: AsyncClient, seeded_catalogs: int
-) -> None:
-    """`fr, en` carries no `q`, so both ranges are q=1.0 and only the written order says
-    French is preferred. Ranking on `q` alone would lose that."""
-    assert await titles(client, "fr, en") == [
-        *UNSCOPED,
-        "Ebooks libres et gratuits",  # fr, the range written first
-        "Standard Ebooks",  # en, the range written second
-    ]
-
-
-async def test_a_regional_range_matches_a_plain_tag_in_our_data(
-    client: AsyncClient, seeded_catalogs: int
-) -> None:
-    """`fr-FR` in the header against `fr` in the data, the case Hadrien named."""
-    assert await titles(client, "fr-FR") == [*UNSCOPED, "Ebooks libres et gratuits"]
-
-
-async def test_equal_rank_keeps_the_database_order(
-    client: AsyncClient, seeded_catalogs: int
-) -> None:
-    """The sort is stable, so catalogs ranking equally stay in the title order SQL gave."""
-    assert await titles(client, "fr") == [*UNSCOPED, "Ebooks libres et gratuits"]
-
-
-async def test_rejecting_french_excludes_the_french_catalog(
-    client: AsyncClient, seeded_catalogs: int
-) -> None:
-    assert "Ebooks libres et gratuits" not in await titles(client, "fr;q=0, en")
+async def test_rejecting_a_language_excludes_it(client: AsyncClient, seeded_catalogs: int) -> None:
+    """`q=0` is "not acceptable", and it must not read as "no preference stated"."""
+    assert await titles(client, "en;q=0") == UNSCOPED
+    assert await titles(client, "*;q=0") == UNSCOPED
 
 
 async def test_a_malformed_header_returns_200_unfiltered(

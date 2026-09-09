@@ -72,7 +72,7 @@ Postgres, with eight tables, seven migrations and six native enums.
 
 | | |
 |---|---|
-| `data/recommended.json` | The seed source. Presence in the file *is* the `recommended` flag. `make seed` upserts it, idempotently |
+| `data/recommended.json` | The seed source. `make seed` upserts it, idempotently. Removing an entry does not unrecommend its row, see `docs/development.md` |
 | `demo/` | Example output, and the contract-test corpus. Hadrien's, like the seed file |
 | `data/dev-sample.json` | Invented data for trying ranking out by hand, loaded by `make seed-sample`. No test reads it |
 | `archive/` | Pre-schema records. Out of scope for v0 |

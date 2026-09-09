@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from registry.core.errors import NotFoundError
 from registry.db.models.catalog import Catalog
-from registry.domain.enums import CatalogStatus
+from registry.domain.enums import CatalogStatus, LinkRel
 
 EAGER_COLLECTIONS = (
     selectinload(Catalog.kinds),
@@ -24,6 +24,11 @@ EAGER_COLLECTIONS = (
     selectinload(Catalog.subdivisions),
     selectinload(Catalog.links),
 )
+
+
+#: The rels a catalog is identified by across seed runs, preferred first. Mirrors
+#: `cli/seed.py`, which decides *which* of them a document uses.
+IDENTITY_RELS = (LinkRel.CATALOG, LinkRel.SHELF)
 
 
 class CatalogRepository:
@@ -48,8 +53,19 @@ class CatalogRepository:
         return (await self._session.scalars(statement)).all()
 
     async def fetch_catalog_by_id(self, catalog_id: uuid.UUID) -> Catalog | None:
-        """Read one catalog. Returns None when it does not exist, the caller decides."""
-        statement = select(Catalog).where(Catalog.id == catalog_id).options(*EAGER_COLLECTIONS)
+        """Read one published catalog. Returns None when it does not exist, or is not public.
+
+        `GET /catalogs/{id}` is unauthenticated, so this filters on `status` for the same
+        reason the feed does. A suggested catalog is somebody's unreviewed submission, and an
+        id is not an access control. `recommended` is deliberately *not* filtered: an active
+        catalog that is simply not recommended is still a real, published catalog, and the
+        back office will need to link to one.
+        """
+        statement = (
+            select(Catalog)
+            .where(Catalog.id == catalog_id, Catalog.status == CatalogStatus.ACTIVE)
+            .options(*EAGER_COLLECTIONS)
+        )
         return (await self._session.scalars(statement)).unique().first()
 
     async def load_catalog_by_id(self, catalog_id: uuid.UUID) -> Catalog:
@@ -60,15 +76,20 @@ class CatalogRepository:
             raise NotFoundError(f"no catalog with id {catalog_id}")
         return catalog
 
-    async def fetch_catalog_by_self_href(self, href: str) -> Catalog | None:
-        """Look a catalog up by the identity the seed upserts on. See `cli/seed.py`."""
+    async def fetch_catalog_by_identity_href(self, href: str) -> Catalog | None:
+        """Look a catalog up by the identity the seed upserts on. See `cli/seed.py`.
+
+        Constrained to the identity rels. Matching *any* link with this href would let a new
+        catalog whose feed URL happens to equal another catalog's `search` or `icon` target
+        overwrite that unrelated row.
+        """
         # Imported here, not at module level: it would be a circular import.
         from registry.db.models.link import Link  # noqa: PLC0415
 
         statement = (
             select(Catalog)
             .join(Link, Link.catalog_id == Catalog.id)
-            .where(Link.href == href)
+            .where(Link.href == href, Link.rel.in_(IDENTITY_RELS))
             .options(*EAGER_COLLECTIONS)
         )
         return (await self._session.scalars(statement)).unique().first()

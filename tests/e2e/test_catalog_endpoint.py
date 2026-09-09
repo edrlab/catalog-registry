@@ -4,8 +4,12 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.core.constants import OPDS_CATALOG_MEDIA_TYPE, PROBLEM_JSON_MEDIA_TYPE
+from registry.db.models.catalog import Catalog
+from registry.domain.enums import CatalogStatus
 
 pytestmark = pytest.mark.e2e
 
@@ -43,3 +47,20 @@ async def test_a_malformed_uuid_returns_422(client: AsyncClient) -> None:
     response = await client.get("/catalogs/not-a-uuid")
 
     assert response.status_code == 422
+
+
+async def test_a_suggested_catalog_is_not_publicly_readable(
+    client: AsyncClient, db_session: AsyncSession, seeded_catalogs: int
+) -> None:
+    """`GET /catalogs/{id}` is unauthenticated, and an id is not an access control.
+
+    A suggested catalog is somebody's unreviewed submission. It must not be readable just
+    because its identifier is known.
+    """
+    catalog = (await db_session.scalars(select(Catalog))).first()
+    assert catalog is not None
+    catalog.status = CatalogStatus.SUGGESTED
+    catalog.published_at = None
+    await db_session.commit()
+
+    assert (await client.get(f"/catalogs/{catalog.id}")).status_code == 404

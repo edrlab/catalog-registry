@@ -52,6 +52,10 @@ Two behaviours worth knowing before you fill these in:
 The URL you typed becomes the `catalog` link. The rest come from the feed, mapped onto the
 registry's eight rels:
 
+A link's `rel` may be a string or an array, and an array may name relations this registry does
+not store. Those are skipped, and the rest are kept: `["catalog", "start"]` stores one
+`catalog` link.
+
 | In the feed | Stored as |
 |---|---|
 | *the URL you typed* | `catalog` |
@@ -94,6 +98,8 @@ Phase 3.
 | Situation | Message |
 |---|---|
 | not `http`/`https` | `... is not an http(s) URL` |
+| not a public address | `... resolves to 10.0.0.5, which is not a public address` |
+| redirected off http(s), or to a private address | `refusing to follow a redirect to ...` |
 | unreachable, or times out after 12s | `could not fetch ..., <reason>` |
 | over 2 MB | `... returned more than 2097152 bytes` |
 | not JSON, or not a JSON object | `... did not return JSON` |
@@ -102,6 +108,11 @@ Phase 3.
 | a field the schema rejects | the validation error, with its path |
 
 Nothing is written unless the whole document validates.
+
+The address check is not only a safety measure. A catalog in a public registry has to be
+reachable by readers, so `localhost`, `10.x`, `192.168.x` and `169.254.x` are all refused, and
+every redirect hop is checked again because a public host is free to redirect to a private one.
+That does mean you cannot import from a feed served on your own machine.
 
 ## Where it writes
 

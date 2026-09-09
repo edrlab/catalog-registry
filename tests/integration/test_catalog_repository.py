@@ -1,4 +1,4 @@
-"""Repository behaviour, including the N+1 guard. the conventions.6, §7."""
+"""Repository behaviour, including the N+1 guard."""
 
 import datetime
 

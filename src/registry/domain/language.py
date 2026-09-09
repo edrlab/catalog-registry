@@ -79,8 +79,9 @@ def parse_accept_language(header: str | None) -> tuple[LanguageRange, ...]:
     RFC 9110 §12.5.4. Returns ``()`` for a missing, empty, or wholly unparseable header,
     which callers read as "no preference stated", not as "nothing is acceptable".
 
-    ``q=0`` means *not acceptable* (§12.4.2). Such ranges are dropped here, so a tag that
-    only they would have matched is simply never matched.
+    ``q=0`` means *not acceptable* (§12.4.2). Such ranges are **kept** here and skipped when
+    matching. Dropping them would make ``Accept-Language: fr;q=0`` indistinguishable from a
+    missing header, and a client that explicitly rejected French would be served it.
     """
     if not header:
         return ()
@@ -91,10 +92,7 @@ def parse_accept_language(header: str | None) -> tuple[LanguageRange, ...]:
         normalised = normalise_language_tag(tag)
         if not normalised:
             continue
-        quality = _parse_quality(parameters)
-        if quality == 0.0:
-            continue
-        ranges.append(LanguageRange(tag=normalised, quality=quality))
+        ranges.append(LanguageRange(tag=normalised, quality=_parse_quality(parameters)))
 
     # Stable sort: equal quality preserves the order the client wrote.
     return tuple(sorted(ranges, key=lambda range_: -range_.quality))
@@ -148,6 +146,8 @@ def match_language_ranges(
     matched: dict[str, None] = {}
 
     for range_ in ranges:
+        if range_.quality == 0.0:
+            continue
         if is_wildcard_range(range_):
             matched.update(dict.fromkeys(tags))
             continue
@@ -175,6 +175,8 @@ def rank_language_match(
     best: LanguageMatch | None = None
 
     for position, range_ in enumerate(ranges):
+        if range_.quality == 0.0:
+            continue  # "not acceptable" (RFC 9110 §12.4.2), so it can never rank a catalog
         range_tag = _strip_singleton_extensions(range_.tag)
         for tag in tags:
             depth = 0 if is_wildcard_range(range_) else match_depth(range_tag, tag)
