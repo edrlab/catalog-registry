@@ -13,7 +13,7 @@ class Country(Base):
     alpha2: Mapped[str] = mapped_column(CHAR(2), primary_key=True)
     alpha3: Mapped[str] = mapped_column(CHAR(3), unique=True)
     numeric3: Mapped[str] = mapped_column(CHAR(3))
-    #: false for dissolved states — keeps historical foreign keys valid rather than orphaned.
+    #: false for dissolved states. Keeps historical foreign keys valid rather than orphaned.
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
 
@@ -24,10 +24,10 @@ class Subdivision(Base):
     country_alpha2: Mapped[str] = mapped_column(
         CHAR(2), ForeignKey("countries.alpha2"), nullable=False
     )
-    #: Subdivisions nest — France has regions and departments. Load-bearing for v1.2 ranking.
+    #: Subdivisions nest. France has regions and departments. Load-bearing for v1.2 ranking.
     parent_code: Mapped[str | None] = mapped_column(
         String(6), ForeignKey("subdivisions.code"), nullable=True
     )
-    #: Nullable: which ISO 3166-2 class to standardise on is open (Q14). It only matters
+    #: Nullable: which ISO 3166-2 class to standardise on is still open. It only matters
     #: once subdivisions drive filtering, which is v1.2.
     subdivision_type: Mapped[str | None] = mapped_column(nullable=True)

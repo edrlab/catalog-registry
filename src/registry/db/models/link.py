@@ -1,4 +1,4 @@
-"""Catalog links. ADR-013 — a link carries a single rel, not an array."""
+"""Catalog links. A link carries a single rel, not an array."""
 
 import uuid
 
@@ -40,9 +40,9 @@ class Link(Base):
         nullable=False,
     )
     templated: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
-    #: ADR-014 — a flag, not stored credentials.
+    #: a flag, not stored credentials.
     authentication: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    #: No `position` column. Ordering is computed at render time from `rel` — a stored order
+    #: No `position` column. Ordering is computed at render time from `rel`, a stored order
     #: drifts from spec intent the moment the spec changes.

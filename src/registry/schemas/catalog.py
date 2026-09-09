@@ -9,7 +9,7 @@ from registry.schemas.link import LinkResponse
 class CatalogMetadata(BaseModel):
     """`extra="forbid"` mirrors `additionalProperties: false` in `catalog.schema.json`.
 
-    R3 is enforced upstream by whitelist projection in the renderer; this is a second line,
+    Whitelist projection in the renderer is the first line of defence; this is the second,
     and it is the one that shows up in OpenAPI.
 
     Declaration order is emission order.
@@ -26,7 +26,7 @@ class CatalogMetadata(BaseModel):
     country: str | None = None
     subdivisions: list[str] | None = None
     city: str | None = None
-    #: ADR-032 — absent means not declared, which is not the same as `global`.
+    #: Absent means not declared, which is not the same as `global`.
     coverage: CoverageScope | None = None
 
 

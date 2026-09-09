@@ -21,7 +21,7 @@ class LanguageMatch:
     """How well one catalog answers an ``Accept-Language`` header.
 
     ``rank`` is the winning range's position in the client's preference order, not its ``q``;
-    ``depth`` is how many subtags the match shares. `conventions/algorithms.md` §2.
+    ``depth`` is how many subtags the match shares, breaking ties within a single range.
     """
 
     rank: int
@@ -41,8 +41,8 @@ class DomainCatalog:
     ``schema/catalog.schema.json``. It is carried rather than rebuilt because in this
     version the source of truth *is* that document.
 
-    ponytail: no whitelist projection yet — there is no internal field to leak while the
-    source is a file that is already the wire format. R3's projection lands with the
+    ponytail: no whitelist projection yet, there is no internal field to leak while the
+    source is a file that is already the wire format. Whitelist projection lands with the
     database, in the same change that introduces columns the wire contract does not have.
     """
 

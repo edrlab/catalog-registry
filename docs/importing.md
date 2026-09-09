@@ -10,7 +10,7 @@ make add ARGS="https://example.org/opds --kind public"
 created: Example Library
 ```
 
-Run it again and it prints `updated:` — the import is idempotent.
+Run it again and it prints `updated:`, the import is idempotent.
 
 > `make seed` is the other way in, importing `data/recommended.json`. Both paths share the same
 > validation and the same upsert. See [`development.md`](development.md).
@@ -20,7 +20,7 @@ Run it again and it prints `updated:` — the import is idempotent.
 ## What it takes from the feed, and what you supply
 
 The feed answers *what this catalog is called and where its parts live*. It cannot answer *what
-kind of institution this is* — no OPDS document expresses that — so the rest is flags.
+kind of institution this is*, no OPDS document expresses that, so the rest is flags.
 
 | | Source |
 |---|---|
@@ -44,7 +44,7 @@ Two behaviours worth knowing before you fill these in:
 
 - **`--language` changes who sees the catalog.** A catalog declaring no language appears for
   *every* `Accept-Language`. Declaring `en` hides it from a reader asking for French.
-- **Omitting `--coverage` stores NULL, not `global`.** ADR-032 — the registry does not assert
+- **Omitting `--coverage` stores NULL, not `global`.**, the registry does not assert
   worldwide reach on a catalog's behalf.
 
 ## What it does with the links
@@ -64,11 +64,11 @@ registry's eight rels:
 imports match on, so trusting a remote `self` would let a rename on their side create a second
 row instead of updating the first.
 
-`http://opds-spec.org/shelf` is the single alias accepted — OPDS 1.2 §6.1 defines the
-relation that way and gives it no short form. There is no generic prefix rule, so a rel the
-specifications define but this registry does not store — `http://opds-spec.org/subscriptions`,
-`facet`, `crawlable` — is dropped like any other, silently. Use `--dry-run` to see exactly
-which links an import would keep.
+`http://opds-spec.org/shelf` is the single alias accepted. OPDS 1.2 §6.1 defines the
+relation that way and gives it no short form. There is no generic prefix rule, so a rel that
+the specifications define but this registry does not store is dropped like any other, and
+silently. That covers `http://opds-spec.org/subscriptions`, `facet` and `crawlable`. Use
+`--dry-run` to see exactly which links an import would keep.
 
 ## Re-running replaces the whole record
 
@@ -94,7 +94,7 @@ Phase 3.
 | Situation | Message |
 |---|---|
 | not `http`/`https` | `... is not an http(s) URL` |
-| unreachable, or times out after 12s | `could not fetch ... — <reason>` |
+| unreachable, or times out after 12s | `could not fetch ..., <reason>` |
 | over 2 MB | `... returned more than 2097152 bytes` |
 | not JSON, or not a JSON object | `... did not return JSON` |
 | no `metadata.title` | `... has no metadata.title, so there is nothing to name it` |
@@ -105,7 +105,7 @@ Nothing is written unless the whole document validates.
 
 ## Where it writes
 
-Directly to Postgres, using `REGISTRY_DATABASE_URL`. It is a database client, like `psql` — it
+Directly to Postgres, using `REGISTRY_DATABASE_URL`. It is a database client, like `psql`, it
 never calls the API, which is why `make logs` stays silent during an import, and why it needs
 `make up` running only for the database, not the service.
 

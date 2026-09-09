@@ -13,13 +13,15 @@ from contextlib import asynccontextmanager
 from functools import partial
 
 from fastapi import FastAPI
+from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 from registry.api.exception_handlers import register_exception_handlers
-from registry.api.middleware import RequestIdMiddleware
+from registry.api.middleware import ResponseHeadersMiddleware
 from registry.api.routes import catalogs, feed, health
 from registry.core.config import Settings
 from registry.db.session import (
-    build_session_factory,
+    build_read_session_factory,
     check_database_connection,
     create_database_engine,
 )
@@ -34,7 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine = create_database_engine(resolved)
         app.state.settings = resolved
         app.state.engine = engine
-        app.state.session_factory = build_session_factory(engine)
+        app.state.session_factory = build_read_session_factory(engine)
         app.state.check_database_connection = partial(check_database_connection, engine)
 
         @asynccontextmanager
@@ -48,7 +50,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await engine.dispose()
 
     app = FastAPI(title="OPDS Catalog Registry", version="0.1.0", lifespan=lifespan)
-    app.add_middleware(RequestIdMiddleware)
+    # Outermost, so it compresses the finished body: 258 KB of repetitive JSON at a thousand
+    # catalogs becomes 23 KB. Below 1 KB the header costs more than the compression saves.
+    # Starlette adds `Vary: Accept-Encoding` itself, which a cache will need in v1.0.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
+    # Public data, and browser-based readers are a legitimate
+    # consumer. Read methods only, no credentials: `*` with credentials is what turns a public
+    # read into a session-riding write. The back office (v1.0) is same-origin.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET", "HEAD", "OPTIONS"],
+        allow_credentials=False,
+    )
+    app.add_middleware(ResponseHeadersMiddleware)
     register_exception_handlers(app)
     app.include_router(feed.router)
     app.include_router(catalogs.router)

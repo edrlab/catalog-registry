@@ -1,4 +1,4 @@
-"""`GET /catalogs/{id}` — what every synthesised `self` link points at."""
+"""`GET /catalogs/{id}`. What every synthesised `self` link points at."""
 
 import uuid
 

@@ -34,7 +34,7 @@
         "kind": ["open"],
         "publicationTypes": ["ebook"],
         "color": "gray",
-        "supportedLanguages": ["EN"]
+        "supportedLanguages": ["en"]
       },
       "links": [
         {
@@ -55,7 +55,7 @@
         "kind": ["open"],
         "publicationTypes": ["ebook"],
         "color": "blue",
-        "supportedLanguages": ["FR"]
+        "supportedLanguages": ["fr"]
       },
       "links": [
         {

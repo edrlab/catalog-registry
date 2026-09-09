@@ -1,4 +1,4 @@
-"""Every row of `conventions/testing.md` §5.1 and §5.2."""
+"""Every row of the conventions.1 and §5.2."""
 
 import pytest
 
@@ -98,8 +98,8 @@ def test_normalise_language_tag_is_idempotent() -> None:
     ("header", "available", "expected"),
     [
         ("fr", ["fr"], ("fr",)),
-        ("fr", ["fr-be"], ("fr-be",)),  # Filtering — the range widens to `fr-be`
-        ("fr-be", ["fr"], ("fr",)),  # Lookup truncation — the range narrows to `fr`
+        ("fr", ["fr-be"], ("fr-be",)),  # Filtering, the range widens to `fr-be`
+        ("fr-be", ["fr"], ("fr",)),  # Lookup truncation, the range narrows to `fr`
         ("fr", ["frr"], ()),
         ("*", ["fr", "de"], ("fr", "de")),
         ("de-a-value", ["de"], ("de",)),
@@ -141,7 +141,7 @@ def test_match_language_ranges_returns_each_tag_once() -> None:
         ("fr", "fr-latn-fr", 1),  # and the same the other way round
         ("zh-hant", "zh-hant-tw", 2),
         ("zh-hant-tw", "zh-hans-cn", None),  # same language, different script
-        ("fr", "frr", None),  # shares no whole subtag — Northern Frisian is not French
+        ("fr", "frr", None),  # shares no whole subtag. Northern Frisian is not French
         ("frr", "fr", None),  # and it is not symmetric by accident
         ("fr-be", "fr-ca", None),  # shares `fr`, but neither is a prefix of the other
         ("fr", "de", None),
@@ -161,7 +161,7 @@ def test_rank_prefers_the_higher_quality_range() -> None:
 
 
 def test_rank_respects_header_order_when_every_q_is_equal() -> None:
-    """`fr, en` states a preference through order alone — both ranges are q=1.0.
+    """`fr, en` states a preference through order alone, both ranges are q=1.0.
 
     Ranking on `q` would tie these two, and the feed would fall back to title order.
     """
@@ -172,7 +172,7 @@ def test_rank_respects_header_order_when_every_q_is_equal() -> None:
 
 
 def test_a_regional_range_matches_a_plain_tag() -> None:
-    """`fr-FR` asked for, `fr` held — the registry must still match."""
+    """`fr-FR` asked for, `fr` held, the registry must still match."""
     assert rank_language_match(parse_accept_language("fr-FR"), ["fr"]) == LanguageMatch(
         rank=0, depth=1
     )
@@ -227,7 +227,7 @@ def test_rank_normalises_case_on_both_sides() -> None:
 
 
 def test_rank_uses_every_range_in_the_header() -> None:
-    """All ranges are considered, not just the first — each catalog lands where it matched."""
+    """All ranges are considered, not just the first, each catalog lands where it matched."""
     ranges = parse_accept_language("fr;q=0.9, de;q=0.8, en;q=0.7")
 
     assert rank_language_match(ranges, ["fr"]) == LanguageMatch(rank=0, depth=1)
@@ -244,7 +244,7 @@ def test_rank_takes_the_best_position_a_catalog_can_reach() -> None:
 
 
 def test_a_wildcard_keeps_its_own_position_in_the_order() -> None:
-    """`fr, *` ranks French at 0 and everything else at 1 — the wildcard does not promote."""
+    """`fr, *` ranks French at 0 and everything else at 1, the wildcard does not promote."""
     ranges = parse_accept_language("fr, *")
 
     assert rank_language_match(ranges, ["fr"]) == LanguageMatch(rank=0, depth=1)
@@ -269,7 +269,7 @@ def test_a_zero_quality_range_cannot_rank_anything() -> None:
 
 
 def test_no_ranges_matches_nothing() -> None:
-    """An empty range list is "no preference stated" — the service skips ranking entirely."""
+    """An empty range list is "no preference stated", the service skips ranking entirely."""
     assert rank_language_match((), ["fr"]) is None
 
 

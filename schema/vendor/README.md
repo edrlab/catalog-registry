@@ -2,11 +2,11 @@
 
 `catalog.schema.json` and `feed.schema.json` reference the Readium link schema by absolute
 URL. `jsonschema` resolves an unknown `$ref` over the network, which makes contract tests
-fail when readium.org is slow or unreachable — a failure that is not a defect in this
-repository. These copies are registered with a local `referencing.Registry` instead
-(`conventions/tooling.md`, "The Readium `$ref`").
+fail when readium.org is slow or unreachable, a failure that is not a defect in this
+repository. These copies are registered with a local `referencing.Registry` instead, so validation
+works offline.
 
-Fetched 2026-08-31. Transitively closed — no file here references anything not present.
+Fetched 2026-08-31. Transitively closed, no file here references anything not present.
 
 | File | Source |
 |---|---|

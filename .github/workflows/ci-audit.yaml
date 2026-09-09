@@ -1,0 +1,25 @@
+name: ci-audit
+on:
+  # No `push`: the advisory set does not change between a push and its pull request.
+  pull_request:
+  schedule:
+    # An advisory published today should not wait for the next pull request.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # Runtime dependencies only. `conventions/security.md` §8: review, do not gate — a
+      # blocking check on a two-person project mostly stalls PRs over advisories in
+      # transitive test dependencies that production never reaches.
+      - run: uv export --frozen --no-dev --no-hashes --no-emit-project > runtime-requirements.txt
+      - run: uvx pip-audit -r runtime-requirements.txt
+        continue-on-error: true

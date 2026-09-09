@@ -6,9 +6,9 @@ distinction is worth holding on to.
 
 - [The three kinds](#the-three-kinds)
 - [The `$ref` graph](#the-ref-graph)
-- [`schema/` — the contract](#schema--the-contract)
-- [`schema/vendor/` — third-party copies](#schemavendor--third-party-copies)
-- [`schema/generated/` — derived](#schemagenerated--derived)
+- [`schema/`, the contract](#schema--the-contract)
+- [`schema/vendor/`. Third-party copies](#schemavendor--third-party-copies)
+- [`schema/generated/`. Derived](#schemagenerated--derived)
 - [Why Python cannot use these schemas directly](#why-python-cannot-use-these-schemas-directly)
 - [How a validator is built](#how-a-validator-is-built)
 - [Where each schema is used](#where-each-schema-is-used)
@@ -40,10 +40,10 @@ schema/
 |---|---|---|---|
 | `schema/*.json` | **Hadrien**, upstream | Only upstream, never in a fork | `git merge upstream/main` |
 | `schema/vendor/` | Readium and the OPDS spec | No | Re-fetch and review the diff |
-| `schema/generated/` | This repository, mechanically | **No** — edits are overwritten | `make seed-schema` |
+| `schema/generated/` | This repository, mechanically | **No**, edits are overwritten | `make seed-schema` |
 
 All three are committed. All three ship inside the runtime image, because the seed validates
-against them at runtime — see the `COPY --chown=app:app schema/ ./schema/` line in
+against them at runtime. See the `COPY --chown=app:app schema/ ./schema/` line in
 `docker/Dockerfile`.
 
 ---
@@ -61,7 +61,7 @@ feed.schema.json ─────┤          │
        │              │          ├──► extensions/encryption/properties.schema.json
        │              │          ├──► specs.opds.io …/properties.schema.json
        │              │          │            └──► acquisition-object.schema.json
-       │              │          └──► link.schema.json  (recursive — `alternate`, `children`)
+       │              │          └──► link.schema.json  (recursive. `alternate`, `children`)
        │
        └──► catalog.schema.json  (relative ref: the feed embeds catalogs)
 
@@ -74,15 +74,15 @@ offline validation possible.
 
 ---
 
-## `schema/` — the contract
+## `schema/`, the contract
 
 `catalog.schema.json` and `feed.schema.json` are the published contract, authored by Hadrien
 and served from `edrlab.github.io`. They are the reason this project can test its output
-mechanically instead of by eye — his stated purpose for them on 2026-08-18.
+mechanically instead of by eye, his stated purpose for them on 2026-08-18.
 
 They are also **the reason several things in this codebase exist**:
 
-- `additionalProperties: false` on `metadata` is what makes R3 (no internal field ever reaches
+- `additionalProperties: false` on `metadata` is what makes the rule (no internal field ever reaches
   a response) an executable test rather than a code-review promise.
 - The enum vocabularies in `catalog.schema.json` are the single source for
   `src/registry/domain/enums.py`, which is generated rather than transcribed.
@@ -102,7 +102,7 @@ diff, not as a client bug report weeks later.
 
 ---
 
-## `schema/vendor/` — third-party copies
+## `schema/vendor/`. Third-party copies
 
 ### Why it exists
 
@@ -112,8 +112,8 @@ Both contract schemas reference the Readium link schema **by absolute URL**:
 "items": { "$ref": "https://readium.org/webpub-manifest/schema/link.schema.json" }
 ```
 
-`jsonschema` resolves an unknown `$ref` **over the network**. That means every validation —
-every contract test, every seed run, every CI job — would make an HTTP request to readium.org,
+`jsonschema` resolves an unknown `$ref` **over the network**. Every validation, meaning every
+contract test, every seed run and every CI job, would make an HTTP request to readium.org,
 and would fail when readium.org is slow, unreachable, or has changed the file. None of which
 is a defect in this repository.
 
@@ -148,19 +148,19 @@ Keep it accurate; it is the only provenance there is.
 
 Re-run the fetches and **read the diff**. An upstream change is information, not automatically
 a change to adopt. The plan calls for a weekly, deliberately **non-blocking**
-CI job that fetches and diffs — an upstream edit should not fail a build that has nothing to do
+CI job that fetches and diffs, an upstream edit should not fail a build that has nothing to do
 with it. That job is not written yet.
 
 ---
 
-## `schema/generated/` — derived
+## `schema/generated/`. Derived
 
 One file today: `seed-input.schema.json`, produced by `scripts/generate_seed_schema.py`
 (`make seed-schema`).
 
 ### Why it exists
 
-`data/recommended.json` — the seed source — **fails the published `feed.schema.json`**, and
+`data/recommended.json`, the seed source. **fails the published `feed.schema.json`**, and
 that is correct rather than a bug. It has no feed-level `links`, and no catalog in it has a
 `self` link. Both are required by the published schema, because the published schema describes
 *output*.
@@ -169,7 +169,7 @@ A `self` link points at the registry. At the time Hadrien authored the seed file
 did not exist. Requiring one would be asking him to invent a URL.
 
 So input and output are different documents that happen to look alike, and conflating them was
-the mistake (ADR-030). The seed validates against a **relaxed** variant:
+the mistake. The seed validates against a **relaxed** variant:
 
 | Relaxation | Why |
 |---|---|
@@ -177,21 +177,21 @@ the mistake (ADR-030). The seed validates against a **relaxed** variant:
 | the feed's "must contain a `self` link" constraint dropped | Same |
 | the same constraint dropped from every catalog | `self` is synthesised at render time |
 
-Everything else still applies — enums, the BCP-47 pattern, `minItems` on `kind`,
+Everything else still applies. Enums, the BCP-47 pattern, `minItems` on `kind`,
 `additionalProperties: false`.
 
 `tests/integration/test_seed.py::test_the_seed_input_is_rejected_by_the_published_schema` is
 the tripwire: it asserts the seed file **fails** the published schema. If it ever starts
-passing, the published schema has loosened and ADR-030 is worth revisiting.
+passing, the published schema has loosened and the relaxed variant is worth revisiting.
 
 ### Why it is generated rather than written
 
-ADR-030 is explicit: derived at build time, not hand-written, **so it cannot drift** when
+The rule is explicit: derived at build time, not hand-written, **so it cannot drift** when
 Hadrien edits the originals. A hand-maintained second copy of a schema is a copy that silently
 disagrees with the first six months later.
 
 The generator deep-copies `feed.schema.json`, removes exactly those three constraints, and
-inlines a relaxed copy of `catalog.schema.json` in place of the `$ref` — inlined rather than
+inlines a relaxed copy of `catalog.schema.json` in place of the `$ref`. Inlined rather than
 referenced because the relaxation applies to *this* copy only; the published
 `catalog.schema.json` must keep requiring `self`.
 
@@ -205,8 +205,8 @@ The single most surprising thing in this directory, and worth knowing before tou
 it: **the schemas are correct and Python is the odd one out.**
 
 JSON Schema draft-07 §6.3.3 says `pattern` is an ECMA-262 regular expression, and the BCP-47
-patterns in `catalog.schema.json` and Readium's `link.schema.json` use ECMA named groups —
-`(?<language>...)`. Python's `re` spells that `(?P<name>...)` and raises `PatternError` on the
+patterns in `catalog.schema.json` and Readium's `link.schema.json` use ECMA named groups,
+written `(?<language>...)`. Python's `re` spells that `(?P<name>...)` and raises `PatternError` on the
 ECMA form, so any Python validation of a catalog declaring `supportedLanguages` crashes.
 
 Two further traps sit behind it: a patched validator class does not survive a `$ref` into
@@ -214,7 +214,7 @@ another document, and `Draft7Validator.check_schema` rejects these patterns via 
 checker.
 
 `src/registry/core/schema_validation.py` handles all three, and its module docstring is the
-authoritative explanation — it sits next to the code that would break if the reasoning were
+authoritative explanation, it sits next to the code that would break if the reasoning were
 forgotten. Read it before changing anything in that module.
 
 The one thing to remember here: **schemas are loaded through `load_schema_document`, never
@@ -224,7 +224,7 @@ The one thing to remember here: **schemas are loaded through `load_schema_docume
 
 ## How a validator is built
 
-`build_schema_registry()` registers every schema under `schema/` keyed on its **`$id`** — the
+`build_schema_registry()` registers every schema under `schema/` keyed on its **`$id`**, the
 identifier a `$ref` resolves to, which is not always the filename.
 `build_schema_validator(name)` returns a `Draft7Validator` for `schema/<name>` with that
 registry attached. Both are `lru_cache`d, so each file is read once per process.
@@ -244,14 +244,14 @@ is not used.
 
 | Schema | Used at | For |
 |---|---|---|
-| `catalog.schema.json` | `scripts/generate_enums.py:73` | Generating `domain/enums.py` — the vocabularies come from the contract, never transcribed |
+| `catalog.schema.json` | `scripts/generate_enums.py:73` | Generating `domain/enums.py`, the vocabularies come from the contract, never transcribed |
 | | `scripts/generate_seed_schema.py:45` | The relaxed copy inlined into the seed-input schema |
 | | `tests/contract/test_schema_conformance.py:41` | Every catalog in a live response validates |
 | | `tests/contract/test_schema_conformance.py:64` | The `demo/` fixtures validate |
 | | `scripts/validate_fixtures.py:20` | Same check, as a CI job |
 | `feed.schema.json` | `tests/contract/test_schema_conformance.py:33,53` | The live feed response validates, seeded and empty |
 | | `scripts/generate_seed_schema.py:44` | The base the relaxed schema is derived from |
-| | `tests/integration/test_seed.py:70` | Asserts the seed file **fails** it — the tripwire for ADR-030 |
+| | `tests/integration/test_seed.py:70` | Asserts the seed file **fails** it, the tripwire |
 | | `scripts/validate_fixtures.py:21-22` | `demo/index.json` and `demo/search.json` validate |
 | `generated/seed-input.schema.json` | `src/registry/cli/seed.py:63` | **Runtime.** Every seed run validates its input first |
 | | `scripts/validate_fixtures.py:16` | `data/recommended.json` validates, as a CI job |
@@ -263,7 +263,7 @@ until someone read it by eye. It is a one-line CI job that makes that impossible
 it matters because Hadrien edits these files directly.
 
 `jsonschema` is a **runtime** dependency, not a dev one, precisely because of
-`src/registry/cli/seed.py:63` — validating input before persisting it is production behaviour.
+`src/registry/cli/seed.py:63`. Validating input before persisting it is production behaviour.
 
 ---
 
@@ -293,7 +293,7 @@ diff step, and write the output under `schema/generated/`. Do not hand-write it.
 
 ## Language tags: permissive in, lowercase out
 
-The `supportedLanguages` pattern is the standard BCP-47 regex and accepts **any case** —
+The `supportedLanguages` pattern is the standard BCP-47 regex and accepts **any case**.
 `EN`, `fr-BE` and `zh-Hant-TW` all validate. That is deliberate and stays that way: RFC 5646
 §2.1.1 declares tags case-insensitive, and its *recommended* casing is mixed (language
 lowercase, script Title, region UPPERCASE). A lowercase-only pattern would reject tags that
@@ -303,11 +303,11 @@ Everything the registry stores and emits is nonetheless lowercase, guaranteed in
 
 | Where | What |
 |---|---|
-| ingest | `normalise_language_tag` folds every tag (R2) |
+| ingest | `normalise_language_tag` folds every tag |
 | database | `ck_catalog_languages_language_tag_lowercase` rejects anything else |
 | render | the response is built from that column, so it cannot drift |
 
-The repository's own fixtures — `demo/`, `data/recommended.json` — are written lowercase so a
+The repository's own fixtures, `demo/` and `data/recommended.json`, are written lowercase so a
 diff never turns on casing. That is a convention, not a rule the schema enforces:
 `tests/integration/test_seed.py` asserts both separately, one test for the fixtures and one
 that feeds uppercase input through ingest on purpose.
@@ -325,10 +325,10 @@ divergence from a published spec.
 **Editing `schema/*.json` in this fork** puts you at odds with upstream. Hadrien owns them.
 
 **`$ref` resolution is offline by design.** If you add a schema that references a new external
-URL, vendor it too, or the whole suite starts making network calls again — quietly, and only
+URL, vendor it too, or the whole suite starts making network calls again. Quietly, and only
 failing sometimes.
 
 **A new `$id` must be unique.** Two files with the same `$id` mean one silently wins.
 
 **`.dockerignore` excludes `*.md`,** so `schema/vendor/README.md` is not in the image. The JSON
-is; the provenance note is not, which is fine — nothing reads it at runtime.
+is; the provenance note is not, which is fine. Nothing reads it at runtime.

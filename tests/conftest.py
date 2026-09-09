@@ -1,4 +1,4 @@
-"""Fixture stack (`conventions/testing.md` §3).
+"""Fixture stack
 
 **No mocked database.** A mocked session proves the code calls the methods the mock expects,
 which is a tautology; it cannot catch a constraint violation, an enum mismatch, a broken
@@ -55,8 +55,8 @@ def assert_database_is_disposable(url: str) -> None:
     """Refuse to run the suite against a shared server.
 
     The suite applies migrations and writes rows. Against the Cloud SQL sandbox that means
-    running DDL on a schema someone else is using — the exact "two developers clobbering
-    each other" that `conventions/local-development.md` §6 keeps local databases for. Set
+    running DDL on a schema someone else is using, the exact "two developers clobbering
+    each other" that the conventions keeps local databases for. Set
     ALLOW_REMOTE_TEST_DATABASE=1 to override, deliberately.
     """
     if os.environ.get(ALLOW_REMOTE):
@@ -153,7 +153,7 @@ async def db_session(
 
 @pytest.fixture
 async def seeded_catalogs(db_session: AsyncSession) -> int:
-    """Every recommended catalog, imported through the real seed path (ADR-029)."""
+    """Every recommended catalog, imported through the real seed path."""
     created, _ = await seed_catalogs(db_session, SEED_FILE)
     await db_session.commit()
     return created
@@ -180,7 +180,7 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 
 class QueryCounter:
-    """Counts ORM statements. R4 is a rule; this is what makes it a failing test."""
+    """Counts ORM statements. That is a rule; this is what makes it a failing test."""
 
     def __init__(self) -> None:
         self.count = 0

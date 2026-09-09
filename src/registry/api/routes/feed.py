@@ -1,8 +1,8 @@
-"""`GET /` — the top-level feed.
+"""`GET /`, the top-level feed.
 
 The concrete repository is wired in `main.py`, the composition root, and reached through
 `app.state`. `api` importing `repositories` is a boundary violation the architecture test
-fails on — see `architecture/system/00-layers-and-boundaries.md` §1.
+fails on.
 """
 
 from typing import Any

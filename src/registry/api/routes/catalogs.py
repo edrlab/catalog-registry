@@ -1,4 +1,4 @@
-"""`GET /catalogs/{catalog_id}` — one catalog.
+"""`GET /catalogs/{catalog_id}`, one catalog.
 
 This is what every synthesised `self` link points at, so it has to exist for the feed's own
 output to be honest.

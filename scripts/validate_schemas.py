@@ -21,10 +21,10 @@ def main() -> int:
         try:
             check_schema_is_valid(load_schema_document(path))
         except json.JSONDecodeError as exc:
-            print(f"FAIL {relative}: invalid JSON — {exc}")
+            print(f"FAIL {relative}: invalid JSON. {exc}")
             failures += 1
         except Exception as exc:
-            print(f"FAIL {relative}: invalid draft-07 schema — {exc}")
+            print(f"FAIL {relative}: invalid draft-07 schema. {exc}")
             failures += 1
         else:
             print(f"ok   {relative}")

@@ -1,6 +1,10 @@
 name: ci-schema
 on: [pull_request, push]
 
+# Least privilege: these jobs read the repository and nothing else.
+permissions:
+  contents: read
+
 jobs:
   validate-schemas:
     runs-on: ubuntu-latest

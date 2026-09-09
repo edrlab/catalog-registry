@@ -3,12 +3,12 @@
     python -m registry.cli add https://example.org/opds --kind public
 
 The feed supplies what a machine can know: its title, and the links it publishes. Everything
-else — kind, colour, coverage, country, languages, publication types — is editorial and comes
+else. Kind, colour, coverage, country, languages, publication types. Is editorial and comes
 from flags, because no OPDS feed declares any of it. `--kind` is required for that reason:
 `catalog.schema.json` gives it `minItems: 1`, and there is nothing to derive it from.
 
 This is not a replacement for `seed`. `data/recommended.json` remains the bootstrap
-(ADR-029) — the thing that turns an empty database into a working one. This writes the same
+the thing that turns an empty database into a working one. This writes the same
 rows, through the same validation and the same upsert, driven from a terminal instead of a
 file. The back office (v1.0) will drive that same path from a browser.
 """
@@ -44,15 +44,15 @@ MAX_FEED_BYTES = 2 * 1024 * 1024
 #: OPDS 1.2 §6.1 defines the relation as `http://opds-spec.org/shelf` and gives it no short
 #: form; the bare `shelf` is the registry's own vocabulary, transcribed from Hadrien's links
 #: table (`scripts/generate_enums.py`). OPDS 2.0 §4 does define short aliases for the OPDS
-#: 1.x URIs — but only for the acquisition relations, none of which the registry stores, and
+#: 1.x URIs, but only for the acquisition relations, none of which the registry stores, and
 #: `shelf` does not appear in OPDS 2.0 at all.
 #:
 #: So this is a table, not a prefix rule. Stripping `http://opds-spec.org/` generically would
-#: silently invent short forms the specifications never defined — `subscriptions`, `facet`,
-#: `crawlable`, `recommended` — and import them as though Hadrien had listed them.
+#: silently invent short forms the specifications never defined. `subscriptions`, `facet`,
+#: `crawlable`, `recommended`, and import them as though Hadrien had listed them.
 REL_ALIASES = {"http://opds-spec.org/shelf": LinkRel.SHELF}
 
-#: Never imported from a feed: the registry synthesises its own `self` (ADR-030), and
+#: Never imported from a feed: the registry synthesises its own `self`, and
 #: `catalog` is the address the operator gave, not one the feed claims for itself.
 NEVER_IMPORTED = {LinkRel.SELF, LinkRel.CATALOG}
 
@@ -73,7 +73,7 @@ def download_feed_document(url: str) -> dict[str, Any]:
         with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
             payload = response.read(MAX_FEED_BYTES + 1)
     except OSError as error:  # URLError, HTTPError, socket timeouts
-        raise ValidationError(f"could not fetch {url} — {error}") from error
+        raise ValidationError(f"could not fetch {url}. {error}") from error
 
     if len(payload) > MAX_FEED_BYTES:
         raise ValidationError(f"{url} returned more than {MAX_FEED_BYTES} bytes")
@@ -81,7 +81,7 @@ def download_feed_document(url: str) -> dict[str, Any]:
     try:
         feed = json.loads(payload)
     except json.JSONDecodeError as error:
-        raise ValidationError(f"{url} did not return JSON — {error}") from error
+        raise ValidationError(f"{url} did not return JSON. {error}") from error
 
     if not isinstance(feed, dict):
         raise ValidationError(f"{url} returned {type(feed).__name__}, not an OPDS document")
@@ -94,7 +94,7 @@ def normalise_remote_rel(rel: Any) -> LinkRel | None:
     A Readium link's `rel` is a string *or* an array (`link.schema.json`), so both are
     accepted; the first recognised value in an array wins.
 
-    Anything outside `LinkRel` and `REL_ALIASES` returns `None` — including relations the
+    Anything outside `LinkRel` and `REL_ALIASES` returns `None`. Including relations the
     OPDS specifications do define, such as `http://opds-spec.org/subscriptions`. The registry
     stores the eight rels in Hadrien's links table and no others; a feed cannot widen that by
     publishing something else, whether it is malformed or merely broader than we support.
@@ -117,8 +117,8 @@ def normalise_remote_rel(rel: Any) -> LinkRel | None:
 def build_catalog_document(feed: dict[str, Any], url: str, **editorial: Any) -> dict[str, Any]:
     """The seed-shaped catalog document for *feed*, fetched from *url*.
 
-    *url* becomes the `catalog` rel — the operator asked for this address, and it is the
-    identity the upsert matches on (Q1). Trusting the feed's own `self` instead would let a
+    *url* becomes the `catalog` rel, the operator asked for this address, and it is the
+    identity the upsert matches on. Trusting the feed's own `self` instead would let a
     remote rename split one catalog into two rows.
 
     `editorial` holds the flag-supplied metadata; keys whose value is `None` or empty are
@@ -165,7 +165,7 @@ def main(argv: Sequence[str] = ()) -> int:
         prog="python -m registry.cli add",
         description="Import a catalog into the registry from its live OPDS feed URL.",
     )
-    parser.add_argument("url", help="the catalog's OPDS feed — becomes its `catalog` link")
+    parser.add_argument("url", help="the catalog's OPDS feed. Becomes its `catalog` link")
     parser.add_argument(
         "--kind",
         action="append",

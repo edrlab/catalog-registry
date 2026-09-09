@@ -1,6 +1,10 @@
 name: ci-lint
 on: [pull_request, push]
 
+# Least privilege: these jobs read the repository and nothing else.
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest

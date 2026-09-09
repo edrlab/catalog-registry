@@ -1,6 +1,6 @@
 """Wire contract for a link. Pydantic v2.
 
-These models exist to describe the response in OpenAPI, not to enforce it — the JSON Schemas
+These models exist to describe the response in OpenAPI, not to enforce it, the JSON Schemas
 under `schema/` are the contract, and the contract tests are the enforcement. What they add is
 a machine-readable description for the clients this registry is built for.
 

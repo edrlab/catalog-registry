@@ -15,7 +15,7 @@ class FeedMetadata(BaseModel):
 
 
 class FeedResponse(BaseModel):
-    """ADR-019 — the top-level feed does not paginate, so there is no `itemsPerPage`."""
+    """the top-level feed does not paginate, so there is no `itemsPerPage`."""
 
     model_config = ConfigDict(extra="forbid")
 

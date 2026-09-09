@@ -1,4 +1,4 @@
-"""Repository behaviour, including the N+1 guard. `conventions/testing.md` §5.6, §7."""
+"""Repository behaviour, including the N+1 guard. the conventions.6, §7."""
 
 import datetime
 
@@ -13,7 +13,7 @@ from tests.conftest import SEED_CATALOG_COUNT, QueryCounter
 
 pytestmark = pytest.mark.integration
 
-#: One for the catalogs, one per eager-loaded collection. R4 says this must not grow with n.
+#: One for the catalogs, one per eager-loaded collection. This must not grow with n.
 MAX_FEED_QUERIES = 6
 
 
@@ -23,9 +23,10 @@ async def test_fetch_recommended_catalogs_returns_the_seeded_set(
     catalogs = await CatalogRepository(db_session).fetch_recommended_catalogs()
 
     assert [catalog.title for catalog in catalogs] == [
+        "Ebooks libres et gratuits",
         "Librivox",
-        "Lirtuel",
         "Project Gutenberg",
+        "Standard Ebooks",
     ]
 
 
@@ -58,7 +59,7 @@ async def test_an_unrecommended_catalog_is_excluded(
 async def test_the_feed_query_count_does_not_grow_with_the_number_of_catalogs(
     db_session: AsyncSession, seeded_catalogs: int, query_counter: QueryCounter
 ) -> None:
-    """R4, made executable. Without `selectinload` this is O(n) and the test fails."""
+    """The N+1 rule, made executable. Without `selectinload` this is O(n) and fails."""
     for index in range(20):
         db_session.add(
             Catalog(

@@ -1,4 +1,4 @@
-"""`conventions/testing.md` §5.3 — link ordering and validation."""
+"""the conventions.3. Link ordering and validation."""
 
 import pytest
 
@@ -52,7 +52,7 @@ def test_find_self_link_returns_none_when_absent() -> None:
         ([LinkRel.CATALOG, LinkRel.ICON], True),
         ([LinkRel.ICON], False),
         ([LinkRel.ALTERNATE], False),
-        # ADR-030 — `self` is synthesised, so it is neither required nor sufficient on input.
+        # `self` is synthesised, so it is neither required nor sufficient on input.
         ([LinkRel.SELF], False),
     ],
 )

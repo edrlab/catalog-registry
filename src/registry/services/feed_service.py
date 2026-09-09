@@ -20,9 +20,9 @@ _UNSCOPED, _MATCHED = 0, 1
 def _rank(catalog: Catalog, ranges: Sequence[LanguageRange]) -> tuple[int, int, int] | None:
     """Sort key for *catalog*, or ``None`` when the request excludes it.
 
-    A catalog declaring no languages is never excluded — it has made no claim to contradict —
-    and it sorts **above** every catalog that is scoped to a specific language. Breadth first:
-    a catalog that serves everyone is useful to this reader whatever they asked for.
+    A catalog declaring no languages is never excluded, since it has made no claim to
+    contradict, and it sorts above every catalog scoped to a specific language. Breadth
+    first: a catalog that serves everyone is useful to this reader whatever they asked for.
     """
     if not catalog.languages:
         return (_UNSCOPED, 0, 0)
@@ -35,11 +35,11 @@ async def resolve_top_level_feed(
 ) -> dict[str, Any]:
     """Return the recommended catalogs acceptable to *accept_language*, best match first.
 
-    No ranges means no filtering and no reordering — the client stated no preference.
+    No ranges means no filtering and no reordering, the client stated no preference.
 
     The sort is *stable*, so catalogs ranking equally keep the title order the repository
     established, and two identical requests produce byte-identical bodies without this
-    function knowing anything about titles. `conventions/algorithms.md` §2.
+    function knowing anything about titles.
     """
     catalogs = await reader.fetch_recommended_catalogs()
     ranges = parse_accept_language(accept_language)

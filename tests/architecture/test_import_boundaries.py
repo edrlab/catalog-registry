@@ -1,4 +1,4 @@
-"""Layer boundaries, enforced (`conventions/testing.md` §6).
+"""Layer boundaries, enforced
 
 It passes trivially today, which is the point: it starts passing before there is anything to
 violate. Layering rules that are only written down get broken within weeks, always for a

@@ -21,7 +21,7 @@ ENV_EXAMPLE = Path(__file__).resolve().parents[2] / ".env.example"
 
 def test_the_committed_file_matches_the_settings_model() -> None:
     assert ENV_EXAMPLE.read_text(encoding="utf-8") == render_env_example(), (
-        "`.env.example` is stale — run `make env`"
+        "`.env.example` is stale. Run `make env`"
     )
 
 

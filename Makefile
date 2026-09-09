@@ -22,7 +22,7 @@ export DB_PORT
         test lint fmt bench check-db schema-check docker-build docker-run logs stop
 
 # Self-documenting: a target appears here when its line carries a `## ` description, and
-# `##@ ` starts a section. Nothing to keep in step — add a target with `## what it does`
+# `##@ ` starts a section. Nothing to keep in step, add a target with `## what it does`
 # and it shows up.
 help:  ## List the available targets
 	@awk 'BEGIN {FS = ":.*##"} \
@@ -48,7 +48,7 @@ setup:  ## Install dependencies and create .env if it is missing
 up:  ## Start db + API in Docker and migrate (no seed)
 	@# A busy host port makes Docker fail *while* wiring the container up, leaving it created
 	@# but attached to no network. Its healthcheck still passes, because pg_isready runs
-	@# inside the container and never touches the network — so compose reports success and
+	@# inside the container and never touches the network, so compose reports success and
 	@# the failure surfaces minutes later as an unresolvable hostname. Refuse early instead.
 	@if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:$(DB_PORT) -sTCP:LISTEN >/dev/null 2>&1 \
 	    && [ -z "$$(docker compose ps -q db 2>/dev/null)" ]; then \
@@ -63,11 +63,11 @@ up:  ## Start db + API in Docker and migrate (no seed)
 	docker compose up -d --wait --build
 	@# Trust nothing: a healthy db container can still be off the network (see above).
 	@if ! docker compose exec -T api getent hosts db >/dev/null 2>&1; then \
-		echo "The database container is not on the compose network — recreating it."; \
+		echo "The database container is not on the compose network, recreating it."; \
 		docker compose up -d --force-recreate --wait; \
 	fi
 	docker compose exec -T api alembic upgrade head
-	@echo "Running on http://localhost:$(PORT) — empty. 'make seed' for the recommended catalogs."
+	@echo "Running on http://localhost:$(PORT), empty. 'make seed' for the recommended catalogs."
 
 down:  ## Stop the stack, keeping the database volume
 	docker compose down
@@ -77,7 +77,7 @@ clean:  ## Stop the stack and drop the database volume
 
 ##@ Development
 
-# Local process against the compose database. Ctrl-C to stop. Not the container — see
+# Local process against the compose database. Ctrl-C to stop. Not the container, see
 # docker-run. Catalog JSON is read by `make seed`, not at request time, so no reload glob.
 run:  ## Run the API on the host instead of in Docker (needs make up)
 	uv run uvicorn registry.main:create_app --factory --reload --port $(PORT)
@@ -91,14 +91,14 @@ add:  ## Import one catalog from its live feed URL: make add ARGS="<url> --kind 
 	uv run python -m registry.cli add $(ARGS)
 
 # Invented catalogs covering the regional-English cases a browser actually sends. Not
-# Hadrien's data and not a fixture any test reads — it exists to be looked at by hand.
+# Hadrien's data and not a fixture any test reads, it exists to be looked at by hand.
 seed-sample:  ## Import data/dev-sample.json to try ranking out
 	REGISTRY_SEED_FILE=data/dev-sample.json uv run python -m registry.cli seed
 
 migrate:  ## Apply migrations (needs make up)
 	uv run alembic upgrade head
 
-# A draft. R6 — a human reads it before it is committed.
+# A draft. A human reads and edits it before it is committed.
 revision:  ## Autogenerate a migration draft: make revision m="add x"
 	uv run alembic revision --autogenerate -m "$(m)"
 
@@ -123,9 +123,9 @@ schema-check:  ## Validate schema/ and every fixture under demo/ and data/
 	uv run python scripts/validate_schemas.py
 	uv run python scripts/validate_fixtures.py demo
 
-# Confirm a database is usable before anything depends on it — point REGISTRY_DATABASE_URL
+# Confirm a database is usable before anything depends on it, point REGISTRY_DATABASE_URL
 # at Cloud SQL through the Auth Proxy and run this. See README, "The Cloud SQL sandbox".
-# Q20 — no latency target has ever been stated, so this asserts nothing. It answers "what
+# No latency target has ever been agreed, so this asserts nothing. It answers "what
 # happens at n" on demand, and gives any future optimisation a measured before.
 bench:  ## Measure GET / as the recommended set grows: make bench N="10 1000"
 	uv run python scripts/benchmark_feed.py $(N)
@@ -144,7 +144,7 @@ env:  ## Regenerate .env.example from Settings
 enums:  ## Regenerate domain/enums.py from schema/catalog.schema.json
 	uv run python scripts/generate_enums.py
 
-seed-schema:  ## Regenerate the relaxed seed-input schema (ADR-030)
+seed-schema:  ## Regenerate the relaxed seed-input schema
 	uv run python scripts/generate_seed_schema.py
 
 ##@ Container
@@ -153,7 +153,7 @@ docker-build:  ## Build the runtime image
 	docker build -f docker/Dockerfile -t $(IMAGE) .
 
 # `make up` runs the *development* target, with your source bind-mounted. This runs the
-# runtime image — the artifact that actually deploys — against the same database, which is
+# runtime image, the artifact that actually deploys. Against the same database, which is
 # the only way to catch "works locally, missing from the image" before a deploy does.
 docker-run: docker-build  ## Run the deployable image, not the dev one (needs make up)
 	@docker network inspect $(NETWORK) >/dev/null 2>&1 || { \
@@ -165,7 +165,7 @@ docker-run: docker-build  ## Run the deployable image, not the dev one (needs ma
 	@docker rm -f $(IMAGE) >/dev/null 2>&1 || true
 	@docker run --rm -d --name $(IMAGE) --network $(NETWORK) -p $(IMAGE_PORT):8000 \
 		-e REGISTRY_DATABASE_URL="$(IMAGE_DSN)" $(IMAGE) >/dev/null
-	@echo "$(IMAGE) on http://localhost:$(IMAGE_PORT) — 'make logs' to follow, 'make stop' to stop"
+	@echo "$(IMAGE) on http://localhost:$(IMAGE_PORT). 'make logs' to follow, 'make stop' to stop"
 
 # Two things can be running, and which one you meant is not worth having to remember:
 # `make docker-run` starts a standalone container named $(IMAGE), while `make up` starts
@@ -188,7 +188,7 @@ stop:  ## Stop the runtime container started by docker-run
 	@if docker stop $(IMAGE) >/dev/null 2>&1; then \
 		echo "stopped $(IMAGE)"; \
 	elif [ -n "$$(docker compose ps -q api 2>/dev/null)" ]; then \
-		echo "$(IMAGE) is not running, but the compose stack is — stop it with 'make down'."; \
+		echo "$(IMAGE) is not running, but the compose stack is, stop it with 'make down'."; \
 	else \
 		echo "$(IMAGE) is not running."; \
 	fi

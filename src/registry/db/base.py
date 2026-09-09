@@ -1,8 +1,8 @@
 """Declarative base and the metadata naming convention.
 
 The convention must be set before the first migration. Without it Postgres names constraints
-itself and Alembic cannot reliably drop them later — a ``DROP CONSTRAINT`` that works on one
-machine and not another (`architecture/data/00-target-data-model.md` §5).
+itself and Alembic cannot reliably drop them later, a ``DROP CONSTRAINT`` that works on one
+machine and not another.
 """
 
 from sqlalchemy import MetaData

@@ -9,11 +9,11 @@ of the schemas being *correct*, not broken:
    the language pattern in Readium's ``link.schema.json`` both use named groups, so every
    pattern is translated before it reaches ``re``.
 2. **`$ref` points at readium.org.** Resolving it over the network makes validation fail when
-   readium.org is slow or unreachable — not a defect in this repository. The copies under
-   ``schema/vendor/`` are registered locally instead (`conventions/tooling.md`).
+   readium.org is slow or unreachable, not a defect in this repository. The copies under
+   ``schema/vendor/`` are registered locally instead. See ``schema/vendor/README.md``.
 
 This lives in the package rather than in `scripts/` because the seed path validates incoming
-documents before persisting, which is production behaviour — `jsonschema` is a runtime
+documents before persisting, which is production behaviour. `jsonschema` is a runtime
 dependency for that reason.
 """
 
@@ -60,7 +60,7 @@ def _translate_patterns(node: Any) -> Any:
 
 
 def load_json_document(path: Path) -> Any:
-    """Load an instance document. No pattern translation — patterns only occur in schemas."""
+    """Load an instance document. No pattern translation. Patterns only occur in schemas."""
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -72,7 +72,7 @@ def load_schema_document(path: Path) -> Any:
 #: The draft-07 metaschema, with no format checker attached.
 #:
 #: ``Draft7Validator.check_schema`` attaches one by default, and its ``format: "regex"``
-#: assertion compiles the value with Python's ``re`` — which rejects the ECMA-262 patterns
+#: assertion compiles the value with Python's ``re``, which rejects the ECMA-262 patterns
 #: these schemas correctly contain. Everything else the metaschema asserts still applies.
 _METASCHEMA_VALIDATOR = Draft7Validator(Draft7Validator.META_SCHEMA)
 

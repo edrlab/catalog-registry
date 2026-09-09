@@ -1,4 +1,4 @@
-"""Settings. The only place the environment is read (`architecture/system` §5).
+"""Settings. The only place the environment is read.
 
 Field descriptions are not decoration: `scripts/write_env_example.py` renders them as the
 comments in `.env.example`, so this class is the single source of truth for what a local
@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     )
     seed_file: Path = Field(
         default=Path("data/recommended.json"),
-        description="Feed-shaped document the seed command imports (ADR-029).",
+        description="Feed-shaped document the seed command imports.",
     )
     environment: Literal["local", "test", "staging", "production"] = "local"
     base_url: str = Field(

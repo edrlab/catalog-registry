@@ -1,4 +1,4 @@
-"""The seed path against real Postgres. `conventions/testing.md` §5.6."""
+"""The seed path against real Postgres. the conventions.6."""
 
 import json
 from pathlib import Path
@@ -23,7 +23,7 @@ async def count(session: AsyncSession, model: type) -> int:
 
 
 async def test_seed_imports_every_recommended_catalog(db_session: AsyncSession) -> None:
-    """ADR-029 — presence in the file is the recommended flag."""
+    """Presence in the file is the recommended flag."""
     created, updated = await seed_catalogs(db_session, SEED_FILE)
     await db_session.commit()
 
@@ -45,7 +45,7 @@ async def test_seed_is_idempotent(db_session: AsyncSession) -> None:
 
 
 async def test_language_tags_are_lowercased_on_ingest(db_session: AsyncSession) -> None:
-    """R2 — tags land lowercase or not at all.
+    """Tags land lowercase or not at all.
 
     The input is written uppercase here rather than read from the seed file. The file itself
     is lowercase now, so seeding it would assert nothing: this test has to supply the casing
@@ -70,7 +70,7 @@ async def test_language_tags_are_lowercased_on_ingest(db_session: AsyncSession) 
 async def test_the_seed_file_ships_lowercase_language_tags() -> None:
     """Separate from the ingest guard above, and deliberately so.
 
-    Lowercasing on ingest is the rule that must hold for any input (R2). This asserts the
+    Lowercasing on ingest is the rule that must hold for any input. This asserts the
     repository's own fixtures are already canonical, so a diff never turns on casing.
     """
     for catalog in json.loads(SEED_FILE.read_text(encoding="utf-8"))["catalogs"]:
@@ -79,29 +79,38 @@ async def test_the_seed_file_ships_lowercase_language_tags() -> None:
 
 
 async def test_undeclared_coverage_is_stored_as_null(db_session: AsyncSession) -> None:
-    """ADR-032 — a catalog that did not declare coverage gets NULL, never `global`.
+    """A catalog that did not declare coverage gets NULL, never `global`.
 
-    Lirtuel declares `subdivisions`, so this asserts the two cases are distinguished rather
-    than that every row is NULL — a blanket assertion would have passed even if the column
-    were never populated at all.
+    None of the seed catalogs declares it, so the second half of the rule, that a declared
+    value survives ingest, is asserted here on a document written for the purpose.
     """
     await seed_catalogs(db_session, SEED_FILE)
+    document = {
+        "metadata": {
+            "title": "Declares Coverage",
+            "kind": ["public"],
+            "coverage": "country",
+            "country": "BE",
+        },
+        "links": [{"href": "https://example.org/opds", "rel": "catalog"}],
+    }
+    await import_catalog_document(db_session, document, recommended=True)
     await db_session.commit()
 
     rows = (await db_session.execute(select(Catalog.title, Catalog.coverage))).all()
     by_title = dict(rows)
-    assert by_title["Lirtuel"] == CoverageScope.SUBDIVISIONS
+    assert by_title["Declares Coverage"] == CoverageScope.COUNTRY
     assert by_title["Project Gutenberg"] is None
-    assert sum(value is None for value in by_title.values()) == SEED_CATALOG_COUNT - 1
+    assert sum(value is None for value in by_title.values()) == SEED_CATALOG_COUNT
 
 
 async def test_the_seed_input_is_rejected_by_the_published_schema(db_session: AsyncSession) -> None:
-    """ADR-030, stated as a test: this is *why* the relaxed schema exists. If this ever
+    """Stated as a test: this is *why* the relaxed schema exists. If this ever
     passes, the published schema has loosened and the relaxed variant may be unnecessary."""
     feed = json.loads(SEED_FILE.read_text(encoding="utf-8"))
 
     errors = list(build_schema_validator("feed.schema.json").iter_errors(feed))
-    assert errors, "data/recommended.json now satisfies feed.schema.json — revisit ADR-030"
+    assert errors, "data/recommended.json now satisfies feed.schema.json. Revisit"
 
 
 async def test_re_running_after_the_file_grows_adds_only_the_new_rows(
@@ -129,7 +138,7 @@ async def test_re_running_after_the_file_grows_adds_only_the_new_rows(
 
 
 def test_identity_is_the_catalog_rel_href_not_the_self_href() -> None:
-    """Q1 — every `self` href points at edrlab.github.io and changes at cutover."""
+    """Every `self` href points at edrlab.github.io and changes at cutover."""
     document = {
         "metadata": {"title": "Example"},
         "links": [

@@ -1,7 +1,7 @@
 """The feed service, against an in-memory fake.
 
 A fake that satisfies the Protocol is checked by the type system; a mock is not. No database
-is touched here — that is the whole point of the service depending on `CatalogReader`.
+is touched here, that is the whole point of the service depending on `CatalogReader`.
 
 **This is where the ordering rules are pinned down**, rather than in the e2e tests. The seed
 holds three catalogs chosen to be a realistic starting registry; the fake here holds whatever
@@ -132,7 +132,7 @@ async def test_any_french_range_reaches_a_catalog_declaring_plain_fr(header: str
 
 
 async def test_a_plain_range_reaches_a_regional_catalog() -> None:
-    """The other direction — asking for `fr`, holding `fr-BE`."""
+    """The other direction. Asking for `fr`, holding `fr-BE`."""
     reader = FakeCatalogReader([build_catalog("Belgian", "fr-be"), build_catalog("Silent")])
 
     assert await titles("fr", reader) == ["Silent", "Belgian"]
@@ -150,7 +150,7 @@ async def test_sibling_regions_do_not_match_each_other() -> None:
 
 
 async def test_a_near_miss_prefix_is_not_a_match() -> None:
-    """`fr` must not match `frr` (Northern Frisian) — that is a character comparison."""
+    """`fr` must not match `frr` (Northern Frisian), that is a character comparison."""
     reader = FakeCatalogReader([build_catalog("Frisian", "frr"), build_catalog("Silent")])
 
     assert await titles("fr", reader) == ["Silent"]
@@ -207,7 +207,7 @@ async def test_specificity_never_crosses_a_preference_boundary() -> None:
 
 
 async def test_a_wildcard_ranks_at_its_own_position() -> None:
-    """`fr` first, then everything else — the wildcard does not promote the rest."""
+    """`fr` first, then everything else, the wildcard does not promote the rest."""
     reader = FakeCatalogReader([build_catalog("German", "de"), build_catalog("French", "fr")])
 
     assert await titles("fr, *", reader) == ["French", "German"]

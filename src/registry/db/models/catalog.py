@@ -3,7 +3,7 @@
 Every relationship sets ``lazy="raise_on_sql"``. Under async a lazy load raises
 ``MissingGreenlet``, whose message points nowhere useful; ``raise_on_sql`` fails at the
 access site with a clear error, during development, which is where you want it. It also
-means R4 cannot be violated silently — a query that forgot ``selectinload`` raises rather
+means an N+1 cannot happen silently, a query that forgot ``selectinload`` raises rather
 than quietly issuing N+1.
 """
 
@@ -72,15 +72,15 @@ class Catalog(Base):
     color: Mapped[CatalogColor] = mapped_column(
         _pg_enum(CatalogColor, "catalog_color"), nullable=False, server_default="gray"
     )
-    #: Nullable — a global catalog belongs to no country.
+    #: Nullable, a global catalog belongs to no country.
     country_code: Mapped[str | None] = mapped_column(
         CHAR(2), ForeignKey("countries.alpha2"), nullable=True
     )
-    #: ADR-005 — free text, not a relation. Cities become a table in v1.2.
+    #: Free text, not a relation. Cities become a table in v1.2.
     city: Mapped[str | None] = mapped_column(Text, nullable=True)
-    #: ADR-032 — nullable, no default. NULL means *not declared*; `global` means *worldwide*.
+    #: Nullable, no default. NULL means *not declared*; `global` means *worldwide*.
     #: Defaulting to `global` would be the registry asserting worldwide reach on a catalog's
-    #: behalf, and it collapses a distinction ADR-021's ranking depends on.
+    #: behalf, and it collapses a distinction geographic ranking will depend on.
     coverage: Mapped[CoverageScope | None] = mapped_column(
         _pg_enum(CoverageScope, "coverage_scope"), nullable=True
     )
@@ -114,7 +114,7 @@ class Catalog(Base):
 
 
 class CatalogKindRow(Base):
-    """At least one kind per catalog. Enforced in the service — a table-level constraint
+    """At least one kind per catalog. Enforced in the service, a table-level constraint
     cannot express "the collection is non-empty" without a deferred trigger."""
 
     __tablename__ = "catalog_kinds"
@@ -143,7 +143,7 @@ class CatalogPublicationTypeRow(Base):
 class CatalogLanguageRow(Base):
     __tablename__ = "catalog_languages"
     __table_args__ = (
-        # R2 made structural: an uppercase tag cannot be stored, so a naive comparison
+        # Lowercasing made structural: an uppercase tag cannot be stored, so a comparison
         # against a lowercase Accept-Language cannot silently return an empty feed.
         CheckConstraint("language_tag = lower(language_tag)", name="language_tag_lowercase"),
         Index("ix_catalog_languages_catalog_id", "catalog_id"),

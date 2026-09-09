@@ -12,7 +12,7 @@ from registry.core.schema_validation import build_schema_validator, load_json_do
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-#: The seed input is validated against the relaxed schema, never the published one (ADR-030).
+#: The seed input is validated against the relaxed schema, never the published one.
 SEED_INPUT = (Path("data") / "recommended.json", "generated/seed-input.schema.json")
 
 #: Fixture glob → the schema that governs it.

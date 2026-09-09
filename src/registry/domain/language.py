@@ -1,9 +1,9 @@
-"""Language range parsing and matching. Pure — stdlib only.
+"""Language range parsing and matching. Pure. Stdlib only.
 
 Two specifications, and the difference between them is where the bugs live:
 
-* **RFC 9110 §12.5.4** — how an ``Accept-Language`` header is written and weighted.
-* **RFC 4647 §3.3.1 (Filtering) and §3.4 (Lookup)** — how a range is compared to a tag.
+* **RFC 9110 §12.5.4**. How an ``Accept-Language`` header is written and weighted.
+* **RFC 4647 §3.3.1 (Filtering) and §3.4 (Lookup)**. How a range is compared to a tag.
   Matching is on *subtag* boundaries, not characters: ``fr`` matches ``fr-be`` and does
   **not** match ``frr`` (Northern Frisian). A naive ``startswith`` gets that wrong.
 
@@ -12,11 +12,11 @@ Two specifications, and the difference between them is where the bugs live:
   ``fr-be`` matches tag ``fr``, by truncating the range). A registry needs both: a reader
   asking for ``fr`` should be offered a ``fr-be`` catalog, and a reader asking for ``fr-be``
   should be offered a ``fr`` one. So the rule is **whole-subtag prefix in either
-  direction**, and ``fr-be`` still does not match ``fr-ca`` — they share a prefix, but
+  direction**, and ``fr-be`` still does not match ``fr-ca``. They share a prefix, but
   neither *is* a prefix of the other.
 
 Ranges are compared as strings in practice even though BCP-47 declares tags
-case-insensitive, so everything is lowercased on the way in (R2).
+case-insensitive, so everything is lowercased on the way in.
 """
 
 from collections.abc import Iterable, Sequence
@@ -76,7 +76,7 @@ def _parse_quality(parameters: Sequence[str]) -> float:
 def parse_accept_language(header: str | None) -> tuple[LanguageRange, ...]:
     """Parse an ``Accept-Language`` header into ranges, most preferred first.
 
-    RFC 9110 §12.5.4. Returns ``()`` for a missing, empty, or wholly unparseable header —
+    RFC 9110 §12.5.4. Returns ``()`` for a missing, empty, or wholly unparseable header,
     which callers read as "no preference stated", not as "nothing is acceptable".
 
     ``q=0`` means *not acceptable* (§12.4.2). Such ranges are dropped here, so a tag that
@@ -116,7 +116,7 @@ def _strip_singleton_extensions(tag: str) -> str:
 def match_depth(range_tag: str, available_tag: str) -> int | None:
     """Subtags shared by *range_tag* and *available_tag*, or ``None`` when they do not match.
 
-    A match requires one to be a whole-subtag prefix of the other — the union of RFC 4647
+    A match requires one to be a whole-subtag prefix of the other, the union of RFC 4647
     Filtering and Lookup, for the reason in the module docstring. The returned depth is how
     many subtags the two share, which is what makes one match rankable against another:
     ``fr-be`` against ``fr-be`` (2) is a better answer than ``fr`` against ``fr-be`` (1).
@@ -142,7 +142,7 @@ def match_language_ranges(
 
     Preference order is range order first, then the order the tags were supplied. Each tag
     appears once. An empty result means the caller stated a preference and none of it is
-    available — which is different from stating no preference at all.
+    available, which is different from stating no preference at all.
     """
     tags = [normalise_language_tag(tag) for tag in available]
     matched: dict[str, None] = {}
@@ -165,10 +165,10 @@ def rank_language_match(
     """How well *available* answers *ranges*, or ``None`` when nothing matches.
 
     The best match wins, not the first, and it is ranked on the range's *position* rather
-    than its ``q`` — see `conventions/algorithms.md` §2 for why, and for the complexity.
+    than its ``q``, because ``Accept-Language: fr, en`` states a preference with order alone.
 
     ponytail: linear scan, not an index. A prefix map of the ranges built once per request
-    would make this O(t · s) per catalog, worth doing when `n` reaches the thousands — the
+    would make this O(t · s) per catalog, worth doing when `n` reaches the thousands, the
     search path (v0.2), not this one.
     """
     tags = [normalise_language_tag(tag) for tag in available]

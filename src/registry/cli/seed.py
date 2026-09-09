@@ -1,18 +1,17 @@
 """Import `data/recommended.json` into the registry. Idempotent.
 
-**ADR-029** — `data/recommended.json` is the seed source, and presence in the file *is* the
+`data/recommended.json` is the seed source, and presence in the file *is* the
 recommended flag. `demo/` is example output and the contract-test corpus; `archive/` is out
 of scope for v0.
 
-**ADR-030** — the input is validated against the *relaxed* schema derived by
+the input is validated against the *relaxed* schema derived by
 `scripts/generate_seed_schema.py`, not against `catalog.schema.json`. The file has no
 feed-level `links` and no `self` link on any catalog, so the published schema rejects every
 record. `self` is synthesised at render time from the registry's own base URL, and the
 contract tests validate the output.
 
-**Q1 — the upsert conflict target.** Still open. `id` is generated so it never
-conflicts, and ADR-012
-removed `dedupe_key`. The plan's leaning is the **`catalog` rel href** — the library's own
+**The upsert conflict target is still an open question.** `id` is generated, so it never
+conflicts. The current answer is the **`catalog` rel href**, the library's own
 OPDS feed URL. It is externally owned and stable, where every `self` href in the fixtures
 points at `edrlab.github.io/catalog-registry/...` and so changes at cutover, which would
 silently duplicate every catalog exactly once.
@@ -57,13 +56,13 @@ from registry.domain.language import normalise_language_tag
 from registry.domain.links import has_browsable_rel
 from registry.repositories.catalog_repository import CatalogRepository
 
-#: ADR-029 — presence in `data/recommended.json` is the recommended flag.
+#: Presence in `data/recommended.json` is the recommended flag.
 RECOMMENDED_AT_LAUNCH = True
 
-#: ADR-030 — derived from the published schemas by `scripts/generate_seed_schema.py`.
+#: Derived from the published schemas by `scripts/generate_seed_schema.py`.
 SEED_INPUT_SCHEMA = "generated/seed-input.schema.json"
 
-#: Q1 — preferred identity first, fallback second.
+#: Preferred identity first, fallback second.
 IDENTITY_RELS = (LinkRel.CATALOG, LinkRel.SHELF)
 
 
@@ -75,13 +74,13 @@ def resolve_identity_href(document: dict[str, Any]) -> str:
                 return str(link["href"])
     raise ValidationError(
         f"{document['metadata']['title']} has neither a `catalog` nor a `shelf` link, "
-        "so it has no stable identity to upsert on (Q1)"
+        "so it has no stable identity to upsert on"
     )
 
 
 def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
     metadata = document["metadata"]
-    # ADR-030 — `self` is not required on input; it is synthesised at render time. What the
+    # `self` is not required on input; it is synthesised at render time. What the
     # registry cannot synthesise is somewhere to actually browse or borrow.
     rels = [LinkRel(link["rel"]) for link in document["links"]]
     if not has_browsable_rel(rels):
@@ -95,7 +94,7 @@ def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
         color=CatalogColor(metadata.get("color", CatalogColor.GRAY.value)),
         country_code=(metadata["country"].upper() if metadata.get("country") else None),
         city=metadata.get("city"),
-        # ADR-032 — absent means NULL, not `global`. Storing an undeclared coverage as
+        # Absent means NULL, not `global`. Storing an undeclared coverage as
         # `global` would assert worldwide reach on the catalog's behalf.
         coverage=(CoverageScope(metadata["coverage"]) if metadata.get("coverage") else None),
         # ck_catalogs_published_when_active: an active catalog must carry a publication date.
@@ -105,7 +104,7 @@ def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
             CatalogPublicationTypeRow(publication_type=PublicationType(value))
             for value in metadata.get("publicationTypes", ())
         ],
-        # R2 — lowercase on ingest. The repository's own fixtures are already lowercase, so
+        # Lowercase on ingest. The repository's own fixtures are already lowercase, so
         # this is not defensive: BCP-47 declares tags case-insensitive and real producers do
         # send `EN`. The check constraint rejects anything else, so a regression fails loudly.
         languages=[
@@ -133,7 +132,8 @@ async def import_catalog_document(
     session: AsyncSession, document: dict[str, Any], *, recommended: bool
 ) -> tuple[Catalog, bool]:
     """Insert, or replace the existing catalog's contents in place. Returns (catalog, created)."""
-    from sqlalchemy import func  # noqa: PLC0415 — only needed on the write path
+    # Imported here, not at module level: only the write path needs it.
+    from sqlalchemy import func  # noqa: PLC0415
 
     identity = resolve_identity_href(document)
     existing = await CatalogRepository(session).fetch_catalog_by_self_href(identity)
@@ -180,14 +180,14 @@ async def import_feed_document(
 ) -> tuple[int, int]:
     """Validate a feed-shaped document, then upsert every catalog in it.
 
-    Returns (created, updated). *source* names the document in the error message — a file
+    Returns (created, updated). *source* names the document in the error message, a file
     path for `seed`, a URL for `add`. Takes a session rather than making one, so tests can
     run it inside their transaction and the caller owns the commit.
     """
     errors = sorted(build_schema_validator(SEED_INPUT_SCHEMA).iter_errors(feed), key=str)
     if errors:
         detail = "; ".join(f"{list(error.absolute_path)}: {error.message}" for error in errors)
-        raise ValidationError(f"{source} is not valid seed input — {detail}")
+        raise ValidationError(f"{source} is not valid seed input. {detail}")
 
     created = updated = 0
     for document in feed["catalogs"]:

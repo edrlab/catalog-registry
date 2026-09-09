@@ -1,10 +1,10 @@
 """The response body, validated against the repository's own JSON Schemas.
 
-Hadrien's stated use for those schemas (2026-08-18), and R7. Two things this catches that
+Hadrien's stated use for those schemas (2026-08-18). Two things this catches that
 nothing else does:
 
-* `additionalProperties: false` on `metadata` — an internal column that reaches the response
-  fails here immediately. R3, made executable.
+* `additionalProperties: false` on `metadata`, an internal column that reaches the response
+  fails here immediately. The no-internal-fields rule, made executable.
 * Schema drift. Hadrien edits the schemas independently; when he tightens a rule this goes
   red on the next run, so the service learns from CI rather than from a client bug report.
 """
@@ -69,7 +69,7 @@ def test_the_openapi_document_describes_every_opds_response() -> None:
     """The response models exist to be published, so assert they actually are.
 
     A `JSONResponse` returned directly from a handler silently bypasses `response_model`,
-    which is exactly the mistake this catches — the endpoint keeps working and the schema
+    which is exactly the mistake this catches, the endpoint keeps working and the schema
     quietly goes empty.
     """
     settings = Settings(

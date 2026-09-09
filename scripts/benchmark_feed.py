@@ -3,16 +3,15 @@
     make bench              # 10, 100, 1000 catalogs
     make bench N="10 5000"  # any sizes
 
-Q20 records that no latency target has ever been stated, so this asserts nothing and fails
-nothing — `conventions/testing.md` §9 keeps performance out of the test suite deliberately,
-because an invented threshold produces flaky builds and no information. This exists to answer
-"what happens at n" when someone asks, and to give any future optimisation a before.
+Asserts nothing and cannot fail the build: no latency target has ever been agreed, and an
+invented threshold produces flaky builds and no information.
 
-Synthetic rows are titled `ZZ Bench …` and deleted in a `finally` block, including on Ctrl-C.
-Point `REGISTRY_DATABASE_URL` at a throwaway database: it writes and deletes rows.
+**It writes.** Synthetic rows are titled `ZZ Bench …` and deleted in a `finally`; point
+`REGISTRY_DATABASE_URL` at a throwaway database.
 """
 
 import asyncio
+import gzip
 import itertools
 import json
 import statistics
@@ -59,7 +58,7 @@ LANGUAGE_MIX = [
     ["it"],
 ]
 
-#: Real browser headers. Every user sends something different, which is the point — a cache
+#: Real browser headers. Every user sends something different, which is the point, a cache
 #: keyed on the raw header would treat all of these as distinct.
 HEADERS = [
     "en-US,en;q=0.9",
@@ -121,19 +120,22 @@ async def remove(connection) -> None:
     )
 
 
-def measure(base_url: str, header: str | None) -> tuple[float, int]:
-    """One request, over real HTTP. Returns (milliseconds, body size)."""
-    request = urllib.request.Request(base_url)
+def measure(base_url: str, header: str | None) -> tuple[float, int, int]:
+    """One request, over real HTTP. Returns (milliseconds, bytes on the wire, bytes decoded).
+
+    `Accept-Encoding: gzip` because every real client sends it, and measuring without it
+    reports a payload nobody receives. `urllib` does not add it on its own.
+    """
+    request = urllib.request.Request(base_url, headers={"Accept-Encoding": "gzip"})
     if header is not None:
         request.add_header("Accept-Language", header)
     started = time.perf_counter()
     with urllib.request.urlopen(request) as response:
         body = response.read()
-    return (time.perf_counter() - started) * 1000, len(body)
-
-
-def percentile(sorted_samples: list[float], fraction: float) -> float:
-    return sorted_samples[min(int(len(sorted_samples) * fraction), len(sorted_samples) - 1)]
+        compressed = response.headers.get("Content-Encoding") == "gzip"
+    elapsed = (time.perf_counter() - started) * 1000
+    decoded = len(gzip.decompress(body)) if compressed else len(body)
+    return elapsed, len(body), decoded
 
 
 async def main(argv: list[str]) -> int:
@@ -144,12 +146,14 @@ async def main(argv: list[str]) -> int:
     try:
         measure(base_url, None)
     except urllib.error.URLError as error:
-        print(f"{base_url} is not answering — is `make up` running? ({error})")
+        print(f"{base_url} is not answering. Is `make up` running? ({error})")
         return 1
 
     engine = create_database_engine(settings)
     print(f"{RUNS} requests per size, headers rotating, {base_url}\n")
-    print(f"{'catalogs':>9} {'p50':>9} {'p95':>9} {'p99':>9} {'returned':>9} {'body':>9}")
+    print(
+        f"{'catalogs':>9} {'p50':>9} {'p95':>9} {'p99':>9} {'returned':>9} {'wire':>8} {'raw':>8}"
+    )
     try:
         for count in sizes:
             await populate(engine, count)
@@ -157,20 +161,22 @@ async def main(argv: list[str]) -> int:
             for _ in range(WARMUP):
                 measure(base_url, next(headers))
 
-            samples, sizes_seen = [], []
+            samples, wire, raw = [], [], []
             for _ in range(RUNS):
-                elapsed, size = measure(base_url, next(headers))
+                elapsed, on_wire, decoded = measure(base_url, next(headers))
                 samples.append(elapsed)
-                sizes_seen.append(size)
-            samples.sort()
+                wire.append(on_wire)
+                raw.append(decoded)
+            cuts = statistics.quantiles(samples, n=100, method="inclusive")
 
             with urllib.request.urlopen(base_url) as response:
                 returned = json.loads(response.read())["metadata"]["numberOfItems"]
 
             print(
                 f"{count:>9} {statistics.median(samples):8.1f}ms "
-                f"{percentile(samples, 0.95):8.1f}ms {percentile(samples, 0.99):8.1f}ms "
-                f"{returned:>9} {statistics.median(sizes_seen) / 1024:8.1f}K"
+                f"{cuts[94]:8.1f}ms {cuts[98]:8.1f}ms "
+                f"{returned:>9} {statistics.median(wire) / 1024:7.1f}K "
+                f"{statistics.median(raw) / 1024:7.1f}K"
             )
     finally:
         async with engine.begin() as connection:

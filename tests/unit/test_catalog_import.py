@@ -1,4 +1,4 @@
-"""The pure half of `registry.cli.add` — no network, no database."""
+"""The pure half of `registry.cli.add`, no network, no database."""
 
 import pytest
 
@@ -32,13 +32,13 @@ OPDS_FEED = {
         ("http://opds-spec.org/shelf", LinkRel.SHELF),  # OPDS 1.2 §6.1, the only alias
         ("shelf", LinkRel.SHELF),
         (["next", "search"], LinkRel.SEARCH),  # arrays are legal in link.schema.json
-        ("self", None),  # ADR-030 — the registry synthesises its own
+        ("self", None),  # , the registry synthesises its own
         ("catalog", None),  # supplied by the operator, never trusted from the feed
         ("next", None),
         # Defined by OPDS 1.2 §6.1 alongside `shelf`, and still not ours: the registry's
         # vocabulary is Hadrien's links table, not everything the specifications name.
         ("http://opds-spec.org/subscriptions", None),
-        # No generic prefix rule — this must not become `icon`.
+        # No generic prefix rule, this must not become `icon`.
         ("http://opds-spec.org/image", None),
         (None, None),
     ],
@@ -67,7 +67,7 @@ def test_templated_survives_and_empty_editorial_fields_are_dropped() -> None:
     search = next(link for link in document["links"] if link["rel"] == "search")
     assert search["templated"] is True
     # `additionalProperties: false` on metadata means a null is not merely useless, it is
-    # invalid — so absent flags must not become keys.
+    # invalid, so absent flags must not become keys.
     assert set(document["metadata"]) == {"title", "kind"}
 
 

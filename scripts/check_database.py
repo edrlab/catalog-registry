@@ -3,7 +3,7 @@
 Written for the Phase 0 connectivity task: point `REGISTRY_DATABASE_URL` at Cloud SQL
 (through the Auth Proxy) and run it. Enabling an extension on Cloud SQL is an administrative
 action someone else performs, so discovering a missing one at the start of v0.2 costs a
-round trip — this makes that discovery cheap and early.
+round trip, this makes that discovery cheap and early.
 
     cloud-sql-proxy --port 5433 PROJECT:REGION:INSTANCE
     REGISTRY_DATABASE_URL=postgresql+asyncpg://USER:PASS@localhost:5433/DB \
@@ -20,9 +20,9 @@ from registry.db.session import create_database_engine
 
 #: name → why this service cares, and which version needs it.
 EXTENSIONS = {
-    "pgcrypto": "gen_random_uuid() — v0 (built into PostgreSQL 13+, so often not required)",
-    "pg_trgm": "fuzzy search — v0.2",
-    "postgis": "geo ranking — v1.2 (not needed yet; worth knowing now)",
+    "pgcrypto": "gen_random_uuid(). V0 (built into PostgreSQL 13+, so often not required)",
+    "pg_trgm": "fuzzy search. V0.2",
+    "postgis": "geo ranking. V1.2 (not needed yet; worth knowing now)",
 }
 
 
@@ -68,8 +68,8 @@ async def report() -> int:
     finally:
         await engine.dispose()
 
-    print("\nnot checkable from SQL — confirm by hand:")
-    print("  region (Q9), and that this instance is a sandbox, not production")
+    print("\nnot checkable from SQL. Confirm by hand:")
+    print("  region, and that this instance is a sandbox, not production")
     return 1 if problems else 0
 
 

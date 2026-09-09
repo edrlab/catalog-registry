@@ -1,4 +1,4 @@
-"""Link ordering. Pure — stdlib only.
+"""Link ordering. Pure. Stdlib only.
 
 Ordering is computed from `rel` rather than stored, so it cannot drift from the spec the
 moment the spec changes. The renderer dispatches through this map rather than an if/elif
@@ -39,6 +39,6 @@ def has_browsable_rel(rels: Sequence[LinkRel]) -> bool:
     """A catalog needs somewhere to actually browse or borrow.
 
     `self` is deliberately not checked: it points at this registry, so it is synthesised at
-    render time rather than supplied by whoever authored the catalog (ADR-030).
+    render time rather than supplied by whoever authored the catalog.
     """
     return bool(set(rels) & {LinkRel.CATALOG, LinkRel.SHELF})

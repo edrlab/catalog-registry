@@ -1,6 +1,10 @@
 name: ci-test
 on: [pull_request, push]
 
+# Least privilege: these jobs read the repository and nothing else.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

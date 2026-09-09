@@ -1,7 +1,7 @@
 """Catalog row → OPDS catalog document.
 
-**Whitelist projection (R3).** This builds the document field by field. It never iterates the
-model's attributes, so adding a column cannot leak it into a response — and
+**Whitelist projection.** This builds the document field by field. It never iterates the
+model's attributes, so adding a column cannot leak it into a response, and
 `catalog.schema.json` sets `additionalProperties: false` on `metadata`, which makes a leak a
 contract-test failure rather than a quiet disclosure.
 
@@ -33,10 +33,10 @@ def render_link(link: Link) -> dict[str, Any]:
 
 
 def build_catalog_self_link(catalog_id: uuid.UUID, *, base_url: str) -> dict[str, Any]:
-    """ADR-030 — `self` points at this registry, so the registry synthesises it.
+    """`self` points at this registry, so the registry synthesises it.
 
     Seed input carries no `self` link: it would mean asking whoever authored the catalog to
-    invent a URL for a registry that did not exist yet. ADR-028 fixes the media type.
+    invent a URL for a registry that did not exist yet.
     """
     return {
         "href": f"{base_url.rstrip('/')}/catalogs/{catalog_id}",
@@ -66,7 +66,7 @@ def render_catalog(catalog: Catalog, *, base_url: str) -> dict[str, Any]:
         metadata["subdivisions"] = sorted(row.subdivision_code for row in catalog.subdivisions)
     if catalog.city:
         metadata["city"] = catalog.city
-    # ADR-032 — omitted when not declared. Emitting `global` here would re-introduce exactly
+    # Omitted when not declared. Emitting `global` here would re-introduce exactly
     # the claim the nullable column exists to avoid.
     if catalog.coverage is not None:
         metadata["coverage"] = catalog.coverage.value

@@ -31,6 +31,21 @@ async def handle_http_exception(_request: Request, exc: Exception) -> JSONRespon
     )
 
 
+async def handle_unexpected_error(_request: Request, _exc: Exception) -> JSONResponse:
+    """Anything not deliberately raised.
+
+    Starlette's own handler answers `text/plain`, which breaks the contract that every error
+    is a problem document. The detail is fixed, never `str(exc)`: an unexpected exception's
+    message is the one most likely to carry a DSN, a file path, or a row of data, and this
+    endpoint is public and unauthenticated. The request id in `X-Request-Id` is how the
+    caller and the log are correlated instead.
+    """
+    return build_problem_response(
+        status=500, title="Internal Server Error", detail="An unexpected error occurred."
+    )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RegistryError, handle_registry_error)
     app.add_exception_handler(HTTPException, handle_http_exception)
+    app.add_exception_handler(Exception, handle_unexpected_error)
