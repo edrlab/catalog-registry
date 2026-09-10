@@ -1,5 +1,5 @@
 name: ci-test
-on: [pull_request, push]
+on: [pull_request, push, workflow_call]
 
 # Least privilege: these jobs read the repository and nothing else.
 # Actions are pinned by commit digest, not by tag: a tag can be moved to point at
