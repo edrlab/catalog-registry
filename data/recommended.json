@@ -30,6 +30,21 @@
     },
     {
       "metadata": {
+        "title": "Librivox",
+        "kind": ["open"],
+        "publicationTypes": ["audiobook"],
+        "color": "gray"
+      },
+      "links": [
+        {
+          "href": "https://librivox.org/",
+          "type": "text/html",
+          "rel": "catalog"
+        }
+      ]
+    },
+    {
+      "metadata": {
         "title": "Standard Ebooks",
         "kind": ["open"],
         "publicationTypes": ["ebook"],
@@ -67,16 +82,80 @@
     },
     {
       "metadata": {
-        "title": "Librivox",
+        "title": "TV5 Monde",
         "kind": ["open"],
-        "publicationTypes": ["audiobook"],
-        "color": "gray"
+        "publicationTypes": ["ebook"],
+        "color": "yellow",
+        "supportedLanguages": ["fr"]
       },
       "links": [
         {
-          "href": "https://librivox.org/",
+          "href": "https://bibliothequenumerique.tv5monde.com/",
           "type": "text/html",
           "rel": "catalog"
+        },
+        {
+          "href": "https://bibliothequenumerique.tv5monde.com/apple-touch-icon.png",
+          "type": "image/png",
+          "rel": "icon"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Bibliothèque numérique Romande",
+        "kind": ["open"],
+        "publicationTypes": ["ebook"],
+        "color": "red",
+        "supportedLanguages": ["fr"]
+      },
+      "links": [
+        {
+          "href": "https://ebooks-bnr.com/",
+          "type": "text/html",
+          "rel": "catalog"
+        },
+        {
+          "href": "https://ebooks-bnr.com/wp-content/uploads/2022/06/cropped-BNR-RGB-01-1-180x180.png",
+          "type": "image/png",
+          "rel": "icon"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "La Bibliothèque russe et slave",
+        "kind": ["open"],
+        "publicationTypes": ["ebook"],
+        "color": "red",
+        "supportedLanguages": ["fr"]
+      },
+      "links": [
+        {
+          "href": "https://bibliotheque-russe-et-slave.com/",
+          "type": "text/html",
+          "rel": "catalog"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Liber Liber",
+        "kind": ["open"],
+        "publicationTypes": ["ebook"],
+        "color": "blue",
+        "supportedLanguages": ["it"]
+      },
+      "links": [
+        {
+          "href": "https://liberliber.it/opere/libri/argomento/epub/",
+          "type": "text/html",
+          "rel": "catalog"
+        },
+        {
+          "href": "https://liberliber.it/wp-content/uploads/2015/08/liberliber_2014_favicon_0114x0114.png",
+          "type": "image/png",
+          "rel": "icon"
         }
       ]
     }
