@@ -178,9 +178,13 @@ def normalise_remote_rel(rel: Any) -> LinkRel | None:
 def build_catalog_document(feed: dict[str, Any], url: str, **editorial: Any) -> dict[str, Any]:
     """The seed-shaped catalog document for *feed*, fetched from *url*.
 
-    *url* becomes the `catalog` rel, the operator asked for this address, and it is the
-    identity the upsert matches on. Trusting the feed's own `self` instead would let a
-    remote rename split one catalog into two rows.
+    *url* becomes the `catalog` rel, the operator asked for this address. It is not the
+    upsert identity, though: Q1 (ADR-036) makes `metadata.identifier` that, so a fresh one is
+    generated here (`uuid.uuid4()` — a remote feed has no notion of this registry's identifier
+    scheme, and there's no human in the loop to hand-assign one the way Hadrien does for the
+    curated seed). `add_catalog_from_url` uses *url* only to find a catalog it previously
+    added under it, so a re-run reuses that row's `identifier` instead of generating a new one
+    and duplicating the row.
 
     `editorial` holds the flag-supplied metadata; keys whose value is `None` or empty are
     dropped, so `metadata` never carries a null that `additionalProperties: false` would

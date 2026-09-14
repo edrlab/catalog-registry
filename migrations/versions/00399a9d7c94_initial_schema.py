@@ -1,6 +1,6 @@
 """initial schema
 
-Revision ID: 0001
+Revision ID: 00399a9d7c94
 Revises:
 Create Date: 2026-09-14
 
@@ -10,9 +10,11 @@ final v0 schema rather than replaying `0003`'s `coverage NOT NULL DEFAULT 'globa
 `0007`'s later fix, or creating `catalogs` without `identifier` and adding it in `0008`. Both
 land in their final form directly.
 
-Existing local/CI databases at any of the old revisions must be reset (`make clean` drops the
-volume) before this applies; their `alembic_version` no longer matches anything in this
-history.
+**Deliberately a fresh revision id, not a reused `0001`.** A database still stopped at the old
+`0001_create_enums` (enums only, no `catalogs` table) would otherwise look, to Alembic, like it
+already had this migration applied — `upgrade head` would then skip it silently, leaving that
+database permanently missing every table this migration creates. A new, unrecognised id makes
+Alembic refuse instead, which is what should happen: reset it (`make clean` drops the volume).
 """
 
 from collections.abc import Sequence
@@ -21,7 +23,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0001"
+revision: str = "00399a9d7c94"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
