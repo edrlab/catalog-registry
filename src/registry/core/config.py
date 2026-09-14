@@ -8,7 +8,7 @@ developer has to set.
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, PostgresDsn
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,7 +19,11 @@ class Settings(BaseSettings):
         extra="forbid",  # a typo'd variable fails at boot, not silently six weeks later
     )
 
-    database_url: PostgresDsn = Field(
+    # str, not PostgresDsn: Cloud Run's Cloud SQL unix-socket form
+    # (postgresql+asyncpg://user:pass@/db?host=/cloudsql/...) has an empty
+    # host, which PostgresDsn's stricter URL parser rejects outright even
+    # though asyncpg/SQLAlchemy accept it fine.
+    database_url: str = Field(
         description="Async Postgres DSN. Required, so no deployment falls back to a local default.",
     )
     seed_file: Path = Field(
