@@ -49,6 +49,7 @@ def render_catalog(catalog: Catalog, *, base_url: str) -> dict[str, Any]:
     """Every collection is sorted before emission, so the output is deterministic."""
     metadata: dict[str, Any] = {
         "title": catalog.title,
+        "identifier": catalog.identifier,
         "kind": sorted(row.kind.value for row in catalog.kinds),
     }
     if catalog.description:

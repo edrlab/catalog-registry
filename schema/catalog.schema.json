@@ -14,7 +14,8 @@
         },
         "identifier": {
           "type": "string",
-          "format": "uri"
+          "format": "uri",
+          "pattern": "^urn:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
         },
         "kind": {
           "type": "array",
@@ -94,6 +95,7 @@
       },
       "required": [
         "title",
+        "identifier",
         "kind"
       ]
     },

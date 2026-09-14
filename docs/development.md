@@ -48,7 +48,7 @@ make up
 
 1. builds the image and starts Postgres and the API under Docker Compose
 2. checks the database container is actually reachable on the compose network
-3. runs `alembic upgrade head`. Eight tables, seven migrations, 249 countries
+3. runs `alembic upgrade head`. Eight tables, one migration, 249 countries
 
 It does **not** seed. `make up` is run many times a day, and a command you run that often
 must not keep reinstating rows you deleted on purpose. A fresh database serves an empty feed:
@@ -176,6 +176,8 @@ Constraints worth knowing, because they will reject your data rather than quietl
 - `(catalog_id, rel, href)` is unique across links
 - `coverage` is **nullable with no default**. `NULL` means *not declared*,
   `global` means *worldwide*, and collapsing them loses information
+- `identifier` must be a well-formed `urn:uuid:...` and unique across catalogs — it's the
+  upsert match key, see [Identity across runs](#identity-across-runs)
 
 ---
 
@@ -193,6 +195,11 @@ Rules:
 - **A merged migration is never edited.** Forward-only.
 - `downgrade()` is implemented, or raises with a reason.
 - One logical change per migration; data migrations separate from schema migrations.
+
+`0001_initial_schema` is a squash of what were eight separate migrations, done once, before
+anything was deployed — no environment held applied revision history to protect. That is the
+only case where rewriting merged migrations is safe; it does not happen again once something
+is deployed.
 
 To confirm the models and migrations still agree, autogenerate and check it produces nothing:
 
@@ -236,11 +243,16 @@ tests. [`schemas.md`](schemas.md) has the detail.
 
 ### Identity across runs
 
-Catalogs are matched on their `catalog` rel href, the library's own feed URL, which is
-externally owned and stable. `self` hrefs all point at `edrlab.github.io` and change at
-cutover, which would silently duplicate every catalog. A catalog with only a `shelf` link
-falls back to that; one with neither is rejected rather than inserted under an identity that
-cannot be matched again. This is still an open question.
+Catalogs are matched on `metadata.identifier`, a `urn:uuid:...` required on every catalog
+document. It is not a link, so it survives a catalog's feed URL changing — the case that ruled
+out matching on a href: `self` hrefs all point at `edrlab.github.io` and change at cutover,
+and the `catalog`/`shelf` link a library publishes can change too (Project Gutenberg moving
+from pre-prod to prod is the case that prompted this). A document with no `identifier` is
+rejected rather than inserted under an identity that cannot be matched again.
+
+For `make seed`, Hadrien hand-assigns the identifier in `data/recommended.json`. For `make
+add`, a remote feed has no notion of this registry's identifier scheme, so one is generated;
+see [`importing.md`](importing.md).
 
 ---
 
@@ -410,7 +422,6 @@ in the code where it bites.
 
 | Question | Where it shows up |
 |---|---|
-| What a re-run of the seed matches an existing catalog on | `cli/seed.py`. Currently the `catalog` rel href, with `shelf` as a fallback |
 | Which GCP region | Deployment only. EDRLab is French, so GDPR applies |
 | Which milestone integrator filtering lands in | Nothing in v0 changes either way |
 | Whether the seed catalogs linking to `text/html` rather than OPDS is intentional | An OPDS-only filter would drop most of them. Possibly missing links rather than intent |

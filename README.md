@@ -68,7 +68,7 @@ appears as soon as its line carries a `## description`.
 
 ## Where the data comes from
 
-Postgres, with eight tables, seven migrations and six native enums.
+Postgres, with eight tables, one migration and six native enums.
 
 | | |
 |---|---|
