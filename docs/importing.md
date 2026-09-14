@@ -64,9 +64,14 @@ not store. Those are skipped, and the rest are kept: `["catalog", "start"]` stor
 | `profile`, `icon`, `alternate`, `authenticate` | unchanged |
 | anything else, `self` and paging rels included | dropped |
 
-**Your URL becomes `catalog`, never the feed's own `self`.** That link is the identity later
-imports match on, so trusting a remote `self` would let a rename on their side create a second
-row instead of updating the first.
+**Your URL becomes `catalog`, never the feed's own `self`.** A remote feed's `self` is not
+something this registry trusts for anything.
+
+**The identity later imports match on is `metadata.identifier`, not a link.** A remote feed
+has no notion of this registry's identifier, so one is generated (`uuid.uuid4()`) the first
+time you `add` a URL. Re-running `add` on the same URL looks that catalog up by the URL you
+typed and reuses its existing `identifier`, so the row is updated, not duplicated under a new
+one.
 
 `http://opds-spec.org/shelf` is the single alias accepted. OPDS 1.2 §6.1 defines the
 relation that way and gives it no short form. There is no generic prefix rule, so a rel that

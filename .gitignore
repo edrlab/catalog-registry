@@ -3,6 +3,7 @@ schema/.DS_Store
 opds-registry-all-plans
 CLAUDE.md
 .env
+.env.*
 .venv/
 __pycache__/
 *.py[cod]

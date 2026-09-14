@@ -45,6 +45,25 @@ async def test_every_catalog_validates_against_catalog_schema(
         assert not errors, [catalog["metadata"]["title"], [e.message for e in errors]]
 
 
+async def test_the_seeded_identifier_round_trips_into_the_response(
+    client: AsyncClient, seeded_catalogs: int
+) -> None:
+    """Q1: `metadata.identifier` is rendered, and it's the value Hadrien assigned, unchanged."""
+    seed = json.loads((REPO_ROOT / "data" / "recommended.json").read_text(encoding="utf-8"))
+    expected = {
+        catalog["metadata"]["title"]: catalog["metadata"]["identifier"]
+        for catalog in seed["catalogs"]
+    }
+
+    response = await client.get("/")
+
+    rendered = {
+        catalog["metadata"]["title"]: catalog["metadata"]["identifier"]
+        for catalog in response.json()["catalogs"]
+    }
+    assert rendered == expected
+
+
 async def test_an_empty_feed_still_validates(client: AsyncClient) -> None:
     """No recommended catalogs is a valid feed, not an error."""
     response = await client.get("/")

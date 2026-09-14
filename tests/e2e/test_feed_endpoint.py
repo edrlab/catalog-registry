@@ -53,10 +53,14 @@ async def test_no_accept_language_returns_everything_recommended(
     client: AsyncClient, seeded_catalogs: int
 ) -> None:
     assert await titles(client) == [
+        "Bibliothèque numérique Romande",
         "Ebooks libres et gratuits",
+        "La Bibliothèque russe et slave",
+        "Liber Liber",
         "Librivox",
         "Project Gutenberg",
         "Standard Ebooks",
+        "TV5 Monde",
     ]
 
 

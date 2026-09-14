@@ -5,9 +5,10 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from registry.cli.seed import import_catalog_document, resolve_identity_href, seed_catalogs
+from registry.cli.seed import import_catalog_document, resolve_identifier, seed_catalogs
 from registry.core.errors import ValidationError
 from registry.core.schema_validation import build_schema_validator
 from registry.db.models.catalog import Catalog, CatalogLanguageRow
@@ -55,6 +56,7 @@ async def test_language_tags_are_lowercased_on_ingest(db_session: AsyncSession) 
     document = {
         "metadata": {
             "title": "Uppercase Tags",
+            "identifier": "urn:uuid:2569a0f1-5a98-4d33-ae92-fb26671ba2e0",
             "kind": ["open"],
             "supportedLanguages": ["EN", "Fr-BE"],
         },
@@ -88,6 +90,7 @@ async def test_undeclared_coverage_is_stored_as_null(db_session: AsyncSession) -
     document = {
         "metadata": {
             "title": "Declares Coverage",
+            "identifier": "urn:uuid:a7ed9044-af69-434f-b82b-bbbe541e2074",
             "kind": ["public"],
             "coverage": "country",
             "country": "BE",
@@ -123,7 +126,11 @@ async def test_re_running_after_the_file_grows_adds_only_the_new_rows(
     feed = json.loads(SEED_FILE.read_text(encoding="utf-8"))
     feed["catalogs"].append(
         {
-            "metadata": {"title": "Added Later", "kind": ["public"]},
+            "metadata": {
+                "title": "Added Later",
+                "identifier": "urn:uuid:fe4ed407-6968-458b-9f87-da9b59306c3f",
+                "kind": ["public"],
+            },
             "links": [{"href": "https://later.example/opds", "rel": "catalog"}],
         }
     )
@@ -137,36 +144,75 @@ async def test_re_running_after_the_file_grows_adds_only_the_new_rows(
     assert await count(db_session, Catalog) == SEED_CATALOG_COUNT + 1
 
 
-def test_identity_is_the_catalog_rel_href_not_the_self_href() -> None:
-    """Every `self` href points at edrlab.github.io and changes at cutover."""
+def test_identity_is_the_metadata_identifier() -> None:
+    """Q1: the stable, externally-assigned key — not any link, including `self`."""
     document = {
-        "metadata": {"title": "Example"},
+        "metadata": {
+            "title": "Example",
+            "identifier": "urn:uuid:38f6d219-c567-44c5-8dc5-1b8a85ed9b69",
+        },
         "links": [
             {"href": "https://edrlab.github.io/x.json", "rel": "self"},
             {"href": "https://library.example/home.opds2", "rel": "catalog"},
         ],
     }
 
-    assert resolve_identity_href(document) == "https://library.example/home.opds2"
+    assert resolve_identifier(document) == "urn:uuid:38f6d219-c567-44c5-8dc5-1b8a85ed9b69"
 
 
-def test_shelf_is_the_documented_fallback_when_there_is_no_catalog_link() -> None:
+def test_a_catalog_without_an_identifier_is_rejected() -> None:
     document = {
         "metadata": {"title": "Example"},
-        "links": [{"href": "https://library.example/shelf.opds2", "rel": "shelf"}],
-    }
-
-    assert resolve_identity_href(document) == "https://library.example/shelf.opds2"
-
-
-def test_a_catalog_with_no_identity_link_is_rejected() -> None:
-    document = {
-        "metadata": {"title": "Example"},
-        "links": [{"href": "https://edrlab.github.io/x.json", "rel": "self"}],
+        "links": [{"href": "https://library.example/home.opds2", "rel": "catalog"}],
     }
 
     with pytest.raises(ValidationError, match="no stable identity"):
-        resolve_identity_href(document)
+        resolve_identifier(document)
+
+
+async def test_a_malformed_identifier_is_rejected_by_the_check_constraint(
+    db_session: AsyncSession,
+) -> None:
+    """ck_catalogs_identifier_is_urn_uuid. Defence in depth below the schema/format layer."""
+    document = {
+        "metadata": {
+            "title": "Malformed Identifier",
+            "identifier": "not-a-urn-uuid",
+            "kind": ["open"],
+        },
+        "links": [{"href": "https://example.org/opds", "rel": "catalog"}],
+    }
+    await import_catalog_document(db_session, document, recommended=True)
+
+    with pytest.raises(IntegrityError, match="identifier_is_urn_uuid"):
+        await db_session.commit()
+
+
+async def test_a_catalog_matched_by_identifier_survives_an_href_change(
+    db_session: AsyncSession,
+) -> None:
+    """The scenario Hadrien described: Project Gutenberg moving pre-prod to prod.
+
+    A href-keyed upsert would silently duplicate the row here. Matching on `identifier`
+    instead means the same row is updated in place."""
+    identifier = "urn:uuid:30a59158-28bc-4fc1-ad99-93325968d9c1"
+    original = {
+        "metadata": {"title": "Moving Library", "identifier": identifier, "kind": ["open"]},
+        "links": [{"href": "https://old.example/opds", "rel": "catalog"}],
+    }
+    await import_catalog_document(db_session, original, recommended=True)
+    await db_session.commit()
+
+    moved = {
+        "metadata": {"title": "Moving Library", "identifier": identifier, "kind": ["open"]},
+        "links": [{"href": "https://new.example/opds", "rel": "catalog"}],
+    }
+    catalog, created = await import_catalog_document(db_session, moved, recommended=True)
+    await db_session.commit()
+
+    assert created is False
+    assert await count(db_session, Catalog) == 1
+    assert {link.href for link in catalog.links} == {"https://new.example/opds"}
 
 
 async def test_a_catalog_removed_from_the_file_stays_recommended(
@@ -205,7 +251,11 @@ async def test_seeding_leaves_a_separately_added_catalog_alone(
     await import_catalog_document(
         db_session,
         {
-            "metadata": {"title": "Added Separately", "kind": ["public"]},
+            "metadata": {
+                "title": "Added Separately",
+                "identifier": "urn:uuid:c24b85b8-8a33-4382-8b0d-bb687e708cc6",
+                "kind": ["public"],
+            },
             "links": [{"href": "https://example.org/opds", "rel": "catalog"}],
         },
         recommended=True,
@@ -224,7 +274,11 @@ async def test_a_reactivated_catalog_gets_a_publication_date(db_session: AsyncSe
     """ck_catalogs_published_when_active. A suggested row has none, and activating it without
     one fails the constraint at commit rather than in the code."""
     document = {
-        "metadata": {"title": "Was Suggested", "kind": ["public"]},
+        "metadata": {
+            "title": "Was Suggested",
+            "identifier": "urn:uuid:3169c992-a585-46cd-9825-3c3453ceaa08",
+            "kind": ["public"],
+        },
         "links": [{"href": "https://example.org/opds", "rel": "catalog"}],
     }
     catalog, _ = await import_catalog_document(db_session, document, recommended=False)
@@ -245,10 +299,13 @@ async def test_a_reactivated_catalog_gets_a_publication_date(db_session: AsyncSe
 async def test_a_rel_array_is_accepted(db_session: AsyncSession) -> None:
     """Readium's link schema allows `rel` to be an array, so the seed path must read one."""
     document = {
-        "metadata": {"title": "Array Rel", "kind": ["open"]},
+        "metadata": {
+            "title": "Array Rel",
+            "identifier": "urn:uuid:511be66e-1406-4d55-b29c-2c6547e242ba",
+            "kind": ["open"],
+        },
         "links": [{"href": "https://example.org/opds", "rel": ["catalog", "start"]}],
     }
-    assert resolve_identity_href(document) == "https://example.org/opds"
 
     catalog, _ = await import_catalog_document(db_session, document, recommended=True)
     await db_session.commit()

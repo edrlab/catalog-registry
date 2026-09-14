@@ -10,16 +10,12 @@ feed-level `links` and no `self` link on any catalog, so the published schema re
 record. `self` is synthesised at render time from the registry's own base URL, and the
 contract tests validate the output.
 
-**The upsert conflict target is still an open question.** `id` is generated, so it never
-conflicts. The current answer is the **`catalog` rel href**, the library's own
-OPDS feed URL. It is externally owned and stable, where every `self` href in the fixtures
-points at `edrlab.github.io/catalog-registry/...` and so changes at cutover, which would
-silently duplicate every catalog exactly once.
-
-A catalog with a `shelf` link but no `catalog` link is permitted by the validation rule, so
-`shelf` is the documented fallback. If neither is present the record is rejected rather than
-inserted under an identity that cannot be matched again.
-
+**The upsert conflict target closes Q1: `metadata.identifier`.** `id` is generated fresh per
+environment, so it never conflicts. Matching on the `catalog`/`shelf` link href was the interim
+answer, but a href changes (Project Gutenberg moving from pre-prod to prod is the case that
+prompted this), which would silently duplicate the row on the next re-seed. `identifier` is
+externally assigned once and never changes, so it is required on every catalog document and is
+the sole match key — no href fallback.
 """
 
 import asyncio
@@ -62,9 +58,6 @@ RECOMMENDED_AT_LAUNCH = True
 #: Derived from the published schemas by `scripts/generate_seed_schema.py`.
 SEED_INPUT_SCHEMA = "generated/seed-input.schema.json"
 
-#: Preferred identity first, fallback second.
-IDENTITY_RELS = (LinkRel.CATALOG, LinkRel.SHELF)
-
 
 def link_rels(link: dict[str, Any]) -> list[LinkRel]:
     """The rels on *link* that this registry stores, in the order they were written.
@@ -79,16 +72,19 @@ def link_rels(link: dict[str, Any]) -> list[LinkRel]:
     return [LinkRel(value) for value in written if value in set(LinkRel)]
 
 
-def resolve_identity_href(document: dict[str, Any]) -> str:
-    """The externally owned URL this catalog is matched on across seed runs."""
-    for rel in IDENTITY_RELS:
-        for link in document["links"]:
-            if rel in link_rels(link):
-                return str(link["href"])
-    raise ValidationError(
-        f"{document['metadata']['title']} has neither a `catalog` nor a `shelf` link, "
-        "so it has no stable identity to upsert on"
-    )
+def resolve_identifier(document: dict[str, Any]) -> str:
+    """The externally-assigned `urn:uuid:...` this catalog is matched on across seed runs.
+
+    Schema validation already requires `metadata.identifier` on anything reaching this point;
+    this raises anyway for callers (tests included) that build a document by hand.
+    """
+    identifier = document["metadata"].get("identifier")
+    if not identifier:
+        raise ValidationError(
+            f"{document['metadata']['title']} has no metadata.identifier, "
+            "so it has no stable identity to upsert on"
+        )
+    return str(identifier)
 
 
 def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
@@ -102,6 +98,7 @@ def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
     return Catalog(
         status=CatalogStatus.ACTIVE,
         recommended=recommended,
+        identifier=resolve_identifier(document),
         title=metadata["title"],
         description=metadata.get("description"),
         color=CatalogColor(metadata.get("color", CatalogColor.GRAY.value)),
@@ -151,8 +148,8 @@ async def import_catalog_document(
     # Imported here, not at module level: only the write path needs it.
     from sqlalchemy import func  # noqa: PLC0415
 
-    identity = resolve_identity_href(document)
-    existing = await CatalogRepository(session).fetch_catalog_by_identity_href(identity)
+    identifier = resolve_identifier(document)
+    existing = await CatalogRepository(session).fetch_catalog_by_identifier(identifier)
     built = build_catalog(document, recommended=recommended)
 
     if existing is None:

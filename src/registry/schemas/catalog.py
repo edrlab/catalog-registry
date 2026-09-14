@@ -18,6 +18,7 @@ class CatalogMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     title: str
+    identifier: str
     kind: list[CatalogKind]
     description: str | None = None
     color: CatalogColor

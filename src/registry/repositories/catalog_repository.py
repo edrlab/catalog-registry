@@ -26,11 +26,6 @@ EAGER_COLLECTIONS = (
 )
 
 
-#: The rels a catalog is identified by across seed runs, preferred first. Mirrors
-#: `cli/seed.py`, which decides *which* of them a document uses.
-IDENTITY_RELS = (LinkRel.CATALOG, LinkRel.SHELF)
-
-
 class CatalogRepository:
     """Satisfies `CatalogReader`. The service owns the transaction, not this class, a
     repository that commits cannot be composed into a larger unit of work."""
@@ -76,12 +71,24 @@ class CatalogRepository:
             raise NotFoundError(f"no catalog with id {catalog_id}")
         return catalog
 
-    async def fetch_catalog_by_identity_href(self, href: str) -> Catalog | None:
-        """Look a catalog up by the identity the seed upserts on. See `cli/seed.py`.
+    async def fetch_catalog_by_identifier(self, identifier: str) -> Catalog | None:
+        """Look a catalog up by `metadata.identifier`, the identity the seed upserts on.
 
-        Constrained to the identity rels. Matching *any* link with this href would let a new
-        catalog whose feed URL happens to equal another catalog's `search` or `icon` target
-        overwrite that unrelated row.
+        See `cli/seed.py`. Q1: this is the stable, externally-assigned match key across
+        re-seeds — unlike a link href, it survives a catalog's feed URL changing.
+        """
+        statement = (
+            select(Catalog).where(Catalog.identifier == identifier).options(*EAGER_COLLECTIONS)
+        )
+        return (await self._session.scalars(statement)).unique().first()
+
+    async def fetch_catalog_by_link_href(self, href: str, rel: LinkRel) -> Catalog | None:
+        """Look a catalog up by one of its links, not by `identifier`.
+
+        Used only by `cli/add.py`, to find a catalog it previously added under the same
+        operator-given URL so a re-run can keep it under the same `identifier` rather than
+        generating a fresh one and inserting a duplicate. Not part of the seed's own matching
+        (that is `fetch_catalog_by_identifier`, with no href fallback — Q1).
         """
         # Imported here, not at module level: it would be a circular import.
         from registry.db.models.link import Link  # noqa: PLC0415
@@ -89,7 +96,7 @@ class CatalogRepository:
         statement = (
             select(Catalog)
             .join(Link, Link.catalog_id == Catalog.id)
-            .where(Link.href == href, Link.rel.in_(IDENTITY_RELS))
+            .where(Link.href == href, Link.rel == rel)
             .options(*EAGER_COLLECTIONS)
         )
         return (await self._session.scalars(statement)).unique().first()
