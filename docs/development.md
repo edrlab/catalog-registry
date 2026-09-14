@@ -14,6 +14,7 @@ misbehaves. `README.md` is the short version; this is the long one.
 - [Generated files](#generated-files)
 - [Testing](#testing)
 - [The Cloud SQL sandbox](#the-cloud-sql-sandbox)
+- [Publishing the image](#publishing-the-image)
 - [Troubleshooting](#troubleshooting)
 - [Open questions that affect the code](#open-questions-that-affect-the-code)
 
@@ -355,6 +356,24 @@ until v1.2.
 Do not put sandbox credentials in `.env`. They are real credentials for a shared server, not
 the throwaway `registry:registry`. Deployed environments read secrets from Google Secret
 Manager.
+
+---
+
+## Publishing the image
+
+`.github/workflows/publish-image.yaml` builds `docker/Dockerfile`'s `runtime` stage and pushes
+to Docker Hub (`edrlab/catalog-registry`) on every PR and on push to `main`. PRs get `pr-<N>`
+(moving) and `sha-<shortsha>` (fixed) tags; `main` also gets `latest`. Fork PRs are skipped, not
+failed — they have no access to the push credentials.
+
+Needs two repo secrets, `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (a Docker Hub access token,
+Read & Write scope, from Account Settings → Security → New Access Token). GitHub encrypts these
+itself:
+
+```
+gh secret set DOCKERHUB_USERNAME --repo edrlab/catalog-registry --body "<username>"
+gh secret set DOCKERHUB_TOKEN --repo edrlab/catalog-registry --body "<token>"
+```
 
 ---
 
