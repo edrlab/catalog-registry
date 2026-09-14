@@ -6,6 +6,7 @@
     {
       "metadata": {
         "title": "Project Gutenberg",
+        "identifier": "urn:uuid:7dadebbe-5276-42f4-aa7f-4c8631c965e3",
         "kind": ["open"],
         "publicationTypes": ["ebook"],
         "color": "red"
@@ -31,6 +32,7 @@
     {
       "metadata": {
         "title": "Librivox",
+        "identifier": "urn:uuid:527179d4-fa6f-4e8d-8c98-6b7026a796f2",
         "kind": ["open"],
         "publicationTypes": ["audiobook"],
         "color": "gray"
@@ -46,6 +48,7 @@
     {
       "metadata": {
         "title": "Standard Ebooks",
+        "identifier": "urn:uuid:368d3878-4250-42cb-ae85-58b0dd3fd7ab",
         "kind": ["open"],
         "publicationTypes": ["ebook"],
         "color": "gray",
@@ -67,6 +70,7 @@
     {
       "metadata": {
         "title": "Ebooks libres et gratuits",
+        "identifier": "urn:uuid:1289e0ca-5c64-46fa-b424-7d2a43424827",
         "kind": ["open"],
         "publicationTypes": ["ebook"],
         "color": "blue",
@@ -83,6 +87,7 @@
     {
       "metadata": {
         "title": "TV5 Monde",
+        "identifier": "urn:uuid:aae3e9a9-7551-4a80-845b-4b7f6b96b5bd",
         "kind": ["open"],
         "publicationTypes": ["ebook"],
         "color": "yellow",
@@ -104,6 +109,7 @@
     {
       "metadata": {
         "title": "Bibliothèque numérique Romande",
+        "identifier": "urn:uuid:3a2feec6-61c2-490d-9606-238d79c63000",
         "kind": ["open"],
         "publicationTypes": ["ebook"],
         "color": "red",
@@ -125,6 +131,7 @@
     {
       "metadata": {
         "title": "La Bibliothèque russe et slave",
+        "identifier": "urn:uuid:dab06d7e-0c1d-4088-abaf-51c42b46cd66",
         "kind": ["open"],
         "publicationTypes": ["ebook"],
         "color": "red",
@@ -141,6 +148,7 @@
     {
       "metadata": {
         "title": "Liber Liber",
+        "identifier": "urn:uuid:d4ad1508-f557-473d-b2ec-f4506df148a4",
         "kind": ["open"],
         "publicationTypes": ["ebook"],
         "color": "blue",

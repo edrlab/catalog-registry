@@ -1,6 +1,7 @@
 {
   "metadata": {
     "title": "Lirtuel",
+    "identifier": "urn:uuid:01a09ee8-f197-77dc-8eb1-4ae8ad5e193b",
     "kind": ["public"],
     "color": "red",
     "supportedLanguages": ["fr", "en"],

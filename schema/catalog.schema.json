@@ -12,6 +12,10 @@
         "title": {
           "type": "string"
         },
+        "identifier": {
+          "type": "string",
+          "format": "uri"
+        },
         "kind": {
           "type": "array",
           "minItems": 1,
