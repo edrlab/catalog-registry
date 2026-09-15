@@ -410,7 +410,7 @@ gcloud iam workload-identity-pools providers create-oidc "catalog-registry" \
     --workload-identity-pool="github-actions" \
     --display-name="catalog-registry" \
     --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
-    --attribute-condition="assertion.repository=='edrlab/catalog-registry'" \
+    --attribute-condition="assertion.repository=='edrlab/catalog-registry' && assertion.ref=='refs/heads/main'" \
     --issuer-uri="https://token.actions.githubusercontent.com"
 
 gcloud iam service-accounts create "catalog-registry-deploy" \
@@ -422,12 +422,27 @@ gcloud iam service-accounts add-iam-policy-binding \
     --project="<PROJECT_ID>" --role="roles/iam.workloadIdentityUser" \
     --member="principalSet://iam.googleapis.com/projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/github-actions/attribute.repository/edrlab/catalog-registry"
 
-# Only what deploying and migrating need — nothing broader
-for role in roles/run.developer roles/iam.serviceAccountUser roles/secretmanager.secretAccessor roles/cloudsql.client; do
+# Only what deploying and migrating need — nothing broader. run.developer and
+# cloudsql.client have no finer-grained resource to scope to; the other two do.
+for role in roles/run.developer roles/cloudsql.client; do
   gcloud projects add-iam-policy-binding "<PROJECT_ID>" \
       --member="serviceAccount:catalog-registry-deploy@<PROJECT_ID>.iam.gserviceaccount.com" \
       --role="$role"
 done
+
+# Scoped to the one secret it needs to read, not every secret in the project
+gcloud secrets add-iam-policy-binding REGISTRY_DATABASE_URL \
+    --project="<PROJECT_ID>" \
+    --member="serviceAccount:catalog-registry-deploy@<PROJECT_ID>.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+# Scoped to the one runtime service account Cloud Run deploys as, not every
+# service account in the project
+gcloud iam service-accounts add-iam-policy-binding \
+    "<CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT_EMAIL>" \
+    --project="<PROJECT_ID>" \
+    --member="serviceAccount:catalog-registry-deploy@<PROJECT_ID>.iam.gserviceaccount.com" \
+    --role="roles/iam.serviceAccountUser"
 ```
 
 Then set repo **variables** (not secrets — WIF means there's no credential material to

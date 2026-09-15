@@ -137,7 +137,8 @@ jobs:
         continue-on-error: true
         run: |
           for i in $(seq 1 12); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "${{ steps.url.outputs.url }}/health/ready")
+            code=$(curl --connect-timeout 5 --max-time 10 -s -o /dev/null \
+              -w '%{http_code}' "${{ steps.url.outputs.url }}/health/ready" || true)
             if [ "$code" = "200" ]; then exit 0; fi
             sleep 5
           done
