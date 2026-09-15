@@ -381,95 +381,14 @@ gh secret set DOCKERHUB_TOKEN --repo edrlab/catalog-registry --body "<token>"
 
 Same workflow (`publish-image.yaml`) also deploys, on push to `main` only — never on a PR's
 validation build. Sequence: `migrate` (runs `alembic upgrade head` against the sandbox
-Cloud SQL instance) → `deploy` (rolls the just-built image onto the `catalog-registry`
-Cloud Run service) → health check → automatic rollback if the new revision never returns
-200 on `/health/ready`.
+Cloud SQL instance) → `deploy` (rolls the just-built image onto the Cloud Run service, by
+build digest rather than the `latest` tag) → health check → automatic rollback if the new
+revision never returns 200 on `/health/ready`. If `migrate` fails, the workflow stops there
+and Cloud Run is never touched.
 
-The deploy step references the image by its build **digest** (`edrlab/catalog-registry@sha256:...`),
-never by the `latest` tag — a tag can move between build and deploy, a digest cannot. `latest`
-and `sha-<shortsha>` are still published for humans pulling by hand or matching a revision
-back to a commit.
-
-If `migrate` fails, the workflow stops there: Cloud Run is never touched, the previous
-revision keeps serving. If `deploy` succeeds but the new revision fails its health check,
-the workflow shifts traffic back to the previously-serving revision automatically and still
-ends red.
-
-### One-time GCP setup
-
-Auth is Workload Identity Federation — no service account key file, ever. Someone with IAM
-admin rights on the project runs this once:
-
-```bash
-gcloud iam workload-identity-pools create "github-actions" \
-    --project="<PROJECT_ID>" --location="global" \
-    --display-name="GitHub Actions"
-
-gcloud iam workload-identity-pools providers create-oidc "catalog-registry" \
-    --project="<PROJECT_ID>" --location="global" \
-    --workload-identity-pool="github-actions" \
-    --display-name="catalog-registry" \
-    --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
-    --attribute-condition="assertion.repository=='edrlab/catalog-registry' && assertion.ref=='refs/heads/main'" \
-    --issuer-uri="https://token.actions.githubusercontent.com"
-
-gcloud iam service-accounts create "catalog-registry-deploy" \
-    --project="<PROJECT_ID>" --display-name="catalog-registry CD"
-
-# Let GitHub Actions on this repo impersonate the service account
-gcloud iam service-accounts add-iam-policy-binding \
-    "catalog-registry-deploy@<PROJECT_ID>.iam.gserviceaccount.com" \
-    --project="<PROJECT_ID>" --role="roles/iam.workloadIdentityUser" \
-    --member="principalSet://iam.googleapis.com/projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/github-actions/attribute.repository/edrlab/catalog-registry"
-
-# Only what deploying and migrating need — nothing broader. run.developer and
-# cloudsql.client have no finer-grained resource to scope to.
-for role in roles/run.developer roles/cloudsql.client; do
-  gcloud projects add-iam-policy-binding "<PROJECT_ID>" \
-      --member="serviceAccount:catalog-registry-deploy@<PROJECT_ID>.iam.gserviceaccount.com" \
-      --role="$role"
-done
-
-# Scoped to the one runtime service account Cloud Run deploys as, not every
-# service account in the project
-gcloud iam service-accounts add-iam-policy-binding \
-    "<CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT_EMAIL>" \
-    --project="<PROJECT_ID>" \
-    --member="serviceAccount:catalog-registry-deploy@<PROJECT_ID>.iam.gserviceaccount.com" \
-    --role="roles/iam.serviceAccountUser"
-```
-
-Then set repo **variables** (not secrets — WIF means there's no credential material to
-protect):
-
-```bash
-gh variable set GCP_PROJECT_ID --repo edrlab/catalog-registry --body "<PROJECT_ID>"
-gh variable set GCP_REGION --repo edrlab/catalog-registry --body "europe-west1"
-gh variable set CLOUD_RUN_SERVICE --repo edrlab/catalog-registry --body "catalog-registry"
-gh variable set CLOUD_SQL_INSTANCE_CONNECTION_NAME --repo edrlab/catalog-registry \
-    --body "catalog-registry:europe-west9:development-sandbox-db"
-# Custom domain in front of the service — deploy's health check polls this,
-# not the internal *.run.app URL, since it's what Thorium Reader actually hits.
-gh variable set PROD_URL --repo edrlab/catalog-registry --body "https://registry.thoriumreader.com"
-gh variable set GCP_SERVICE_ACCOUNT_EMAIL --repo edrlab/catalog-registry \
-    --body "catalog-registry-deploy@<PROJECT_ID>.iam.gserviceaccount.com"
-gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER --repo edrlab/catalog-registry \
-    --body "projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/github-actions/providers/catalog-registry"
-```
-
-And one repo **secret** (real credential material, unlike the variables above) — `migrate`
-needs a DSN to run `alembic upgrade head` against:
-
-```bash
-gh secret set REGISTRY_DATABASE_URL --repo edrlab/catalog-registry --body "<same DSN Cloud Run uses>"
-```
-
-**Known gap, not fixed by this:** Secret Manager isn't enabled on this project yet, so both
-this GitHub secret and Cloud Run's own `REGISTRY_DATABASE_URL` env var are the DSN (Postgres
-password included) sitting in plaintext — in the revision config for Cloud Run, and as a
-GitHub secret here (GitHub does redact `secrets.*` from job logs, but the value itself is
-still just a string, not Secret-Manager-backed). Moving both to Secret Manager together is
-follow-up work, not folded into this change.
+Auth is Workload Identity Federation — no service account key file. The one-time GCP setup
+(WIF pool/provider, deploy service account, IAM bindings) and the repo variables/secrets it
+needs are internal ops details, not committed here — ask whoever set up the deploy pipeline.
 
 ---
 
