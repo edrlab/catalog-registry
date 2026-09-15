@@ -454,6 +454,9 @@ gh variable set GCP_REGION --repo edrlab/catalog-registry --body "europe-west9"
 gh variable set CLOUD_RUN_SERVICE --repo edrlab/catalog-registry --body "catalog-registry"
 gh variable set CLOUD_SQL_INSTANCE_CONNECTION_NAME --repo edrlab/catalog-registry \
     --body "catalog-registry:europe-west9:development-sandbox-db"
+# Custom domain in front of the service — deploy's health check polls this,
+# not the internal *.run.app URL, since it's what Thorium Reader actually hits.
+gh variable set PROD_URL --repo edrlab/catalog-registry --body "https://registry.thoriumreader.com"
 gh variable set GCP_SERVICE_ACCOUNT_EMAIL --repo edrlab/catalog-registry \
     --body "catalog-registry-deploy@<PROJECT_ID>.iam.gserviceaccount.com"
 gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER --repo edrlab/catalog-registry \

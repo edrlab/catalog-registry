@@ -125,20 +125,15 @@ jobs:
           gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
             --image="docker.io/edrlab/catalog-registry@${{ needs.build-and-push.outputs.digest }}" \
             --region="${{ vars.GCP_REGION }}" --project="${{ vars.GCP_PROJECT_ID }}" --quiet
-      - name: Resolve service URL
-        id: url
-        run: |
-          URL=$(gcloud run services describe "${{ vars.CLOUD_RUN_SERVICE }}" \
-            --region="${{ vars.GCP_REGION }}" --project="${{ vars.GCP_PROJECT_ID }}" \
-            --format='value(status.url)')
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
+      # Poll the real prod domain, not the internal *.run.app URL — this is what
+      # Thorium Reader actually hits, custom-domain-mapped in front of the service.
       - name: Poll /health/ready
         id: healthcheck
         continue-on-error: true
         run: |
           for i in $(seq 1 12); do
             code=$(curl --connect-timeout 5 --max-time 10 -s -o /dev/null \
-              -w '%{http_code}' "${{ steps.url.outputs.url }}/health/ready" || true)
+              -w '%{http_code}' "${{ vars.PROD_URL }}/health/ready" || true)
             if [ "$code" = "200" ]; then exit 0; fi
             sleep 5
           done
