@@ -90,6 +90,10 @@ jobs:
         run: |
           curl -sSL -o cloud-sql-proxy \
             https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.25.4/cloud-sql-proxy.linux.amd64
+          # Google doesn't publish a checksums file for this release channel. Pinned by
+          # hand against the binary fetched 2026-09-15 — this at least catches the file
+          # changing under the same version tag, not just a version bump.
+          echo "b780c0d2c445ffd5d2fdba0925f2722c19fcd0d2c27c538e85713732698561f2  cloud-sql-proxy" | sha256sum -c -
           chmod +x cloud-sql-proxy
           sudo mkdir -p /cloudsql && sudo chown "$USER" /cloudsql
           ./cloud-sql-proxy --unix-socket=/cloudsql \
@@ -114,38 +118,44 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3.0.1
-      - name: Record currently serving revision (rollback target)
-        id: prev
-        run: |
-          PREV=$(gcloud run services describe "${{ vars.CLOUD_RUN_SERVICE }}" \
-            --region="${{ vars.GCP_REGION }}" --project="${{ vars.GCP_PROJECT_ID }}" \
-            --format='value(status.traffic[0].revisionName)')
-          echo "revision=$PREV" >> "$GITHUB_OUTPUT"
-      - name: Deploy image by digest
+      # Deploy with zero traffic first, health-check the new revision directly by its own
+      # tagged URL, and only shift prod traffic to it once that passes. Prod never serves
+      # an unhealthy revision even briefly, and there's nothing to roll back on failure —
+      # the previous revision was never touched, so no traffic-restoration logic needed.
+      - name: Deploy new revision (no traffic yet)
+        id: deploy
         run: |
           gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
             --image="docker.io/edrlab/catalog-registry@${{ needs.build-and-push.outputs.digest }}" \
-            --region="${{ vars.GCP_REGION }}" --project="${{ vars.GCP_PROJECT_ID }}" --quiet
-      # Poll the real prod domain, not the internal *.run.app URL — this is what
-      # Thorium Reader actually hits, custom-domain-mapped in front of the service.
-      - name: Poll /health/ready
-        id: healthcheck
-        continue-on-error: true
+            --region="${{ vars.GCP_REGION }}" --project="${{ vars.GCP_PROJECT_ID }}" \
+            --no-traffic --tag=ci-candidate --quiet
+          REVISION=$(gcloud run services describe "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --region="${{ vars.GCP_REGION }}" --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format='value(status.latestCreatedRevisionName)')
+          CANDIDATE_URL=$(gcloud run services describe "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --region="${{ vars.GCP_REGION }}" --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format=json | jq -r '.status.traffic[] | select(.tag=="ci-candidate") | .url')
+          echo "revision=$REVISION" >> "$GITHUB_OUTPUT"
+          echo "candidate_url=$CANDIDATE_URL" >> "$GITHUB_OUTPUT"
+      - name: Poll the candidate revision's own URL before it takes traffic
         run: |
           for i in $(seq 1 12); do
             code=$(curl --connect-timeout 5 --max-time 10 -s -o /dev/null \
-              -w '%{http_code}' "${{ vars.PROD_URL }}/health/ready" || true)
+              -w '%{http_code}' "${{ steps.deploy.outputs.candidate_url }}/health/ready" || true)
             if [ "$code" = "200" ]; then exit 0; fi
             sleep 5
           done
-          echo "health check never returned 200" >&2
+          echo "candidate revision never returned 200 on /health/ready — leaving prod traffic untouched" >&2
           exit 1
-      - name: Roll back to previous revision
-        if: steps.healthcheck.outcome == 'failure'
+      - name: Promote — shift all traffic to the new revision
         run: |
           gcloud run services update-traffic "${{ vars.CLOUD_RUN_SERVICE }}" \
             --region="${{ vars.GCP_REGION }}" --project="${{ vars.GCP_PROJECT_ID }}" \
-            --to-revisions="${{ steps.prev.outputs.revision }}=100"
-      - name: Fail the job if the new revision never became healthy
-        if: steps.healthcheck.outcome == 'failure'
-        run: exit 1
+            --to-revisions="${{ steps.deploy.outputs.revision }}=100"
+      # Sanity check the real prod domain too, since it's what Thorium Reader actually
+      # hits and the custom-domain mapping is one more hop than the candidate URL above.
+      - name: Confirm prod domain reflects the promoted revision
+        run: |
+          code=$(curl --connect-timeout 5 --max-time 10 -s -o /dev/null \
+            -w '%{http_code}' "${{ vars.PROD_URL }}/health/ready" || true)
+          [ "$code" = "200" ]
