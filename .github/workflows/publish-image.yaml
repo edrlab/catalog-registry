@@ -45,6 +45,7 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable={{is_default_branch}}
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        id: build
         with:
           context: .
           file: docker/Dockerfile
@@ -53,3 +54,101 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+    outputs:
+      # The immutable content digest, not a tag: what `deploy` below actually runs.
+      # A tag (including `latest`) is a pointer that can move between build and deploy;
+      # the digest cannot.
+      digest: ${{ steps.build.outputs.digest }}
+
+  # Roll the image just built onto the live Cloud Run service. Only on a real merge to
+  # main, never for a PR's validation build. Auth is Workload Identity Federation, not a
+  # long-lived service account key, per this repo's own deployment conventions.
+  migrate:
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Fetch DB DSN from Secret Manager
+        run: |
+          DB_URL=$(gcloud secrets versions access latest \
+            --secret=REGISTRY_DATABASE_URL --project="${{ vars.GCP_PROJECT_ID }}")
+          echo "::add-mask::$DB_URL"
+          echo "REGISTRY_DATABASE_URL=$DB_URL" >> "$GITHUB_ENV"
+      - name: Start Cloud SQL Auth Proxy (unix socket, same form the app itself uses)
+        run: |
+          curl -sSL -o cloud-sql-proxy \
+            https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.25.4/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          sudo mkdir -p /cloudsql && sudo chown "$USER" /cloudsql
+          ./cloud-sql-proxy --unix-socket=/cloudsql \
+            "${{ vars.CLOUD_SQL_INSTANCE_CONNECTION_NAME }}" &
+          sleep 3
+      # If this fails, the workflow stops here: Cloud Run is untouched and the previous
+      # revision keeps serving. Migrations are a gate, not a step folded into deploy.
+      - run: uv run alembic upgrade head
+
+  deploy:
+    needs: [build-and-push, migrate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3.0.1
+      - name: Record currently serving revision (rollback target)
+        id: prev
+        run: |
+          PREV=$(gcloud run services describe "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --region="${{ vars.GCP_REGION }}" --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format='value(status.traffic[0].revisionName)')
+          echo "revision=$PREV" >> "$GITHUB_OUTPUT"
+      - name: Deploy image by digest
+        run: |
+          gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --image="docker.io/edrlab/catalog-registry@${{ needs.build-and-push.outputs.digest }}" \
+            --region="${{ vars.GCP_REGION }}" --project="${{ vars.GCP_PROJECT_ID }}" --quiet
+      - name: Resolve service URL
+        id: url
+        run: |
+          URL=$(gcloud run services describe "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --region="${{ vars.GCP_REGION }}" --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format='value(status.url)')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+      - name: Poll /health/ready
+        id: healthcheck
+        continue-on-error: true
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${{ steps.url.outputs.url }}/health/ready")
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 5
+          done
+          echo "health check never returned 200" >&2
+          exit 1
+      - name: Roll back to previous revision
+        if: steps.healthcheck.outcome == 'failure'
+        run: |
+          gcloud run services update-traffic "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --region="${{ vars.GCP_REGION }}" --project="${{ vars.GCP_PROJECT_ID }}" \
+            --to-revisions="${{ steps.prev.outputs.revision }}=100"
+      - name: Fail the job if the new revision never became healthy
+        if: steps.healthcheck.outcome == 'failure'
+        run: exit 1
