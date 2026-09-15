@@ -423,18 +423,12 @@ gcloud iam service-accounts add-iam-policy-binding \
     --member="principalSet://iam.googleapis.com/projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/github-actions/attribute.repository/edrlab/catalog-registry"
 
 # Only what deploying and migrating need — nothing broader. run.developer and
-# cloudsql.client have no finer-grained resource to scope to; the other two do.
+# cloudsql.client have no finer-grained resource to scope to.
 for role in roles/run.developer roles/cloudsql.client; do
   gcloud projects add-iam-policy-binding "<PROJECT_ID>" \
       --member="serviceAccount:catalog-registry-deploy@<PROJECT_ID>.iam.gserviceaccount.com" \
       --role="$role"
 done
-
-# Scoped to the one secret it needs to read, not every secret in the project
-gcloud secrets add-iam-policy-binding REGISTRY_DATABASE_URL \
-    --project="<PROJECT_ID>" \
-    --member="serviceAccount:catalog-registry-deploy@<PROJECT_ID>.iam.gserviceaccount.com" \
-    --role="roles/secretmanager.secretAccessor"
 
 # Scoped to the one runtime service account Cloud Run deploys as, not every
 # service account in the project
@@ -450,7 +444,7 @@ protect):
 
 ```bash
 gh variable set GCP_PROJECT_ID --repo edrlab/catalog-registry --body "<PROJECT_ID>"
-gh variable set GCP_REGION --repo edrlab/catalog-registry --body "europe-west9"
+gh variable set GCP_REGION --repo edrlab/catalog-registry --body "europe-west1"
 gh variable set CLOUD_RUN_SERVICE --repo edrlab/catalog-registry --body "catalog-registry"
 gh variable set CLOUD_SQL_INSTANCE_CONNECTION_NAME --repo edrlab/catalog-registry \
     --body "catalog-registry:europe-west9:development-sandbox-db"
@@ -462,6 +456,20 @@ gh variable set GCP_SERVICE_ACCOUNT_EMAIL --repo edrlab/catalog-registry \
 gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER --repo edrlab/catalog-registry \
     --body "projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/github-actions/providers/catalog-registry"
 ```
+
+And one repo **secret** (real credential material, unlike the variables above) — `migrate`
+needs a DSN to run `alembic upgrade head` against:
+
+```bash
+gh secret set REGISTRY_DATABASE_URL --repo edrlab/catalog-registry --body "<same DSN Cloud Run uses>"
+```
+
+**Known gap, not fixed by this:** Secret Manager isn't enabled on this project yet, so both
+this GitHub secret and Cloud Run's own `REGISTRY_DATABASE_URL` env var are the DSN (Postgres
+password included) sitting in plaintext — in the revision config for Cloud Run, and as a
+GitHub secret here (GitHub does redact `secrets.*` from job logs, but the value itself is
+still just a string, not Secret-Manager-backed). Moving both to Secret Manager together is
+follow-up work, not folded into this change.
 
 ---
 

@@ -81,12 +81,11 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen
-      - name: Fetch DB DSN from Secret Manager
-        run: |
-          DB_URL=$(gcloud secrets versions access latest \
-            --secret=REGISTRY_DATABASE_URL --project="${{ vars.GCP_PROJECT_ID }}")
-          echo "::add-mask::$DB_URL"
-          echo "REGISTRY_DATABASE_URL=$DB_URL" >> "$GITHUB_ENV"
+      # ponytail: DSN comes from a GitHub secret, not Secret Manager — the project doesn't
+      # have Secret Manager enabled yet and Cloud Run's own copy is still a plaintext env
+      # var too. Move both to Secret Manager together when that's picked up as its own
+      # piece of work; until then this is at least masked in logs same as the GCP path
+      # would've been, GitHub auto-redacts `secrets.*` regardless.
       - name: Start Cloud SQL Auth Proxy (unix socket, same form the app itself uses)
         run: |
           curl -sSL -o cloud-sql-proxy \
@@ -99,6 +98,8 @@ jobs:
       # If this fails, the workflow stops here: Cloud Run is untouched and the previous
       # revision keeps serving. Migrations are a gate, not a step folded into deploy.
       - run: uv run alembic upgrade head
+        env:
+          REGISTRY_DATABASE_URL: ${{ secrets.REGISTRY_DATABASE_URL }}
 
   deploy:
     needs: [build-and-push, migrate]
