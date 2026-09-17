@@ -16,7 +16,6 @@ misbehaves. `README.md` is the short version; this is the long one.
 - [The Cloud SQL sandbox](#the-cloud-sql-sandbox)
 - [Publishing the image](#publishing-the-image)
 - [Troubleshooting](#troubleshooting)
-- [Open questions that affect the code](#open-questions-that-affect-the-code)
 
 ---
 
@@ -446,16 +445,3 @@ It needs `make up` first, or an explicit `IMAGE_DSN=`.
 The volume is mounted at the pre-18 path. `compose.override.yaml` mounts
 `/var/lib/postgresql`, not `/var/lib/postgresql/data`. If you have an old volume from before
 that fix, `make clean` drops it.
-
----
-
-## Open questions that affect the code
-
-These are not settled, and none of them is the implementer's to settle alone. Each is marked
-in the code where it bites.
-
-| Question | Where it shows up |
-|---|---|
-| Which GCP region | Deployment only. EDRLab is French, so GDPR applies |
-| Which milestone integrator filtering lands in | Nothing in v0 changes either way |
-| Whether the seed catalogs linking to `text/html` rather than OPDS is intentional | An OPDS-only filter would drop most of them. Possibly missing links rather than intent |
