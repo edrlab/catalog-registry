@@ -154,8 +154,15 @@ jobs:
             --to-revisions="${{ steps.deploy.outputs.revision }}=100"
       # Sanity check the real prod domain too, since it's what Thorium Reader actually
       # hits and the custom-domain mapping is one more hop than the candidate URL above.
+      # Short retry, not a single shot — the candidate already passed its own health
+      # check, so this is guarding against a transient blip, not re-litigating health.
       - name: Confirm prod domain reflects the promoted revision
         run: |
-          code=$(curl --connect-timeout 5 --max-time 10 -s -o /dev/null \
-            -w '%{http_code}' "${{ vars.PROD_URL }}/health/ready" || true)
-          [ "$code" = "200" ]
+          for i in $(seq 1 3); do
+            code=$(curl --connect-timeout 5 --max-time 10 -s -o /dev/null \
+              -w '%{http_code}' "${{ vars.PROD_URL }}/health/ready" || true)
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 3
+          done
+          echo "prod domain never returned 200 after promotion" >&2
+          exit 1
