@@ -210,7 +210,7 @@ make revision m="drift check"
 ## The seed
 
 `data/recommended.json` is the seed source — presence in the file **is** the `recommended`
-flag. `demo/` is example output + contract-test corpus; `archive/` is out of scope for v0.
+flag. `demo/` is example output + contract-test corpus; `archive/` is out of scope currently.
 
 ```
 make seed          # idempotent
