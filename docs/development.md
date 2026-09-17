@@ -174,7 +174,7 @@ Constraints worth knowing, because they will reject your data rather than quietl
 - `coverage` is **nullable with no default**. `NULL` means *not declared*,
   `global` means *worldwide*, and collapsing them loses information
 - `identifier` must be a well-formed `urn:uuid:...` and unique across catalogs — it's the
-  upsert match key, see [Identity across runs](#identity-across-runs)
+  upsert match key, see [The seed](#the-seed)
 
 ---
 
@@ -209,47 +209,28 @@ make revision m="drift check"
 
 ## The seed
 
-`data/recommended.json` is the seed source. Four catalogs, and **presence in the
-file is the `recommended` flag**. `demo/` is example *output* and the contract-test corpus;
-`archive/` is out of scope for v0.
+`data/recommended.json` is the seed source — presence in the file **is** the `recommended`
+flag. `demo/` is example output + contract-test corpus; `archive/` is out of scope for v0.
 
 ```
-make seed        # idempotent; run it as often as you like
+make seed          # idempotent
+make add ARGS="https://example.org/opds --kind public"   # import a live feed instead
+make seed-sample    # data/dev-sample.json — regional-English test cases
 ```
 
-**Removing a catalog from the file does not unrecommend it.** Presence in the file is meant
-to be the recommended flag, and that held while the file was the only way in. `make add`
-broke the premise: the database now holds rows the file has never mentioned, and nothing on a
-row says where it came from, so reconciling would unrecommend catalogs added by `add`.
-Unrecommending is a manual step until a catalog records its provenance, which is a schema
-change and not the implementer's to decide. `tests/integration/test_seed.py` asserts the
-current behaviour, so the gap fails loudly the day it is closed.
+**Removing a catalog from the file does not unrecommend it.** `make add` rows have no
+provenance to reconcile against, so unrecommending is manual until that's fixed
+(`tests/integration/test_seed.py` asserts this).
 
-To import a catalog from its live feed instead of the file, use `make add`.
-See [`importing.md`](importing.md). `make seed-sample` loads `data/dev-sample.json`, invented
-catalogs covering the regional-English cases a browser sends, for trying ranking out by hand.
+**Input/output are different schemas**: seed file has no `self`/feed-level `links` (none
+exist yet when it's authored), so it validates against `schema/generated/seed-input.schema.json`,
+not the published `feed.schema.json`. `self` links are synthesised at render time. Detail:
+[`schemas.md`](schemas.md).
 
-### Input and output are deliberately different schemas
-
-The seed file has no feed-level `links` and no `self` link on any catalog, so the published
-`feed.schema.json` rejects every record, a `self` link would have to name a registry that did
-not exist when the file was authored. Input therefore validates against
-`schema/generated/seed-input.schema.json`, derived from the published schemas; `self` links are
-synthesised at render time; output validates against the published schemas in the contract
-tests. [`schemas.md`](schemas.md) has the detail.
-
-### Identity across runs
-
-Catalogs are matched on `metadata.identifier`, a `urn:uuid:...` required on every catalog
-document. It is not a link, so it survives a catalog's feed URL changing — the case that ruled
-out matching on a href: `self` hrefs all point at `edrlab.github.io` and change at cutover,
-and the `catalog`/`shelf` link a library publishes can change too (Project Gutenberg moving
-from pre-prod to prod is the case that prompted this). A document with no `identifier` is
-rejected rather than inserted under an identity that cannot be matched again.
-
-For `make seed`, Hadrien hand-assigns the identifier in `data/recommended.json`. For `make
-add`, a remote feed has no notion of this registry's identifier scheme, so one is generated;
-see [`importing.md`](importing.md).
+**Identity**: catalogs match on `metadata.identifier` (`urn:uuid:...`, required), not on a
+link — hrefs change (registry migrations, library moving pre-prod→prod), the identifier
+doesn't. No identifier = rejected. `make seed`: hand-assigned by Hadrien. `make add`: generated
+(remote feeds have no notion of this registry's scheme). See [`importing.md`](importing.md).
 
 ---
 
