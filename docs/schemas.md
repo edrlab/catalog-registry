@@ -44,7 +44,7 @@ schema/
 
 All three are committed. All three ship inside the runtime image, because the seed validates
 against them at runtime. See the `COPY --chown=app:app schema/ ./schema/` line in
-`docker/Dockerfile`.
+`Dockerfile`.
 
 ---
 

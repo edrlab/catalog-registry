@@ -19,7 +19,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: Dockerfile
       target: runtime
     environment:
       REGISTRY_DATABASE_URL: postgresql+asyncpg://registry:registry@db:5432/registry
