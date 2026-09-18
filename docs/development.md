@@ -13,9 +13,7 @@ misbehaves. `README.md` is the short version; this is the long one.
 - [The seed](#the-seed)
 - [Generated files](#generated-files)
 - [Testing](#testing)
-- [The Cloud SQL sandbox](#the-cloud-sql-sandbox)
-- [Troubleshooting](#troubleshooting)
-- [Open questions that affect the code](#open-questions-that-affect-the-code)
+- [Measuring the feed](#measuring-the-feed)
 
 ---
 
@@ -177,7 +175,7 @@ Constraints worth knowing, because they will reject your data rather than quietl
 - `coverage` is **nullable with no default**. `NULL` means *not declared*,
   `global` means *worldwide*, and collapsing them loses information
 - `identifier` must be a well-formed `urn:uuid:...` and unique across catalogs — it's the
-  upsert match key, see [Identity across runs](#identity-across-runs)
+  upsert match key, see [The seed](#the-seed)
 
 ---
 
@@ -212,47 +210,29 @@ make revision m="drift check"
 
 ## The seed
 
-`data/recommended.json` is the seed source. Four catalogs, and **presence in the
-file is the `recommended` flag**. `demo/` is example *output* and the contract-test corpus;
-`archive/` is out of scope for v0.
+`data/recommended.json` is the seed source — presence in the file **is** the `recommended`
+flag. `demo/` is example output + contract-test corpus; `archive/` is out of scope currently.
 
 ```
-make seed        # idempotent; run it as often as you like
+make seed          # idempotent
+make add ARGS="https://example.org/opds --kind public"   # import a live feed instead
+make seed-sample    # data/dev-sample.json — regional-English test cases
 ```
 
-**Removing a catalog from the file does not unrecommend it.** Presence in the file is meant
-to be the recommended flag, and that held while the file was the only way in. `make add`
-broke the premise: the database now holds rows the file has never mentioned, and nothing on a
-row says where it came from, so reconciling would unrecommend catalogs added by `add`.
-Unrecommending is a manual step until a catalog records its provenance, which is a schema
-change and not the implementer's to decide. `tests/integration/test_seed.py` asserts the
-current behaviour, so the gap fails loudly the day it is closed.
+**Removing a catalog from the file does not unrecommend it.** `make add` rows have no
+provenance to reconcile against, so unrecommending is manual until that's fixed
+(`tests/integration/test_seed.py` asserts this).
 
-To import a catalog from its live feed instead of the file, use `make add`.
-See [`importing.md`](importing.md). `make seed-sample` loads `data/dev-sample.json`, invented
-catalogs covering the regional-English cases a browser sends, for trying ranking out by hand.
+**Input/output are different schemas**: seed file has no `self`/feed-level `links` (none
+exist yet when it's authored), so it validates against `schema/generated/seed-input.schema.json`,
+not the published `feed.schema.json`. `self` links are synthesised at render time. Detail:
+[`schemas.md`](schemas.md).
 
-### Input and output are deliberately different schemas
-
-The seed file has no feed-level `links` and no `self` link on any catalog, so the published
-`feed.schema.json` rejects every record, a `self` link would have to name a registry that did
-not exist when the file was authored. Input therefore validates against
-`schema/generated/seed-input.schema.json`, derived from the published schemas; `self` links are
-synthesised at render time; output validates against the published schemas in the contract
-tests. [`schemas.md`](schemas.md) has the detail.
-
-### Identity across runs
-
-Catalogs are matched on `metadata.identifier`, a `urn:uuid:...` required on every catalog
-document. It is not a link, so it survives a catalog's feed URL changing — the case that ruled
-out matching on a href: `self` hrefs all point at `edrlab.github.io` and change at cutover,
-and the `catalog`/`shelf` link a library publishes can change too (Project Gutenberg moving
-from pre-prod to prod is the case that prompted this). A document with no `identifier` is
-rejected rather than inserted under an identity that cannot be matched again.
-
-For `make seed`, Hadrien hand-assigns the identifier in `data/recommended.json`. For `make
-add`, a remote feed has no notion of this registry's identifier scheme, so one is generated;
-see [`importing.md`](importing.md).
+**Identity**: catalogs match on `metadata.identifier` (`urn:uuid:...`, required), not on a
+link — hrefs change (registry migrations, library moving pre-prod→prod), the identifier
+doesn't. No identifier = rejected. `make seed`: hand-assigned by Hadrien. `make add`: generated
+once per URL, then reused on re-import so the row updates instead of duplicating (remote
+feeds have no notion of this registry's scheme). See [`importing.md`](importing.md).
 
 ---
 
@@ -331,97 +311,3 @@ The query count stays flat at 6 until ~500 and then steps as `selectinload` chun
 list. Batching, not N+1. What the decomposition shows, and the order to optimise in when
 there is a reason to, is recorded in the plan.
 
----
-
-## The Cloud SQL sandbox
-
-A third thing: not the dev loop, not production. Somewhere to verify the connection path and
-extension availability early, and to let other people try the service.
-
-```
-cloud-sql-proxy --port 5433 PROJECT:REGION:INSTANCE
-
-REGISTRY_DATABASE_URL=postgresql+asyncpg://USER:PASS@localhost:5433/DB \
-    uv run make check-db
-```
-
-`make check-db` reports the server version, whether `gen_random_uuid()` works, and whether
-`pgcrypto`, `pg_trgm` and `postgis` are available. **`pg_trgm` is the one that can stall a
-phase**. Enabling an extension on Cloud SQL is an administrative action someone else
-performs, so if it comes back unavailable, ask now rather than at the start of v0.2. Non-zero
-exit if `pgcrypto` or `pg_trgm` are missing; `postgis` only reports, since it is not needed
-until v1.2.
-
-Do not put sandbox credentials in `.env`. They are real credentials for a shared server, not
-the throwaway `registry:registry`. Deployed environments read secrets from Google Secret
-Manager.
-
----
-
-## Troubleshooting
-
-### `make up` says port 5432 is already in use
-
-Another project's database has it. Use a different host port and match it in `.env`:
-
-```
-make up DB_PORT=55432
-```
-
-### `Name or service not known` from alembic, or `db` will not resolve
-
-The database container is running but attached to no network. This happens when a port
-collision makes Docker fail *while* wiring the container up: the container is left created but
-detached, and its healthcheck still passes, because `pg_isready` runs inside the container and
-never touches the network. Compose reports success and the failure surfaces later as an
-unresolvable hostname.
-
-`make up` now detects this and recreates the container itself. To confirm what happened:
-
-```
-docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' catalog-registry-db-1
-```
-
-Empty output means no network. `make down && make up` repairs it.
-
-### `extra_forbidden` at boot, naming a key you did not add
-
-Your `.env` has a key `Settings` does not know, usually a setting that was renamed, or a
-compose variable like `DB_PORT` that does not belong there. Regenerate and re-copy:
-
-```
-make env
-cp .env.example .env      # then re-apply your DSN if you changed the port
-```
-
-### `.env.example is stale` from `make test`
-
-You added or renamed a `Settings` field. Run `make env` and commit the result.
-
-### The API serves old code after a change
-
-`make up` always rebuilds, so this should not happen. If it does, `make clean && make up`
-drops the volume and rebuilds from scratch.
-
-### `make docker-run` says the compose database is not running
-
-It needs `make up` first, or an explicit `IMAGE_DSN=`.
-
-### Postgres 18 refuses to start, mentioning `pg_upgrade`
-
-The volume is mounted at the pre-18 path. `compose.override.yaml` mounts
-`/var/lib/postgresql`, not `/var/lib/postgresql/data`. If you have an old volume from before
-that fix, `make clean` drops it.
-
----
-
-## Open questions that affect the code
-
-These are not settled, and none of them is the implementer's to settle alone. Each is marked
-in the code where it bites.
-
-| Question | Where it shows up |
-|---|---|
-| Which GCP region | Deployment only. EDRLab is French, so GDPR applies |
-| Which milestone integrator filtering lands in | Nothing in v0 changes either way |
-| Whether the seed catalogs linking to `text/html` rather than OPDS is intentional | An OPDS-only filter would drop most of them. Possibly missing links rather than intent |

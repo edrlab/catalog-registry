@@ -90,7 +90,7 @@ make add ARGS="<url> --kind public"                  # colour is gray again
 ```
 
 Correct for an import - the feed plus your flags are the whole truth for that catalog - and
-wrong for editing one field. Partial edits are the back office's job (v1.0).
+wrong for editing one field. Partial edits are the back office's job.
 
 ## Two things it does not set
 
