@@ -150,7 +150,7 @@ seed-schema:  ## Regenerate the relaxed seed-input schema
 ##@ Container
 
 docker-build:  ## Build the runtime image
-	docker build -f docker/Dockerfile -t $(IMAGE) .
+	docker build -f Dockerfile -t $(IMAGE) .
 
 # `make up` runs the *development* target, with your source bind-mounted. This runs the
 # runtime image, the artifact that actually deploys. Against the same database, which is

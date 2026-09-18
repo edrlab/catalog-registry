@@ -361,7 +361,7 @@ Manager.
 
 ## Publishing the image
 
-`.github/workflows/publish-image.yaml` builds `docker/Dockerfile`'s `runtime` stage and pushes
+`.github/workflows/publish-image.yaml` builds `Dockerfile`'s `runtime` stage and pushes
 to Docker Hub (`edrlab/catalog-registry`) on every PR and on push to `main`. PRs get `pr-<N>`
 (moving) and `sha-<shortsha>` (fixed) tags; `main` also gets `latest`. Fork PRs are skipped, not
 failed — they have no access to the push credentials.
