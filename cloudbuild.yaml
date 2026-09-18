@@ -1,0 +1,99 @@
+# Cloud Build config for the catalog-registry Cloud Build trigger (Cloud Build > Triggers,
+# not the Cloud Run "Continuously Deploy" wizard - that managed flow can't satisfy its own
+# service-account/logging requirement, for anyone, regardless of IAM role. This file exists
+# because that one's a dead end.
+#
+# `options.logging: CLOUD_LOGGING_ONLY` below is the actual fix for:
+#   "invalid argument: if 'build.service_account' is specified, the build must either
+#   (a) specify 'build.logs_bucket', (b) use REGIONAL_USER_OWNED_BUCKET
+#   build.options.default_logs_bucket_behavior, or (c) use CLOUD_LOGGING_ONLY / NONE"
+#
+# Prerequisites, one-time, someone with the right access runs these before the trigger works:
+#   - Artifact Registry repo to push into:
+#       gcloud artifacts repositories create cloud-run-source-deploy \
+#         --repository-format=docker --location=europe-west1 --project=catalog-registry
+#   - The trigger's chosen service account needs: roles/artifactregistry.writer,
+#     roles/run.developer, roles/cloudsql.client, and roles/iam.serviceAccountUser scoped to
+#     the Cloud Run runtime SA (978115678958-compute@developer.gserviceaccount.com).
+#   - Trigger substitution variable _DATABASE_URL, set per-trigger in the Console, marked
+#     "secret" so Cloud Build redacts it from logs (same DSN Cloud Run's own env var uses -
+#     known gap: neither is Secret-Manager-backed yet, see opds-registry-all-plans notes).
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _AR_REGION: europe-west1
+  _AR_REPO: cloud-run-source-deploy
+  _SERVICE: catalog-registry
+  _REGION: europe-west1
+  _CLOUD_SQL_INSTANCE: catalog-registry:europe-west9:development-sandbox-db
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --target=runtime
+      - -f=Dockerfile
+      - -t=${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_SERVICE}:$SHORT_SHA
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_SERVICE}:$SHORT_SHA
+
+  # Detached, on the `cloudbuild` network Cloud Build creates for this build, socket shared
+  # via /workspace (the real host build directory, bind-mountable into any step's nested
+  # `docker run`) so the migrate step below can reach it the same unix-socket way the app
+  # itself and the old GH Actions attempt both did - same DSN shape, nothing new to generate.
+  - id: cloud-sql-proxy
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - -d
+      - --name=cloudsql-proxy
+      - --network=cloudbuild
+      - -v=/workspace/cloudsql:/cloudsql
+      - gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.25.4
+      - --unix-socket=/cloudsql
+      - ${_CLOUD_SQL_INSTANCE}
+
+  # Gate, not folded into deploy: if this fails, the build stops here and Cloud Run is
+  # never touched - the previous revision keeps serving.
+  - id: migrate
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --network=cloudbuild
+      - -v=/workspace/cloudsql:/cloudsql
+      - -e=REGISTRY_DATABASE_URL=${_DATABASE_URL}
+      - ${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_SERVICE}:$SHORT_SHA
+      - sh
+      - -c
+      - |
+        SOCKET=/cloudsql/${_CLOUD_SQL_INSTANCE}/.s.PGSQL.5432
+        for i in $(seq 1 30); do
+          [ -S "$SOCKET" ] && break
+          sleep 1
+        done
+        [ -S "$SOCKET" ] || { echo "cloud-sql-proxy socket never appeared" >&2; exit 1; }
+        alembic upgrade head
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdk/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_SERVICE}:$SHORT_SHA
+      - --region=${_REGION}
+      - --project=$PROJECT_ID
+      - --quiet
+
+images:
+  - ${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_SERVICE}:$SHORT_SHA
