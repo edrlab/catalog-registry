@@ -12,22 +12,26 @@ from registry.domain.language import LanguageRange, parse_accept_language, rank_
 from registry.rendering.feed_renderer import render_feed
 from registry.repositories.protocols import CatalogReader
 
-#: A catalog scoped to no language leads: it serves every reader. Buckets rather than a
-#: sentinel score, so its position never depends on the `q` values in the header.
-_UNSCOPED, _MATCHED = 0, 1
+#: A catalog matching the client's language leads; one scoped to no language trails every
+#: match. Buckets rather than a sentinel score, so position never depends on the `q` values
+#: in the header. `created_at` (newest first) breaks ties within a bucket.
+_MATCHED, _UNSCOPED = 0, 1
 
 
-def _rank(catalog: Catalog, ranges: Sequence[LanguageRange]) -> tuple[int, int, int] | None:
+def _rank(catalog: Catalog, ranges: Sequence[LanguageRange]) -> tuple[int, int, int, float] | None:
     """Sort key for *catalog*, or ``None`` when the request excludes it.
 
     A catalog declaring no languages is never excluded, since it has made no claim to
-    contradict, and it sorts above every catalog scoped to a specific language. Breadth
-    first: a catalog that serves everyone is useful to this reader whatever they asked for.
+    contradict, but it sorts below every catalog scoped to a specific language that matched.
+    The final element is `-created_at.timestamp()`, so within a bucket (and within a single
+    range's rank/depth) the newest catalog sorts first.
     """
     if not catalog.languages:
-        return (_UNSCOPED, 0, 0)
+        return (_UNSCOPED, 0, 0, -catalog.created_at.timestamp())
     match = rank_language_match(ranges, [row.language_tag for row in catalog.languages])
-    return None if match is None else (_MATCHED, *match.sort_key)
+    if match is None:
+        return None
+    return (_MATCHED, *match.sort_key, -catalog.created_at.timestamp())
 
 
 async def resolve_top_level_feed(
@@ -35,11 +39,12 @@ async def resolve_top_level_feed(
 ) -> dict[str, Any]:
     """Return the recommended catalogs acceptable to *accept_language*, best match first.
 
-    No ranges means no filtering and no reordering, the client stated no preference.
+    No ranges means no filtering and no reordering, the client stated no preference — the
+    feed keeps the repository's `created_at DESC, title` order as-is.
 
-    The sort is *stable*, so catalogs ranking equally keep the title order the repository
-    established, and two identical requests produce byte-identical bodies without this
-    function knowing anything about titles.
+    The sort is *stable*, so catalogs ranking exactly equally (same bucket, rank, depth, and
+    `created_at`) keep the order the repository established, and two identical requests
+    produce byte-identical bodies without this function knowing anything about titles.
     """
     catalogs = await reader.fetch_recommended_catalogs()
     ranges = parse_accept_language(accept_language)

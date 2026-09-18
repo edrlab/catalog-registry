@@ -6,16 +6,18 @@ is touched here, that is the whole point of the service depending on `CatalogRea
 **This is where the ordering rules are pinned down**, rather than in the e2e tests. The seed
 holds three catalogs chosen to be a realistic starting registry; the fake here holds whatever
 each rule needs to be provable, including a French-only catalog the seed no longer has. The
-requirement, from Hadrien:
+current rule:
 
     Use all languages listed in `Accept-Language`. Since this can contain regional
     preferences, match against those (for example "fr-FR" in `Accept-Language` but "FR" in
     our data). Language preferences are ranked in `Accept-Language`, so respect that
     preference in the order of recommended catalogs displayed. Primary sorting order:
-    language, with catalogs not scoped to a specific language listed above the other ones.
+    language, with catalogs not scoped to a specific language listed *below* the matched
+    ones. Secondary sort order: `created_at`, newest first.
 """
 
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -24,6 +26,11 @@ from registry.domain.enums import CatalogColor, CatalogStatus, CoverageScope
 from registry.services.feed_service import resolve_top_level_feed
 
 pytestmark = pytest.mark.unit
+
+#: Every catalog built without an explicit `created_at` gets this same instant, so tests that
+#: aren't about recency don't have to think about it — ties fall back to build order via a
+#: stable sort, same as before `created_at` existed as a sort key.
+_DEFAULT_CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 class FakeCatalogReader:
@@ -36,7 +43,9 @@ class FakeCatalogReader:
         return self._catalogs
 
 
-def build_catalog(title: str, *languages: str) -> Catalog:
+def build_catalog(
+    title: str, *languages: str, created_at: datetime = _DEFAULT_CREATED_AT
+) -> Catalog:
     # Server defaults apply on INSERT, so a transient instance has to state them itself.
     catalog = Catalog(
         title=title,
@@ -44,6 +53,7 @@ def build_catalog(title: str, *languages: str) -> Catalog:
         recommended=True,
         color=CatalogColor.GRAY,
         coverage=CoverageScope.GLOBAL,
+        created_at=created_at,
     )
     catalog.kinds = []
     catalog.publication_types = []
@@ -72,8 +82,8 @@ async def test_no_header_returns_everything() -> None:
 
 
 async def test_a_stated_language_keeps_matching_and_unscoped_catalogs() -> None:
-    """`Silent` is scoped to no language, so it leads; the French match follows."""
-    assert await titles("fr") == ["Silent", "French"]
+    """The French match leads; `Silent`, scoped to no language, follows."""
+    assert await titles("fr") == ["French", "Silent"]
 
 
 async def test_a_language_nobody_declares_keeps_only_unscoped_catalogs() -> None:
@@ -81,17 +91,17 @@ async def test_a_language_nobody_declares_keeps_only_unscoped_catalogs() -> None
 
 
 async def test_a_wildcard_keeps_everything() -> None:
-    assert await titles("*") == ["Silent", "English", "French"]
+    assert await titles("*") == ["English", "French", "Silent"]
 
 
 async def test_header_order_decides_when_no_quality_is_given() -> None:
-    assert await titles("fr, en") == ["Silent", "French", "English"]
-    assert await titles("en, fr") == ["Silent", "English", "French"]
+    assert await titles("fr, en") == ["French", "English", "Silent"]
+    assert await titles("en, fr") == ["English", "French", "Silent"]
 
 
 async def test_quality_overrides_header_order() -> None:
-    assert await titles("en, fr;q=1.0") == ["Silent", "English", "French"]
-    assert await titles("en;q=0.5, fr") == ["Silent", "French", "English"]
+    assert await titles("en, fr;q=1.0") == ["English", "French", "Silent"]
+    assert await titles("en;q=0.5, fr") == ["French", "English", "Silent"]
 
 
 async def test_a_malformed_header_is_treated_as_no_preference() -> None:
@@ -128,14 +138,14 @@ async def test_any_french_range_reaches_a_catalog_declaring_plain_fr(header: str
 
     `fr-Latn-FR` also has to work: it is three subtags deep, and the catalog holds one.
     """
-    assert await titles(header) == ["Silent", "French"]
+    assert await titles(header) == ["French", "Silent"]
 
 
 async def test_a_plain_range_reaches_a_regional_catalog() -> None:
     """The other direction. Asking for `fr`, holding `fr-BE`."""
     reader = FakeCatalogReader([build_catalog("Belgian", "fr-be"), build_catalog("Silent")])
 
-    assert await titles("fr", reader) == ["Silent", "Belgian"]
+    assert await titles("fr", reader) == ["Belgian", "Silent"]
 
 
 async def test_sibling_regions_do_not_match_each_other() -> None:
@@ -171,10 +181,10 @@ async def test_the_full_preference_order_is_respected() -> None:
     )
 
     assert await titles("fr;q=0.9, de;q=0.8, en;q=0.7", reader) == [
-        "Silent",
         "French",
         "German",
         "English",
+        "Silent",
     ]
 
 
@@ -213,25 +223,44 @@ async def test_a_wildcard_ranks_at_its_own_position() -> None:
     assert await titles("fr, *", reader) == ["French", "German"]
 
 
-# --- the unscoped bucket ---------------------------------------------------------------
+# --- the unscoped bucket, and the created_at tiebreaker --------------------------------
 
 
-async def test_unscoped_catalogs_lead_regardless_of_how_good_the_matches_are() -> None:
-    """An exact, top-quality match still sorts below a catalog scoped to no language."""
+async def test_unscoped_catalogs_trail_regardless_of_how_good_the_matches_are() -> None:
+    """An exact, top-quality match still sorts above every catalog scoped to no language."""
     reader = FakeCatalogReader(
         [build_catalog("Exact", "fr-be"), build_catalog("Silent"), build_catalog("Other")]
     )
 
-    assert await titles("fr-be", reader) == ["Silent", "Other", "Exact"]
+    assert await titles("fr-be", reader) == ["Exact", "Silent", "Other"]
 
 
-async def test_unscoped_catalogs_keep_the_readers_order_among_themselves() -> None:
-    """The bucket is stable, so the database's ordering survives inside it."""
+async def test_unscoped_catalogs_sort_newest_first_among_themselves() -> None:
+    """Ties within the unscoped bucket break on `created_at`, newest first — not the order
+    the reader happened to return them in."""
+    base = _DEFAULT_CREATED_AT
     reader = FakeCatalogReader(
-        [build_catalog("Zulu title"), build_catalog("Alpha title"), build_catalog("French", "fr")]
+        [
+            build_catalog("Older", created_at=base),
+            build_catalog("Newer", created_at=base + timedelta(days=1)),
+            build_catalog("French", "fr"),
+        ]
     )
 
-    assert await titles("fr", reader) == ["Zulu title", "Alpha title", "French"]
+    assert await titles("fr", reader) == ["French", "Newer", "Older"]
+
+
+async def test_created_at_breaks_ties_within_a_language_match_too() -> None:
+    """Two catalogs matching the same range at the same depth: the newer one wins."""
+    base = _DEFAULT_CREATED_AT
+    reader = FakeCatalogReader(
+        [
+            build_catalog("Older", "fr", created_at=base),
+            build_catalog("Newer", "fr", created_at=base + timedelta(days=1)),
+        ]
+    )
+
+    assert await titles("fr", reader) == ["Newer", "Older"]
 
 
 async def test_an_empty_registry_is_not_an_error() -> None:

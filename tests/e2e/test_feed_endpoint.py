@@ -4,7 +4,7 @@ The seed set is built to demonstrate `Accept-Language` filtering:
 
 | Catalog | Declares | Covers |
 |---|---|---|
-| Project Gutenberg | nothing | unscoped, never filtered out, always first |
+| Project Gutenberg | nothing | unscoped, never filtered out, trails every language match |
 | Librivox | nothing | a second unscoped catalog, so the bucket's own order is visible |
 | Standard Ebooks | `en` | a single-language catalog |
 | Ebooks libres et gratuits | `fr` | a second, so preference order is visible |
@@ -24,8 +24,8 @@ from tests.conftest import SEED_CATALOG_COUNT
 
 pytestmark = pytest.mark.e2e
 
-#: Scoped to no language, so never filtered out, and sorts **above** every language-scoped
-#: catalog whatever was asked for. Breadth first.
+#: Scoped to no language, so never filtered out, but sorts **below** every language-scoped
+#: catalog that matched whatever was asked for.
 UNSCOPED = ["Librivox", "Project Gutenberg"]
 
 
@@ -65,7 +65,7 @@ async def test_no_accept_language_returns_everything_recommended(
 
 
 async def test_english_keeps_the_english_catalog(client: AsyncClient, seeded_catalogs: int) -> None:
-    assert await titles(client, "en") == [*UNSCOPED, "Standard Ebooks"]
+    assert await titles(client, "en") == ["Standard Ebooks", *UNSCOPED]
 
 
 async def test_a_language_no_catalog_declares_keeps_only_the_unscoped_ones(
@@ -84,7 +84,7 @@ async def test_a_regional_range_reaches_a_plain_tag(
     A reader asking for a regional variant and being shown nothing is the failure this
     guards against, and it needs both RFC 4647 procedures rather than either alone.
     """
-    assert await titles(client, "en-GB") == [*UNSCOPED, "Standard Ebooks"]
+    assert await titles(client, "en-GB") == ["Standard Ebooks", *UNSCOPED]
 
 
 async def test_rejecting_a_language_excludes_it(client: AsyncClient, seeded_catalogs: int) -> None:
