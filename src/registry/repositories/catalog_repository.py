@@ -36,14 +36,17 @@ class CatalogRepository:
     async def fetch_recommended_catalogs(self) -> Sequence[Catalog]:
         """The top-level feed's only query. Hits `ix_catalogs_recommended`.
 
-        Ordered by case-folded title in the database so two identical requests produce
-        byte-identical bodies without the renderer having to re-sort.
+        Ordered newest-first by `created_at`, the feed's secondary sort key (the service
+        applies the primary, language-based sort on top of this). Title is a second `ORDER BY`
+        term purely for determinism: seed rows are inserted in one transaction and share a
+        single `created_at` under Postgres `now()` semantics, so without a tiebreaker their
+        relative order would be unspecified and two identical requests could disagree.
         """
         statement = (
             select(Catalog)
             .where(Catalog.recommended.is_(True), Catalog.status == CatalogStatus.ACTIVE)
             .options(*EAGER_COLLECTIONS)
-            .order_by(Catalog.title)
+            .order_by(Catalog.created_at.desc(), Catalog.title)
         )
         return (await self._session.scalars(statement)).all()
 
