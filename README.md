@@ -5,6 +5,9 @@
 
 This project is part of EDRLab's OPDS Interoperability Task Force.
 
+## Demo 
+Live: [registry.thoriumreader.com](https://registry.thoriumreader.com)
+
 The Catalog Registry will contain:
 
 - public libraries
