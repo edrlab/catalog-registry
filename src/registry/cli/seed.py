@@ -146,15 +146,22 @@ def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
 
 
 async def import_catalog_document(
-    session: AsyncSession, document: dict[str, Any], *, recommended: bool, position: int = 0
+    session: AsyncSession,
+    document: dict[str, Any],
+    *,
+    recommended: bool,
+    ordered_at: datetime | None = None,
 ) -> tuple[Catalog, bool]:
     """Insert, or replace the existing catalog's contents in place. Returns (catalog, created).
 
-    *position* is the catalog's index in the document it arrived in, and it decides where the
-    catalog lands in the feed. The feed orders by `created_at` descending, so this writes one
-    second earlier per position: the first catalog in the file is the newest row and leads its
-    language bucket. Without it every row in a run shares a single `now()` and the order falls
-    through to the alphabetical tiebreaker, which is not an order anyone chose.
+    *ordered_at* is the `created_at` to write, and `created_at` is what the feed orders on:
+    the newest row leads its language bucket. `import_feed_document` derives it from the
+    catalog's position in the file, so the file's order is the feed's order. Left out, it is
+    simply now.
+
+    Taking the timestamp rather than the position is deliberate. The caller reads the clock
+    once for the whole run; reading it per catalog let the time each row spends in the
+    database outrun the gap between positions, which reversed the order.
 
     Re-seeding rewrites it, so editing the file is how the order is changed.
     """
@@ -164,7 +171,8 @@ async def import_catalog_document(
     # ponytail: created_at doubles as the sort key, so a row's position is spelled as a time
     # it was not created at. An explicit ordering column is the upgrade if the feed ever
     # needs an order the seed file cannot express.
-    ordered_at = datetime.now(UTC) - timedelta(seconds=position)
+    if ordered_at is None:
+        ordered_at = datetime.now(UTC)
     identity_href = resolve_identity_href(document)
     existing = await CatalogRepository(session).fetch_catalog_by_identity_href(identity_href)
     built = build_catalog(document, recommended=recommended)
@@ -225,10 +233,18 @@ async def import_feed_document(
         detail = "; ".join(f"{list(error.absolute_path)}: {error.message}" for error in errors)
         raise ValidationError(f"{source} is not valid seed input. {detail}")
 
+    # One clock reading for the run: each catalog is written a millisecond earlier than the
+    # one before it, so position in the file survives as `created_at` order. Re-read per
+    # catalog, the write latency between rows would swamp that gap and invert it.
+    anchor = datetime.now(UTC)
+
     created = updated = 0
     for position, document in enumerate(feed["catalogs"]):
         _, was_created = await import_catalog_document(
-            session, document, recommended=recommended, position=position
+            session,
+            document,
+            recommended=recommended,
+            ordered_at=anchor - timedelta(milliseconds=position),
         )
         created += was_created
         updated += not was_created
