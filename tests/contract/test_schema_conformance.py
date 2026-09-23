@@ -45,23 +45,23 @@ async def test_every_catalog_validates_against_catalog_schema(
         assert not errors, [catalog["metadata"]["title"], [e.message for e in errors]]
 
 
-async def test_the_seeded_identifier_round_trips_into_the_response(
+async def test_the_rendered_identifier_is_the_catalog_id(
     client: AsyncClient, seeded_catalogs: int
 ) -> None:
-    """Q1: `metadata.identifier` is rendered, and it's the value Hadrien assigned, unchanged."""
-    seed = json.loads((REPO_ROOT / "data" / "recommended.json").read_text(encoding="utf-8"))
-    expected = {
-        catalog["metadata"]["title"]: catalog["metadata"]["identifier"]
-        for catalog in seed["catalogs"]
-    }
+    """`metadata.identifier` is rendered from `catalogs.id`, not stored beside it.
 
+    Asserted against the `self` link, which the renderer builds from the same id: if the two
+    ever disagree, a client following `self` lands on a catalog whose identifier is not the
+    one it just read. The hand-assigned values in `data/recommended.json` are deliberately
+    *not* what comes back — the seed reads past them.
+    """
     response = await client.get("/")
 
-    rendered = {
-        catalog["metadata"]["title"]: catalog["metadata"]["identifier"]
-        for catalog in response.json()["catalogs"]
-    }
-    assert rendered == expected
+    catalogs = response.json()["catalogs"]
+    assert catalogs, "nothing was seeded, so this asserts nothing"
+    for catalog in catalogs:
+        self_href = next(link["href"] for link in catalog["links"] if link["rel"] == "self")
+        assert catalog["metadata"]["identifier"] == f"urn:uuid:{self_href.rsplit('/', 1)[1]}"
 
 
 async def test_an_empty_feed_still_validates(client: AsyncClient) -> None:

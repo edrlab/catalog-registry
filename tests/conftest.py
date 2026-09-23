@@ -44,6 +44,15 @@ SEED_FILE = REPO_ROOT / "data" / "recommended.json"
 #: count out fails on his commit rather than on a defect.
 SEED_CATALOG_COUNT = len(json.loads(SEED_FILE.read_text(encoding="utf-8"))["catalogs"])
 
+#: The file's own order, which the seed turns into the feed's order by staggering
+#: `created_at`. Derived for the same reason as the count: reordering the file is how the
+#: feed is reordered, so a test that spells the order out would have to be edited to agree
+#: with a change it is supposed to be checking.
+SEED_TITLES_IN_FILE_ORDER = [
+    catalog["metadata"]["title"]
+    for catalog in json.loads(SEED_FILE.read_text(encoding="utf-8"))["catalogs"]
+]
+
 
 #: Hosts the suite is allowed to run against without an explicit override.
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "postgres", "db"})

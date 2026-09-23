@@ -67,11 +67,11 @@ not store. Those are skipped, and the rest are kept: `["catalog", "start"]` stor
 **Your URL becomes `catalog`, never the feed's own `self`.** A remote feed's `self` is not
 something this registry trusts for anything.
 
-**The identity later imports match on is `metadata.identifier`, not a link.** A remote feed
-has no notion of this registry's identifier, so one is generated (`uuid.uuid4()`) the first
-time you `add` a URL. Re-running `add` on the same URL looks that catalog up by the URL you
-typed and reuses its existing `identifier`, so the row is updated, not duplicated under a new
-one.
+**The identity later imports match on is that `catalog` link, not `metadata.identifier`.**
+Re-running `add` on the same URL finds the row it created the first time and updates it.
+An `identifier` is still generated (`uuid.uuid4()`) because the seed input schema requires
+the field, but the import discards it: the registry renders `metadata.identifier` from
+`catalogs.id`. Change the URL and you get a second catalog, not an updated one.
 
 `http://opds-spec.org/shelf` is the single alias accepted. OPDS 1.2 §6.1 defines the
 relation that way and gives it no short form. There is no generic prefix rule, so a rel that

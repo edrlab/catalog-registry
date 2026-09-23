@@ -67,7 +67,17 @@ up:  ## Start db + API in Docker and migrate (no seed)
 		docker compose up -d --force-recreate --wait; \
 	fi
 	docker compose exec -T api alembic upgrade head
-	@echo "Running on http://localhost:$(PORT), empty. 'make seed' for the recommended catalogs."
+	@# Counted, not assumed: `make up` keeps the volume, so a re-run usually finds the rows
+	@# a previous `make seed` left. Printing "empty" unconditionally reads as though `up`
+	@# had just seeded them.
+	@rows=$$(docker compose exec -T db psql -U registry -d registry -tAc \
+		'SELECT count(*) FROM catalogs' 2>/dev/null | tr -d '[:space:]'); \
+	if [ "$$rows" = "0" ]; then \
+		echo "Running on http://localhost:$(PORT), empty. 'make seed' for the recommended catalogs."; \
+	else \
+		echo "Running on http://localhost:$(PORT), $$rows catalogs already in the volume."; \
+		echo "  'make seed' re-imports them, 'make clean' drops the volume and starts empty."; \
+	fi
 
 down:  ## Stop the stack, keeping the database volume
 	docker compose down

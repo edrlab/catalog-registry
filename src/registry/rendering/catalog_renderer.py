@@ -49,7 +49,9 @@ def render_catalog(catalog: Catalog, *, base_url: str) -> dict[str, Any]:
     """Every collection is sorted before emission, so the output is deterministic."""
     metadata: dict[str, Any] = {
         "title": catalog.title,
-        "identifier": catalog.identifier,
+        # Derived from the primary key, not stored: `catalogs.id` is the registry's only UUID
+        # and `urn:uuid:` is its RFC 4122 URN form.
+        "identifier": f"urn:uuid:{catalog.id}",
         "kind": sorted(row.kind.value for row in catalog.kinds),
     }
     if catalog.description:

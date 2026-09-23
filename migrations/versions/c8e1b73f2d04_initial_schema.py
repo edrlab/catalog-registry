@@ -1,20 +1,21 @@
 """initial schema
 
-Revision ID: 00399a9d7c94
+Revision ID: c8e1b73f2d04
 Revises:
-Create Date: 2026-09-14
+Create Date: 2026-09-23
 
-Squashes what were `0001`-`0008` into one migration. Nothing has been deployed yet — no
-environment holds applied revision history to protect — so this collapses straight to the
-final v0 schema rather than replaying `0003`'s `coverage NOT NULL DEFAULT 'global'` and then
-`0007`'s later fix, or creating `catalogs` without `identifier` and adding it in `0008`. Both
-land in their final form directly.
+The whole v0 schema in one migration. It replaces `00399a9d7c94`, which was itself a squash of
+what were `0001`-`0008`; that revision is deleted rather than amended, and the databases that
+hold it are wiped and rebuilt from this one. The only difference between the two is
+`catalogs.identifier`, which is gone: `catalogs.id` is the registry's only UUID and
+`metadata.identifier` is rendered from it (`urn:uuid:{id}`) rather than stored a second time.
 
-**Deliberately a fresh revision id, not a reused `0001`.** A database still stopped at the old
-`0001_create_enums` (enums only, no `catalogs` table) would otherwise look, to Alembic, like it
-already had this migration applied — `upgrade head` would then skip it silently, leaving that
-database permanently missing every table this migration creates. A new, unrecognised id makes
-Alembic refuse instead, which is what should happen: reset it (`make clean` drops the volume).
+**Deliberately a fresh revision id, not a reused one.** A database still stopped at
+`00399a9d7c94` would otherwise look, to Alembic, like it already had this migration applied,
+and `upgrade head` would skip it silently — leaving a live `catalogs.identifier` column that is
+`NOT NULL` and that nothing writes to any more, so the next insert fails. An unrecognised id
+makes Alembic refuse instead, which is what should happen: reset it (`make clean` locally,
+`DROP SCHEMA public CASCADE` on Cloud SQL) and migrate from empty.
 """
 
 from collections.abc import Sequence
@@ -23,7 +24,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "00399a9d7c94"
+revision: str = "c8e1b73f2d04"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -314,10 +315,6 @@ SUBDIVISIONS = [
     ("BE-WAL", "BE", None, "region"),
 ]
 
-_URN_UUID_PATTERN = (
-    r"^urn:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-)
-
 
 def _enum(name: str) -> postgresql.ENUM:
     """Reference a type created earlier in this same migration without recreating it."""
@@ -384,9 +381,6 @@ def upgrade() -> None:
         ),
         sa.Column("status", _enum("catalog_status"), server_default="suggested", nullable=False),
         sa.Column("recommended", sa.Boolean(), server_default="false", nullable=False),
-        # Q1 (ADR-036): the stable, externally-assigned upsert match key. `id` above is
-        # gen_random_uuid()'d fresh per environment and cannot serve that role.
-        sa.Column("identifier", sa.Text(), nullable=False),
         sa.Column("title", sa.Text(), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("color", _enum("catalog_color"), server_default="gray", nullable=False),
@@ -414,7 +408,6 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["country_code"], ["countries.alpha2"], name=op.f("fk_catalogs_country_code_countries")
         ),
-        sa.UniqueConstraint("identifier", name=op.f("uq_catalogs_identifier")),
         sa.CheckConstraint("length(trim(title)) > 0", name=op.f("ck_catalogs_title_not_blank")),
         sa.CheckConstraint(
             "country_code = upper(country_code)", name=op.f("ck_catalogs_country_uppercase")
@@ -422,10 +415,6 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "status <> 'active' OR published_at IS NOT NULL",
             name=op.f("ck_catalogs_published_when_active"),
-        ),
-        sa.CheckConstraint(
-            f"identifier ~ '{_URN_UUID_PATTERN}'",
-            name=op.f("ck_catalogs_identifier_is_urn_uuid"),
         ),
     )
     # Partial: the top-level feed's only query. Right shape over ten rows, still right at
@@ -494,6 +483,18 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_links_catalog_id", "links", ["catalog_id"])
+    # Serves `fetch_catalog_by_identity_href`'s predicate, and enforces it: the
+    # `catalog`/`shelf` href is the upsert identity, so a check-then-insert race that would
+    # otherwise commit the same catalog twice fails on the losing insert instead. On `href`
+    # alone rather than `(href, rel)` — the lookup spans both rels, so one URL is one
+    # catalog whichever of the two rels it is published under.
+    op.create_index(
+        "uq_links_identity_href",
+        "links",
+        ["href"],
+        unique=True,
+        postgresql_where=sa.text("rel IN ('catalog', 'shelf')"),
+    )
 
     # A trigger rather than an ORM `onupdate`: it also fires for the direct SQL the seed
     # script and any future data migration perform. Autogenerate does not produce triggers.

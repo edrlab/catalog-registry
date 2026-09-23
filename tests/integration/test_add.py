@@ -23,11 +23,12 @@ FEED = {"metadata": {"title": "Repeat Add Library"}, "links": []}
 async def test_re_adding_the_same_url_updates_instead_of_duplicating(
     settings: Settings, migrated_database: str
 ) -> None:
-    """The bug this guards against: each `add` invocation generates a fresh `identifier`
-    (`build_catalog_document`, since a remote feed has no notion of ours). Without the
-    href-based lookup in `add_catalog_from_url`, a second `make add` on the same URL would
-    match on nothing, and insert a duplicate row under a new identifier instead of updating
-    the first."""
+    """The bug this guards against: a second `make add` on the same URL inserting a duplicate.
+
+    Identity is the `catalog` rel href, which is the URL the operator typed, so both documents
+    resolve to the same row. `metadata.identifier` differs between them and is irrelevant:
+    the import discards it, and the row keeps the `id` Postgres gave it on the first add.
+    """
     first_document = build_catalog_document(FEED, URL, kind=["open"])
     second_document = build_catalog_document(FEED, URL, kind=["open"])
     assert first_document["metadata"]["identifier"] != second_document["metadata"]["identifier"]
@@ -47,7 +48,6 @@ async def test_re_adding_the_same_url_updates_instead_of_duplicating(
         assert created_first is True
         assert created_second is False
         assert len(rows) == 1
-        assert rows[0].identifier == first_document["metadata"]["identifier"]
     finally:
         async with engine.begin() as connection:
             await connection.execute(

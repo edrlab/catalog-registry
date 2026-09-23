@@ -10,18 +10,19 @@ feed-level `links` and no `self` link on any catalog, so the published schema re
 record. `self` is synthesised at render time from the registry's own base URL, and the
 contract tests validate the output.
 
-**The upsert conflict target closes Q1: `metadata.identifier`.** `id` is generated fresh per
-environment, so it never conflicts. Matching on the `catalog`/`shelf` link href was the interim
-answer, but a href changes (Project Gutenberg moving from pre-prod to prod is the case that
-prompted this), which would silently duplicate the row on the next re-seed. `identifier` is
-externally assigned once and never changes, so it is required on every catalog document and is
-the sole match key — no href fallback.
+**A catalog is matched across re-seeds by its `catalog`/`shelf` link href.** `catalogs.id` is
+the registry's only UUID and is generated fresh per environment, so it never conflicts with
+anything in the source document; `metadata.identifier` is rendered *from* that id rather than
+stored, so the hand-assigned `urn:uuid:` values in `data/recommended.json` are read past and
+discarded here. The href is externally owned rather than stable, which is the known cost of
+this design — see `resolve_identity_href` below.
 """
 
 import asyncio
 import json
 import sys
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,7 @@ from registry.domain.enums import (
     PublicationType,
 )
 from registry.domain.language import normalise_language_tag
-from registry.domain.links import has_browsable_rel
+from registry.domain.links import IDENTITY_RELS, has_browsable_rel
 from registry.repositories.catalog_repository import CatalogRepository
 
 #: Presence in `data/recommended.json` is the recommended flag.
@@ -72,19 +73,23 @@ def link_rels(link: dict[str, Any]) -> list[LinkRel]:
     return [LinkRel(value) for value in written if value in set(LinkRel)]
 
 
-def resolve_identifier(document: dict[str, Any]) -> str:
-    """The externally-assigned `urn:uuid:...` this catalog is matched on across seed runs.
+# ponytail: href match - a catalog that changes its feed URL inserts a second row instead of
+# updating the first (Project Gutenberg's pre-prod to prod move is the case that bites). The
+# fix is a wipe and re-seed. Revisit if that stops being acceptable.
+def resolve_identity_href(document: dict[str, Any]) -> str:
+    """The externally owned URL this catalog is matched on across seed runs.
 
-    Schema validation already requires `metadata.identifier` on anything reaching this point;
-    this raises anyway for callers (tests included) that build a document by hand.
+    `metadata.identifier` is deliberately *not* it: the registry renders that field from
+    `catalogs.id`, so the value in the source document is not the one clients ever see.
     """
-    identifier = document["metadata"].get("identifier")
-    if not identifier:
-        raise ValidationError(
-            f"{document['metadata']['title']} has no metadata.identifier, "
-            "so it has no stable identity to upsert on"
-        )
-    return str(identifier)
+    for rel in IDENTITY_RELS:
+        for link in document["links"]:
+            if rel in link_rels(link):
+                return str(link["href"])
+    raise ValidationError(
+        f"{document['metadata']['title']} has neither a `catalog` nor a `shelf` link, "
+        "so it has no stable identity to upsert on"
+    )
 
 
 def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
@@ -98,7 +103,6 @@ def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
     return Catalog(
         status=CatalogStatus.ACTIVE,
         recommended=recommended,
-        identifier=resolve_identifier(document),
         title=metadata["title"],
         description=metadata.get("description"),
         color=CatalogColor(metadata.get("color", CatalogColor.GRAY.value)),
@@ -142,18 +146,40 @@ def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
 
 
 async def import_catalog_document(
-    session: AsyncSession, document: dict[str, Any], *, recommended: bool
+    session: AsyncSession,
+    document: dict[str, Any],
+    *,
+    recommended: bool,
+    ordered_at: datetime | None = None,
 ) -> tuple[Catalog, bool]:
-    """Insert, or replace the existing catalog's contents in place. Returns (catalog, created)."""
+    """Insert, or replace the existing catalog's contents in place. Returns (catalog, created).
+
+    *ordered_at* is the `created_at` to write, and `created_at` is what the feed orders on:
+    the newest row leads its language bucket. `import_feed_document` derives it from the
+    catalog's position in the file, so the file's order is the feed's order. Left out, it is
+    simply now.
+
+    Taking the timestamp rather than the position is deliberate. The caller reads the clock
+    once for the whole run; reading it per catalog let the time each row spends in the
+    database outrun the gap between positions, which reversed the order.
+
+    Re-seeding rewrites it, so editing the file is how the order is changed.
+    """
     # Imported here, not at module level: only the write path needs it.
     from sqlalchemy import func  # noqa: PLC0415
 
-    identifier = resolve_identifier(document)
-    existing = await CatalogRepository(session).fetch_catalog_by_identifier(identifier)
+    # ponytail: created_at doubles as the sort key, so a row's position is spelled as a time
+    # it was not created at. An explicit ordering column is the upgrade if the feed ever
+    # needs an order the seed file cannot express.
+    if ordered_at is None:
+        ordered_at = datetime.now(UTC)
+    identity_href = resolve_identity_href(document)
+    existing = await CatalogRepository(session).fetch_catalog_by_identity_href(identity_href)
     built = build_catalog(document, recommended=recommended)
 
     if existing is None:
         built.published_at = func.now()
+        built.created_at = ordered_at
         session.add(built)
         return built, True
 
@@ -180,6 +206,7 @@ async def import_catalog_document(
     if existing.published_at is None:
         existing.published_at = func.now()
     existing.status = built.status
+    existing.created_at = ordered_at
     existing.kinds = built.kinds
     existing.publication_types = built.publication_types
     existing.languages = built.languages
@@ -206,9 +233,19 @@ async def import_feed_document(
         detail = "; ".join(f"{list(error.absolute_path)}: {error.message}" for error in errors)
         raise ValidationError(f"{source} is not valid seed input. {detail}")
 
+    # One clock reading for the run: each catalog is written a millisecond earlier than the
+    # one before it, so position in the file survives as `created_at` order. Re-read per
+    # catalog, the write latency between rows would swamp that gap and invert it.
+    anchor = datetime.now(UTC)
+
     created = updated = 0
-    for document in feed["catalogs"]:
-        _, was_created = await import_catalog_document(session, document, recommended=recommended)
+    for position, document in enumerate(feed["catalogs"]):
+        _, was_created = await import_catalog_document(
+            session,
+            document,
+            recommended=recommended,
+            ordered_at=anchor - timedelta(milliseconds=position),
+        )
         created += was_created
         updated += not was_created
 

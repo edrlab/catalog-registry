@@ -1,7 +1,6 @@
 """Repository behaviour, including the N+1 guard."""
 
 import datetime
-import uuid
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +9,7 @@ from registry.db.models.catalog import Catalog
 from registry.domain.enums import CatalogColor, CatalogStatus, CoverageScope
 from registry.rendering.feed_renderer import render_feed
 from registry.repositories.catalog_repository import CatalogRepository
-from tests.conftest import SEED_CATALOG_COUNT, QueryCounter
+from tests.conftest import SEED_CATALOG_COUNT, SEED_TITLES_IN_FILE_ORDER, QueryCounter
 
 pytestmark = pytest.mark.integration
 
@@ -23,16 +22,9 @@ async def test_fetch_recommended_catalogs_returns_the_seeded_set(
 ) -> None:
     catalogs = await CatalogRepository(db_session).fetch_recommended_catalogs()
 
-    assert [catalog.title for catalog in catalogs] == [
-        "Bibliothèque numérique Romande",
-        "Ebooks libres et gratuits",
-        "La Bibliothèque russe et slave",
-        "Liber Liber",
-        "Librivox",
-        "Project Gutenberg",
-        "Standard Ebooks",
-        "TV5 Monde",
-    ]
+    # File order, not alphabetical: the seed staggers `created_at` by position, and this
+    # query orders on it. Title is still the last `ORDER BY` term, for determinism only.
+    assert [catalog.title for catalog in catalogs] == SEED_TITLES_IN_FILE_ORDER
 
 
 async def test_a_suggested_catalog_is_excluded_even_when_recommended(
@@ -69,7 +61,6 @@ async def test_the_feed_query_count_does_not_grow_with_the_number_of_catalogs(
         db_session.add(
             Catalog(
                 title=f"Bulk {index:02d}",
-                identifier=f"urn:uuid:{uuid.uuid4()}",
                 status=CatalogStatus.ACTIVE,
                 published_at=datetime.datetime.now(datetime.UTC),
                 recommended=True,

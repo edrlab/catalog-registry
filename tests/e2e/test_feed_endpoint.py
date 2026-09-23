@@ -16,17 +16,20 @@ contain; those live in `tests/unit/test_feed_service.py`, against a fake built p
 A catalog declaring nothing has made no claim to contradict, so it is kept for every request.
 """
 
+import json
+
 import pytest
 from httpx import AsyncClient
 
 from registry.core.constants import OPDS_CATALOG_MEDIA_TYPE
-from tests.conftest import SEED_CATALOG_COUNT
+from tests.conftest import SEED_CATALOG_COUNT, SEED_FILE, SEED_TITLES_IN_FILE_ORDER
 
 pytestmark = pytest.mark.e2e
 
 #: Scoped to no language, so never filtered out, but sorts **below** every language-scoped
-#: catalog that matched whatever was asked for.
-UNSCOPED = ["Librivox", "Project Gutenberg"]
+#: catalog that matched whatever was asked for. In the seed file's order, which the seed
+#: turns into `created_at` order.
+UNSCOPED = ["Project Gutenberg", "Librivox"]
 
 
 async def titles(client: AsyncClient, header: str | None = None) -> list[str]:
@@ -52,16 +55,26 @@ async def test_the_content_type_is_the_opds_media_type(
 async def test_no_accept_language_returns_everything_recommended(
     client: AsyncClient, seeded_catalogs: int
 ) -> None:
-    assert await titles(client) == [
-        "Bibliothèque numérique Romande",
-        "Ebooks libres et gratuits",
-        "La Bibliothèque russe et slave",
-        "Liber Liber",
-        "Librivox",
-        "Project Gutenberg",
-        "Standard Ebooks",
-        "TV5 Monde",
+    assert await titles(client) == SEED_TITLES_IN_FILE_ORDER
+
+
+async def test_a_language_bucket_keeps_the_seed_file_order(
+    client: AsyncClient, seeded_catalogs: int
+) -> None:
+    """Within one language, position in `data/recommended.json` is the order, top to bottom.
+
+    Hadrien asked for a particular order among the French catalogs. Rather than encode his
+    list here, this reads the order out of the file, so the file stays the single place it is
+    stated and reordering it is what changes the feed.
+    """
+    seed = json.loads(SEED_FILE.read_text(encoding="utf-8"))
+    french = [
+        catalog["metadata"]["title"]
+        for catalog in seed["catalogs"]
+        if "fr" in catalog["metadata"].get("supportedLanguages", [])
     ]
+
+    assert await titles(client, "fr") == [*french, *UNSCOPED]
 
 
 async def test_english_keeps_the_english_catalog(client: AsyncClient, seeded_catalogs: int) -> None:

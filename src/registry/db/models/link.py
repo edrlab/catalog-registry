@@ -10,6 +10,7 @@ from sqlalchemy import (
     Index,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -25,6 +26,24 @@ class Link(Base):
         UniqueConstraint("catalog_id", "rel", "href", name="uq_links_catalog_rel_href"),
         CheckConstraint("NOT templated OR rel = 'search'", name="templated_only_search"),
         Index("ix_links_catalog_id", "catalog_id"),
+        # Two jobs, one index. `cli/seed.py` matches a catalog by its `catalog`/`shelf` href,
+        # so this is the index that predicate needs — without it every import scans `links`
+        # once per catalog. Unique because that href *is* the identity: a check-then-insert
+        # is not atomic, and two concurrent seeds would otherwise both find nothing and
+        # commit the same catalog twice. The loser now fails loudly instead.
+        #
+        # On `href` alone, deliberately, not `(href, rel)`. The lookup spans both rels at
+        # once, so a URL that is one catalog's `shelf` and another's `catalog` would match
+        # two rows and the import would update whichever the planner returned first. One
+        # URL is one catalog. The cost is that a single catalog may not use the same href
+        # for both its `catalog` and its `shelf` link; a shelf is a different resource from
+        # a browse root, and the refusal is loud rather than silent.
+        Index(
+            "uq_links_identity_href",
+            "href",
+            unique=True,
+            postgresql_where=text("rel IN ('catalog', 'shelf')"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

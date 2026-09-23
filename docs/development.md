@@ -174,8 +174,8 @@ Constraints worth knowing, because they will reject your data rather than quietl
 - `(catalog_id, rel, href)` is unique across links
 - `coverage` is **nullable with no default**. `NULL` means *not declared*,
   `global` means *worldwide*, and collapsing them loses information
-- `identifier` must be a well-formed `urn:uuid:...` and unique across catalogs — it's the
-  upsert match key, see [The seed](#the-seed)
+- `id` is the catalog's only UUID. `metadata.identifier` is rendered from it
+  (`urn:uuid:{id}`), never stored separately, so it is environment-specific
 
 ---
 
@@ -228,11 +228,12 @@ exist yet when it's authored), so it validates against `schema/generated/seed-in
 not the published `feed.schema.json`. `self` links are synthesised at render time. Detail:
 [`schemas.md`](schemas.md).
 
-**Identity**: catalogs match on `metadata.identifier` (`urn:uuid:...`, required), not on a
-link — hrefs change (registry migrations, library moving pre-prod→prod), the identifier
-doesn't. No identifier = rejected. `make seed`: hand-assigned by Hadrien. `make add`: generated
-once per URL, then reused on re-import so the row updates instead of duplicating (remote
-feeds have no notion of this registry's scheme). See [`importing.md`](importing.md).
+**Identity**: catalogs match on their `catalog`/`shelf` link href. No browsable link =
+rejected. `metadata.identifier` is present in `data/recommended.json` and is read past: the
+registry renders that field from `catalogs.id`, so the hand-assigned values never reach the
+database. The known cost is that a catalog changing its feed URL (a library moving
+pre-prod→prod) is inserted as a second row rather than updated; the fix is a wipe and
+re-seed. See [`importing.md`](importing.md).
 
 ---
 

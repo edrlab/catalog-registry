@@ -12,7 +12,7 @@ from types import MappingProxyType
 WIRE_TO_COLUMN = MappingProxyType(
     {
         "title": "title",
-        "identifier": "identifier",
+        "identifier": "id",
         "kind": "kinds",
         "description": "description",
         "color": "color",
