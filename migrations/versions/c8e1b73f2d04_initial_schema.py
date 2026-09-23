@@ -483,6 +483,16 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_links_catalog_id", "links", ["catalog_id"])
+    # Serves `fetch_catalog_by_identity_href`'s predicate, and enforces it: the
+    # `catalog`/`shelf` href is the upsert identity, so a check-then-insert race that would
+    # otherwise commit the same catalog twice fails on the losing insert instead.
+    op.create_index(
+        "uq_links_identity_href",
+        "links",
+        ["href", "rel"],
+        unique=True,
+        postgresql_where=sa.text("rel IN ('catalog', 'shelf')"),
+    )
 
     # A trigger rather than an ORM `onupdate`: it also fires for the direct SQL the seed
     # script and any future data migration perform. Autogenerate does not produce triggers.

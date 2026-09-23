@@ -10,6 +10,7 @@ from sqlalchemy import (
     Index,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -25,6 +26,18 @@ class Link(Base):
         UniqueConstraint("catalog_id", "rel", "href", name="uq_links_catalog_rel_href"),
         CheckConstraint("NOT templated OR rel = 'search'", name="templated_only_search"),
         Index("ix_links_catalog_id", "catalog_id"),
+        # Two jobs, one index. `cli/seed.py` matches a catalog by its `catalog`/`shelf` href,
+        # so this is the index that predicate needs — without it every import scans `links`
+        # once per catalog. Unique because that href *is* the identity: a check-then-insert
+        # is not atomic, and two concurrent seeds would otherwise both find nothing and
+        # commit the same catalog twice. The loser now fails loudly instead.
+        Index(
+            "uq_links_identity_href",
+            "href",
+            "rel",
+            unique=True,
+            postgresql_where=text("rel IN ('catalog', 'shelf')"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.cli.seed import import_catalog_document, resolve_identity_href, seed_catalogs
@@ -196,6 +197,30 @@ async def test_the_document_identifier_is_not_the_one_that_is_stored(
     await db_session.commit()
 
     assert str(catalog.id) != "30a59158-28bc-4fc1-ad99-93325968d9c1"
+
+
+async def test_two_catalogs_cannot_share_an_identity_href(db_session: AsyncSession) -> None:
+    """uq_links_identity_href. The identity is enforced in the database, not only looked up.
+
+    `import_catalog_document` reads before it writes, and a check-then-insert is not atomic:
+    two concurrent seeds would both find nothing and commit the same catalog twice. The race
+    itself is impractical to stage in a test, so what is asserted here is the constraint that
+    makes the losing insert fail. Inserting the rows directly bypasses the read that would
+    otherwise turn the second one into an update.
+    """
+    for title in ("First Claimant", "Second Claimant"):
+        db_session.add(
+            Catalog(
+                title=title,
+                status=CatalogStatus.ACTIVE,
+                published_at=func.now(),
+                recommended=True,
+                links=[Link(href="https://contested.example/opds", rel=LinkRel.CATALOG)],
+            )
+        )
+
+    with pytest.raises(IntegrityError, match="uq_links_identity_href"):
+        await db_session.commit()
 
 
 async def test_a_changed_href_inserts_a_second_catalog(db_session: AsyncSession) -> None:
