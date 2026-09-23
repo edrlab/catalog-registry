@@ -485,11 +485,13 @@ def upgrade() -> None:
     op.create_index("ix_links_catalog_id", "links", ["catalog_id"])
     # Serves `fetch_catalog_by_identity_href`'s predicate, and enforces it: the
     # `catalog`/`shelf` href is the upsert identity, so a check-then-insert race that would
-    # otherwise commit the same catalog twice fails on the losing insert instead.
+    # otherwise commit the same catalog twice fails on the losing insert instead. On `href`
+    # alone rather than `(href, rel)` — the lookup spans both rels, so one URL is one
+    # catalog whichever of the two rels it is published under.
     op.create_index(
         "uq_links_identity_href",
         "links",
-        ["href", "rel"],
+        ["href"],
         unique=True,
         postgresql_where=sa.text("rel IN ('catalog', 'shelf')"),
     )

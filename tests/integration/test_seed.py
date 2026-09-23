@@ -199,7 +199,10 @@ async def test_the_document_identifier_is_not_the_one_that_is_stored(
     assert str(catalog.id) != "30a59158-28bc-4fc1-ad99-93325968d9c1"
 
 
-async def test_two_catalogs_cannot_share_an_identity_href(db_session: AsyncSession) -> None:
+@pytest.mark.parametrize("second_rel", [LinkRel.CATALOG, LinkRel.SHELF])
+async def test_two_catalogs_cannot_share_an_identity_href(
+    db_session: AsyncSession, second_rel: LinkRel
+) -> None:
     """uq_links_identity_href. The identity is enforced in the database, not only looked up.
 
     `import_catalog_document` reads before it writes, and a check-then-insert is not atomic:
@@ -207,15 +210,19 @@ async def test_two_catalogs_cannot_share_an_identity_href(db_session: AsyncSessi
     itself is impractical to stage in a test, so what is asserted here is the constraint that
     makes the losing insert fail. Inserting the rows directly bypasses the read that would
     otherwise turn the second one into an update.
+
+    Both rels, because the lookup spans both: a URL that is one catalog's `catalog` link and
+    another's `shelf` link would match two rows, and the import would update whichever came
+    back first. One URL is one catalog either way.
     """
-    for title in ("First Claimant", "Second Claimant"):
+    for title, rel in (("First Claimant", LinkRel.CATALOG), ("Second Claimant", second_rel)):
         db_session.add(
             Catalog(
                 title=title,
                 status=CatalogStatus.ACTIVE,
                 published_at=func.now(),
                 recommended=True,
-                links=[Link(href="https://contested.example/opds", rel=LinkRel.CATALOG)],
+                links=[Link(href="https://contested.example/opds", rel=rel)],
             )
         )
 
