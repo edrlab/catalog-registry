@@ -50,13 +50,6 @@ class Catalog(Base):
         CheckConstraint(
             "status <> 'active' OR published_at IS NOT NULL", name="published_when_active"
         ),
-        # Q1: the stable, externally-assigned match key across re-seeds. `id` below is
-        # gen_random_uuid()'d fresh per environment and cannot serve that role.
-        CheckConstraint(
-            r"identifier ~ '^urn:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-            r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'",
-            name="identifier_is_urn_uuid",
-        ),
         # The top-level feed's only query. A partial index is the right shape over ten rows
         # and stays right as the table grows.
         Index(
@@ -67,6 +60,8 @@ class Catalog(Base):
         Index("ix_catalogs_country_code", "country_code"),
     )
 
+    #: The catalog's only UUID. `metadata.identifier` in the OPDS output is rendered from it
+    #: (`urn:uuid:{id}`), so it is not stored twice. See `rendering/catalog_renderer.py`.
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
@@ -74,9 +69,6 @@ class Catalog(Base):
         _pg_enum(CatalogStatus, "catalog_status"), nullable=False, server_default="suggested"
     )
     recommended: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
-    #: Externally assigned (Hadrien, by hand, for the curated seed; auto-generated for `add`).
-    #: The upsert conflict target across re-seeds. See `identifier_is_urn_uuid` above.
-    identifier: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     color: Mapped[CatalogColor] = mapped_column(

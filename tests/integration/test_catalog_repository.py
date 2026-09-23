@@ -1,7 +1,6 @@
 """Repository behaviour, including the N+1 guard."""
 
 import datetime
-import uuid
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,7 +68,6 @@ async def test_the_feed_query_count_does_not_grow_with_the_number_of_catalogs(
         db_session.add(
             Catalog(
                 title=f"Bulk {index:02d}",
-                identifier=f"urn:uuid:{uuid.uuid4()}",
                 status=CatalogStatus.ACTIVE,
                 published_at=datetime.datetime.now(datetime.UTC),
                 recommended=True,

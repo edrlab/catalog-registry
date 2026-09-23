@@ -10,12 +10,12 @@ feed-level `links` and no `self` link on any catalog, so the published schema re
 record. `self` is synthesised at render time from the registry's own base URL, and the
 contract tests validate the output.
 
-**The upsert conflict target closes Q1: `metadata.identifier`.** `id` is generated fresh per
-environment, so it never conflicts. Matching on the `catalog`/`shelf` link href was the interim
-answer, but a href changes (Project Gutenberg moving from pre-prod to prod is the case that
-prompted this), which would silently duplicate the row on the next re-seed. `identifier` is
-externally assigned once and never changes, so it is required on every catalog document and is
-the sole match key — no href fallback.
+**A catalog is matched across re-seeds by its `catalog`/`shelf` link href.** `catalogs.id` is
+the registry's only UUID and is generated fresh per environment, so it never conflicts with
+anything in the source document; `metadata.identifier` is rendered *from* that id rather than
+stored, so the hand-assigned `urn:uuid:` values in `data/recommended.json` are read past and
+discarded here. The href is externally owned rather than stable, which is the known cost of
+this design — see `resolve_identity_href` below.
 """
 
 import asyncio
@@ -49,7 +49,7 @@ from registry.domain.enums import (
     PublicationType,
 )
 from registry.domain.language import normalise_language_tag
-from registry.domain.links import has_browsable_rel
+from registry.domain.links import IDENTITY_RELS, has_browsable_rel
 from registry.repositories.catalog_repository import CatalogRepository
 
 #: Presence in `data/recommended.json` is the recommended flag.
@@ -72,19 +72,23 @@ def link_rels(link: dict[str, Any]) -> list[LinkRel]:
     return [LinkRel(value) for value in written if value in set(LinkRel)]
 
 
-def resolve_identifier(document: dict[str, Any]) -> str:
-    """The externally-assigned `urn:uuid:...` this catalog is matched on across seed runs.
+# ponytail: href match - a catalog that changes its feed URL inserts a second row instead of
+# updating the first (Project Gutenberg's pre-prod to prod move is the case that bites). The
+# fix is a wipe and re-seed. Revisit if that stops being acceptable.
+def resolve_identity_href(document: dict[str, Any]) -> str:
+    """The externally owned URL this catalog is matched on across seed runs.
 
-    Schema validation already requires `metadata.identifier` on anything reaching this point;
-    this raises anyway for callers (tests included) that build a document by hand.
+    `metadata.identifier` is deliberately *not* it: the registry renders that field from
+    `catalogs.id`, so the value in the source document is not the one clients ever see.
     """
-    identifier = document["metadata"].get("identifier")
-    if not identifier:
-        raise ValidationError(
-            f"{document['metadata']['title']} has no metadata.identifier, "
-            "so it has no stable identity to upsert on"
-        )
-    return str(identifier)
+    for rel in IDENTITY_RELS:
+        for link in document["links"]:
+            if rel in link_rels(link):
+                return str(link["href"])
+    raise ValidationError(
+        f"{document['metadata']['title']} has neither a `catalog` nor a `shelf` link, "
+        "so it has no stable identity to upsert on"
+    )
 
 
 def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
@@ -98,7 +102,6 @@ def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
     return Catalog(
         status=CatalogStatus.ACTIVE,
         recommended=recommended,
-        identifier=resolve_identifier(document),
         title=metadata["title"],
         description=metadata.get("description"),
         color=CatalogColor(metadata.get("color", CatalogColor.GRAY.value)),
@@ -148,8 +151,8 @@ async def import_catalog_document(
     # Imported here, not at module level: only the write path needs it.
     from sqlalchemy import func  # noqa: PLC0415
 
-    identifier = resolve_identifier(document)
-    existing = await CatalogRepository(session).fetch_catalog_by_identifier(identifier)
+    identity_href = resolve_identity_href(document)
+    existing = await CatalogRepository(session).fetch_catalog_by_identity_href(identity_href)
     built = build_catalog(document, recommended=recommended)
 
     if existing is None:

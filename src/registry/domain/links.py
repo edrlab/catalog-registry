@@ -26,6 +26,12 @@ LINK_REL_PRIORITY = MappingProxyType(
 )
 
 
+#: The rels a catalog is recognised by across re-seeds: where to browse, or where the reader's
+#: own shelf is. Defined once here because `cli/seed.py` resolves it from the document and
+#: `repositories/catalog_repository.py` matches on it in SQL, and the two must not drift.
+IDENTITY_RELS = (LinkRel.CATALOG, LinkRel.SHELF)
+
+
 def order_links[T](links: Sequence[T], *, rel_of: Callable[[T], LinkRel]) -> tuple[T, ...]:
     """Stable sort on `LINK_REL_PRIORITY`. Two links sharing a rel keep their input order."""
     return tuple(sorted(links, key=lambda link: LINK_REL_PRIORITY[rel_of(link)]))
@@ -41,4 +47,4 @@ def has_browsable_rel(rels: Sequence[LinkRel]) -> bool:
     `self` is deliberately not checked: it points at this registry, so it is synthesised at
     render time rather than supplied by whoever authored the catalog.
     """
-    return bool(set(rels) & {LinkRel.CATALOG, LinkRel.SHELF})
+    return bool(set(rels) & set(IDENTITY_RELS))
