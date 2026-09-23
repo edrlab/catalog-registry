@@ -9,7 +9,7 @@ from registry.db.models.catalog import Catalog
 from registry.domain.enums import CatalogColor, CatalogStatus, CoverageScope
 from registry.rendering.feed_renderer import render_feed
 from registry.repositories.catalog_repository import CatalogRepository
-from tests.conftest import SEED_CATALOG_COUNT, QueryCounter
+from tests.conftest import SEED_CATALOG_COUNT, SEED_TITLES_IN_FILE_ORDER, QueryCounter
 
 pytestmark = pytest.mark.integration
 
@@ -22,16 +22,9 @@ async def test_fetch_recommended_catalogs_returns_the_seeded_set(
 ) -> None:
     catalogs = await CatalogRepository(db_session).fetch_recommended_catalogs()
 
-    assert [catalog.title for catalog in catalogs] == [
-        "Bibliothèque numérique Romande",
-        "Ebooks libres et gratuits",
-        "La Bibliothèque russe et slave",
-        "Liber Liber",
-        "Librivox",
-        "Project Gutenberg",
-        "Standard Ebooks",
-        "TV5 Monde",
-    ]
+    # File order, not alphabetical: the seed staggers `created_at` by position, and this
+    # query orders on it. Title is still the last `ORDER BY` term, for determinism only.
+    assert [catalog.title for catalog in catalogs] == SEED_TITLES_IN_FILE_ORDER
 
 
 async def test_a_suggested_catalog_is_excluded_even_when_recommended(

@@ -22,6 +22,7 @@ import asyncio
 import json
 import sys
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -145,18 +146,32 @@ def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
 
 
 async def import_catalog_document(
-    session: AsyncSession, document: dict[str, Any], *, recommended: bool
+    session: AsyncSession, document: dict[str, Any], *, recommended: bool, position: int = 0
 ) -> tuple[Catalog, bool]:
-    """Insert, or replace the existing catalog's contents in place. Returns (catalog, created)."""
+    """Insert, or replace the existing catalog's contents in place. Returns (catalog, created).
+
+    *position* is the catalog's index in the document it arrived in, and it decides where the
+    catalog lands in the feed. The feed orders by `created_at` descending, so this writes one
+    second earlier per position: the first catalog in the file is the newest row and leads its
+    language bucket. Without it every row in a run shares a single `now()` and the order falls
+    through to the alphabetical tiebreaker, which is not an order anyone chose.
+
+    Re-seeding rewrites it, so editing the file is how the order is changed.
+    """
     # Imported here, not at module level: only the write path needs it.
     from sqlalchemy import func  # noqa: PLC0415
 
+    # ponytail: created_at doubles as the sort key, so a row's position is spelled as a time
+    # it was not created at. An explicit ordering column is the upgrade if the feed ever
+    # needs an order the seed file cannot express.
+    ordered_at = datetime.now(UTC) - timedelta(seconds=position)
     identity_href = resolve_identity_href(document)
     existing = await CatalogRepository(session).fetch_catalog_by_identity_href(identity_href)
     built = build_catalog(document, recommended=recommended)
 
     if existing is None:
         built.published_at = func.now()
+        built.created_at = ordered_at
         session.add(built)
         return built, True
 
@@ -183,6 +198,7 @@ async def import_catalog_document(
     if existing.published_at is None:
         existing.published_at = func.now()
     existing.status = built.status
+    existing.created_at = ordered_at
     existing.kinds = built.kinds
     existing.publication_types = built.publication_types
     existing.languages = built.languages
@@ -210,8 +226,10 @@ async def import_feed_document(
         raise ValidationError(f"{source} is not valid seed input. {detail}")
 
     created = updated = 0
-    for document in feed["catalogs"]:
-        _, was_created = await import_catalog_document(session, document, recommended=recommended)
+    for position, document in enumerate(feed["catalogs"]):
+        _, was_created = await import_catalog_document(
+            session, document, recommended=recommended, position=position
+        )
         created += was_created
         updated += not was_created
 
