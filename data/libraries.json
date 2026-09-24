@@ -1,0 +1,176 @@
+{
+  "metadata": {
+    "title": "Libraries"
+  },
+  "catalogs": [
+    {
+      "metadata": {
+        "title": "Bibliothèque numérique de Paris",
+        "kind": ["public"],
+        "color": "red",
+        "supportedLanguages": ["fr"],
+        "publicationTypes": ["ebook", "comic", "audiobook"],
+        "country": "fr",
+        "subdivisions": ["fr-idf"],
+        "coverage": "subdivisions"
+      },
+      "links": [
+        {
+          "href": "https://bibliotheques.paris.fr/numerique/",
+          "type": "text/html",
+          "rel": "catalog"
+        },
+        {
+          "href": "https://www.paris.fr/apple-touch-icon.png",
+          "type": "image/png",
+          "rel": "icon"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Lirtuel",
+        "kind": ["public"],
+        "color": "red",
+        "supportedLanguages": ["fr", "en"],
+        "publicationTypes": ["ebook", "comic"],
+        "country": "be",
+        "subdivisions": ["be-wal", "be-bru"],
+        "coverage": "subdivisions"
+      },
+      "links": [
+        {
+          "href": "https://www.lirtuel.be/v1/home.opds2",
+          "type": "application/opds+json",
+          "rel": "catalog"
+        },
+        {
+          "href": "https://www.lirtuel.be/v1/my_profile/activity.opds2",
+          "type": "application/opds+json",
+          "rel": "shelf"
+        },
+        {
+          "href": "https://www.lirtuel.be/v1/sign_in.opds2",
+          "type": "application/opds-authentication+json",
+          "rel": "authenticate"
+        },
+        {
+          "href": "https://www.lirtuel.be/v1/my_profile.opds2",
+          "type": "application/opds-profile+json",
+          "rel": "profile"
+        },
+        {
+          "href": "https://www.lirtuel.be/v1/resources.opds2{?query}",
+          "type": "application/opds+json",
+          "rel": "search",
+          "templated": true
+        },
+        {
+          "href": "https://www.federation-wallonie-bruxelles.be/_assets/333807a55ae9d14a595c4b1c1783d409/images/favicon/apple-touch-icon-120x120.png",
+          "type": "image/png",
+          "rel": "icon"
+        },
+        {
+          "href": "https://www.lirtuel.be",
+          "type": "text/html",
+          "rel": "alternate"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "De Openbare bibliotheek Vlaanderen en Brussel",
+        "kind": ["public"],
+        "color": "yellow",
+        "supportedLanguages": ["nl", "en", "fr"],
+        "publicationTypes": ["ebook", "comic", "audiobook"],
+        "country": "be",
+        "subdivisions": ["be-vlg", "be-bru"],
+        "coverage": "subdivisions"
+      },
+      "links": [
+        {
+          "href": "https://debib.cantookstation.eu/v1/home.opds2",
+          "type": "application/opds+json",
+          "rel": "catalog"
+        },
+        {
+          "href": "https://debib.cantookstation.eu/v1/my_profile/activity.opds2",
+          "type": "application/opds+json",
+          "rel": "shelf"
+        },
+        {
+          "href": "https://debib.cantookstation.eu/v1/sign_in.opds2",
+          "type": "application/opds-authentication+json",
+          "rel": "authenticate"
+        },
+        {
+          "href": "https://debib.cantookstation.eu/v1/my_profile.opds2",
+          "type": "application/opds-profile+json",
+          "rel": "profile"
+        },
+        {
+          "href": "https://debib.cantookstation.eu/v1/resources.opds2{?query}",
+          "type": "application/opds+json",
+          "rel": "search",
+          "templated": true
+        },
+        {
+          "href": "https://ui.vlaanderen.be/3.latest/icons/app-icon/touch-icon-ipad-retina-precomposed.png",
+          "type": "image/png",
+          "rel": "icon"
+        },
+        {
+          "href": "https://debib.cantookstation.eu",
+          "type": "text/html",
+          "rel": "alternate"
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "title": "Médiathèque Valais",
+        "kind": ["public"],
+        "color": "red",
+        "supportedLanguages": ["fr"],
+        "publicationTypes": ["ebook", "comic", "audiobook"],
+        "country": "ch",
+        "subdivisions": ["ch-vs"],
+        "coverage": "subdivisions"
+      },
+      "links": [
+        {
+          "href": "https://mediatheque-valais.cantookstation.eu/v1/home.opds2",
+          "type": "application/opds+json",
+          "rel": "catalog"
+        },
+        {
+          "href": "https://mediatheque-valais.cantookstation.eu/v1/my_profile/activity.opds2",
+          "type": "application/opds+json",
+          "rel": "shelf"
+        },
+        {
+          "href": "https://mediatheque-valais.cantookstation.eu/v1/sign_in.opds2",
+          "type": "application/opds-authentication+json",
+          "rel": "authenticate"
+        },
+        {
+          "href": "https://mediatheque-valais.cantookstation.eu/v1/my_profile.opds2",
+          "type": "application/opds-profile+json",
+          "rel": "profile"
+        },
+        {
+          "href": "https://mediatheque-valais.cantookstation.eu/v1/resources.opds2{?query}",
+          "type": "application/opds+json",
+          "rel": "search",
+          "templated": true
+        },
+        {
+          "href": "https://mediatheque-valais.cantookstation.eu",
+          "type": "text/html",
+          "rel": "alternate"
+        }
+      ]
+    }
+  ]
+}
