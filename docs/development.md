@@ -46,7 +46,7 @@ make up
 
 1. builds the image and starts Postgres and the API under Docker Compose
 2. checks the database container is actually reachable on the compose network
-3. runs `alembic upgrade head`. Eight tables, one migration, 249 countries
+3. runs `alembic upgrade head`. Eight tables, two migrations, 249 countries
 
 It does **not** seed. `make up` is run many times a day, and a command you run that often
 must not keep reinstating rows you deleted on purpose. A fresh database serves an empty feed:
@@ -247,6 +247,12 @@ document without the field — `data/libraries.json` has none — gets
 `uuid5(NAMESPACE_URL, identity href)`. Either way the id is reproducible: it is the same in
 every environment and it survives a wipe and re-seed, which is what makes `/catalogs/{id}`
 usable for a catalog that no feed lists.
+
+**Rows written before this rule keep the id they were given.** An upsert does not rewrite a
+primary key, so a database seeded earlier still holds random ids, and adding an identifier to a
+catalog already stored does not move it onto that id. Only a wipe and re-seed makes the two
+agree. Nothing in the deploy does that — merging to `main` builds and deploys the image and runs
+no migration, so a schema or data reset is always a deliberate manual step.
 
 **Two data sets, and only one of them is recommended:**
 

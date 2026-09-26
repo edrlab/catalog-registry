@@ -7,19 +7,30 @@ authoring time. The service synthesises those at render time, and the contract t
 the output, which is where it matters.
 
 The relaxed variant is **derived, not hand-written**, so it cannot drift from the published
-schema when Hadrien edits it. Four relaxations, and nothing else:
+schema when Hadrien edits it. Five relaxations, and nothing else:
 
 1. feed-level `links` is not required
 2. the feed's "must contain a `self` link" constraint is dropped
 3. the same `self` constraint is dropped from every catalog
 4. `metadata.identifier` is not required
+5. `metadata.country` and `metadata.subdivisions` accept lowercase as well as uppercase
 
-The fourth has the same justification as the other three: the field is not authored, it is
-answered by the registry. `catalogs.id` is derived from the identity href when the document
-omits an identifier, and rendered back out as `urn:uuid:{id}`, so requiring it on input would
-demand a value the author has no way to compute. Supplying one is still allowed, and still
-wins. The published `catalog.schema.json` keeps it required, because every *rendered* catalog
-does have one.
+The fourth: the field is not authored, it is answered by the registry. `catalogs.id` is derived
+from the identity href when the document omits an identifier, and rendered back out as
+`urn:uuid:{id}`, so requiring it on input would demand a value the author has no way to compute.
+Supplying one is still allowed, and still wins.
+
+The fifth: ISO 3166-1 and 3166-2 declare their codes case-insensitive and `data/libraries.json`
+writes `be`/`be-wal`, so rejecting them on *input* rejects valid data. `cli/seed.py` uppercases
+both on ingest and `ck_catalogs_country_uppercase` /
+`ck_catalog_subdivisions_subdivision_code_uppercase` enforce the stored form, which is the
+arrangement R2 already describes for `language_tag`.
+
+Both relaxations are **input-only, and belong here rather than in `schema/catalog.schema.json`**.
+That file is upstream's contract (`docs/schemas.md`: "Hadrien owns. Never edit here"), it is what
+validates *rendered output*, and every rendered catalog does carry an identifier and does carry
+uppercase codes. Relaxing it there would delete a working output tripwire and be undone by the
+next `git merge upstream/main`.
 
 Everything else the published schemas assert. Enums, the BCP-47 pattern, `minItems` on
 `kind`, `additionalProperties: false` on `metadata`, still applies.
@@ -40,13 +51,28 @@ BANNER = (
 )
 
 
+def accept_either_case(pattern: str) -> str:
+    """Widen every `A-Z` character class in *pattern* to accept lowercase too.
+
+    A transform rather than a literal, so it still applies if Hadrien rewrites the pattern —
+    the whole point of generating this file instead of keeping a second copy by hand.
+    """
+    return pattern.replace("A-Z", "A-Za-z")
+
+
 def relax_catalog(catalog_schema: dict[str, Any]) -> dict[str, Any]:
-    """Drop the `self` and `metadata.identifier` requirements from a catalog document."""
+    """Drop the `self` and `metadata.identifier` requirements, and the uppercase-only patterns."""
     relaxed = json.loads(json.dumps(catalog_schema))
     relaxed.pop("$id", None)
     relaxed["properties"]["links"].pop("contains", None)
+
     metadata = relaxed["properties"]["metadata"]
     metadata["required"] = [name for name in metadata["required"] if name != "identifier"]
+
+    properties = metadata["properties"]
+    properties["country"]["pattern"] = accept_either_case(properties["country"]["pattern"])
+    subdivision = properties["subdivisions"]["items"]
+    subdivision["pattern"] = accept_either_case(subdivision["pattern"])
     return relaxed
 
 

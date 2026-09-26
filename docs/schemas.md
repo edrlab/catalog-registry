@@ -190,7 +190,9 @@ The rule is explicit: derived at build time, not hand-written, **so it cannot dr
 Hadrien edits the originals. A hand-maintained second copy of a schema is a copy that silently
 disagrees with the first six months later.
 
-The generator deep-copies `feed.schema.json`, removes exactly those three constraints, and
+The generator deep-copies `feed.schema.json`, removes exactly those three constraints, drops
+the `metadata.identifier` requirement, widens the `country`/`subdivisions` patterns to accept
+lowercase, and
 inlines a relaxed copy of `catalog.schema.json` in place of the `$ref`. Inlined rather than
 referenced because the relaxation applies to *this* copy only; the published
 `catalog.schema.json` must keep requiring `self`.

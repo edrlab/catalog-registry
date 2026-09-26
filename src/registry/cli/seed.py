@@ -104,8 +104,11 @@ def resolve_identity_href(document: dict[str, Any]) -> str:
 def resolve_catalog_id(document: dict[str, Any], identity_href: str) -> uuid.UUID:
     """The UUID this catalog is stored under, derived rather than generated.
 
-    A supplied `metadata.identifier` wins: it is the author's own name for the catalog, and
-    honouring it means editing the file can address an existing row. When the field is absent
+    A supplied `metadata.identifier` wins: it is the author's own name for the catalog, so the
+    file can name the id a client will fetch it at. Note the limit — this decides the id a row is
+    *inserted* with. Adding an identifier to a catalog already stored does not move it onto that
+    id, because an upsert does not rewrite a primary key
+    (`test_an_identifier_added_later_does_not_move_an_existing_row`). When the field is absent
     the id is `uuid5(NAMESPACE_URL, identity_href)` — a name-based UUID (RFC 9562 §5.5), so the
     same catalog lands on the same UUID in local Docker, in CI and on Cloud Run, and keeps it
     across a wipe and re-seed.
@@ -116,7 +119,17 @@ def resolve_catalog_id(document: dict[str, Any], identity_href: str) -> uuid.UUI
     """
     identifier = document["metadata"].get("identifier")
     if identifier:
-        return uuid.UUID(identifier.removeprefix("urn:uuid:"))
+        # RFC 9562 §4: the `urn:uuid:` prefix is case-insensitive, so `URN:UUID:` is the same
+        # URN. The published schema's pattern only admits the lowercase form, but this function
+        # is also reachable from code that has not been through it.
+        trimmed = identifier[9:] if identifier[:9].lower() == "urn:uuid:" else identifier
+        try:
+            return uuid.UUID(trimmed)
+        except ValueError as error:
+            raise ValidationError(
+                f"{document['metadata']['title']} has an identifier that is not a UUID: "
+                f"{identifier!r}"
+            ) from error
     # ponytail: derived from the href, so it inherits the href's instability - a catalog that
     # moves its feed URL gets a new id as well as a new row. Supplying `metadata.identifier`
     # is the escape hatch, and is what to reach for if that becomes a problem.
@@ -273,6 +286,31 @@ async def import_catalog_document(
     return existing, False
 
 
+def assert_identities_are_unique(feed: dict[str, Any], *, source: str) -> None:
+    """Refuse a document where two catalogs resolve to the same id. Raises `ValidationError`.
+
+    Two entries sharing a `metadata.identifier` used to be two rows, because ids were random.
+    Now the second one's id lookup finds the row the first one just inserted — pending inserts
+    are visible to the next query through autoflush — and *overwrites it in place*: one row,
+    the first catalog's title and links gone, `created 1, updated 1` printed, no error. A typo
+    in a hand-edited file silently deletes a catalog.
+
+    JSON Schema cannot express "unique within this document", so it is checked here, before
+    anything is written. Hrefs are not checked: `uq_links_identity_href` already rejects a
+    duplicate in the database, loudly.
+    """
+    seen: dict[uuid.UUID, str] = {}
+    for document in feed["catalogs"]:
+        title = document["metadata"]["title"]
+        catalog_id = resolve_catalog_id(document, resolve_identity_href(document))
+        if (owner := seen.get(catalog_id)) is not None:
+            raise ValidationError(
+                f"{source} gives {owner!r} and {title!r} the same identity ({catalog_id}). "
+                "Two catalogs cannot share a `metadata.identifier`."
+            )
+        seen[catalog_id] = title
+
+
 async def import_feed_document(
     session: AsyncSession,
     feed: dict[str, Any],
@@ -290,6 +328,8 @@ async def import_feed_document(
     if errors:
         detail = "; ".join(f"{list(error.absolute_path)}: {error.message}" for error in errors)
         raise ValidationError(f"{source} is not valid seed input. {detail}")
+
+    assert_identities_are_unique(feed, source=source)
 
     # One clock reading for the run: each catalog is written a millisecond earlier than the
     # one before it, so position in the file survives as `created_at` order. Re-read per
@@ -327,12 +367,13 @@ async def seed_catalogs(
     to infer here. Until then, unrecommending is a manual step. There is a test asserting the
     current behaviour so the gap is executable rather than a comment.
     """
-    return await import_feed_document(
-        session,
-        json.loads(seed_file.read_text(encoding="utf-8")),
-        source=str(seed_file),
-        recommended=recommended,
-    )
+    try:
+        feed = json.loads(seed_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        # Otherwise a hand-edit with a trailing comma is a traceback rather than a message.
+        raise ValidationError(f"{seed_file} is not valid JSON. {error}") from error
+
+    return await import_feed_document(session, feed, source=str(seed_file), recommended=recommended)
 
 
 async def seed_from_file(
@@ -381,10 +422,23 @@ def main(argv: Sequence[str] = ()) -> int:
     `--no-recommended`, which is the only difference between it and `data/recommended.json`
     as far as this command is concerned. Both go through `seed_catalogs`.
     """
-    arguments = build_seed_parser().parse_args(argv)
+    parser = build_seed_parser()
+    arguments = parser.parse_args(argv)
+    # `--no-recommended` against the default file would flip every catalog in
+    # `data/recommended.json` out of the top-level feed in one command, which contradicts
+    # `seed_catalogs`' promise that unrecommending is a deliberate manual step. The flag
+    # describes a *file*, so it has to name one.
+    if not arguments.recommended and arguments.file is None:
+        parser.error("--no-recommended needs a file; it must not be used on REGISTRY_SEED_FILE")
 
     settings = Settings()
     seed_file = arguments.file or settings.seed_file
+    # Checked here rather than left to `read_text`: `FileNotFoundError` is an `OSError`, and
+    # `cli/__main__.py` reports every `OSError` as an unreachable database, so a typo in the
+    # path prints "Is it running? make up" and never mentions the file.
+    if not seed_file.is_file():
+        raise ValidationError(f"{seed_file} is not a file. Nothing to seed.")
+
     created, updated = asyncio.run(
         seed_from_file(seed_file, settings, recommended=arguments.recommended)
     )

@@ -34,24 +34,18 @@ SUBDIVISIONS = [
 
 
 def upgrade() -> None:
-    op.bulk_insert(
-        sa.table(
-            "subdivisions",
-            sa.column("code", sa.String(6)),
-            sa.column("country_alpha2", sa.CHAR(2)),
-            sa.column("parent_code", sa.String(6)),
-            sa.column("subdivision_type", sa.String()),
-        ),
-        [
-            {
-                "code": code,
-                "country_alpha2": country,
-                "parent_code": parent,
-                "subdivision_type": kind,
-            }
-            for code, country, parent, kind in SUBDIVISIONS
-        ],
-    )
+    # `ON CONFLICT DO NOTHING` rather than `bulk_insert`: an operator who added one of these by
+    # hand to unblock a seed would otherwise hit `pk_subdivisions` here and be unable to migrate
+    # at all. Reference data is worth making idempotent; it costs one clause.
+    # ponytail: one statement per row. Two rows; `executemany` through `op.execute` needs a
+    # different call shape and would not read any better.
+    for code, country, parent, kind in SUBDIVISIONS:
+        op.execute(
+            sa.text(
+                "INSERT INTO subdivisions (code, country_alpha2, parent_code, subdivision_type) "
+                "VALUES (:code, :country, :parent, :kind) ON CONFLICT (code) DO NOTHING"
+            ).bindparams(code=code, country=country, parent=parent, kind=kind)
+        )
 
 
 def downgrade() -> None:

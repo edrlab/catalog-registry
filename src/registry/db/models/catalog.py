@@ -62,6 +62,11 @@ class Catalog(Base):
 
     #: The catalog's only UUID. `metadata.identifier` in the OPDS output is rendered from it
     #: (`urn:uuid:{id}`), so it is not stored twice. See `rendering/catalog_renderer.py`.
+    #:
+    #: **The import supplies this value; it does not let the default fire.** `gen_random_uuid()`
+    #: stays because the merged migration cannot be edited, but a random id is the thing ADR-038
+    #: exists to prevent — it is unaddressable for any catalog no feed lists. Any new write path
+    #: goes through `cli/seed.py:resolve_catalog_id`.
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )

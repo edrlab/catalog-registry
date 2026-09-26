@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from registry.cli.seed import (
     SEED_INPUT_SCHEMA,
     import_catalog_document,
+    import_feed_document,
     resolve_catalog_id,
     resolve_identity_href,
     seed_catalogs,
@@ -153,10 +154,11 @@ async def test_re_running_after_the_file_grows_adds_only_the_new_rows(
 
 
 def test_identity_is_the_browsable_href_not_the_document_identifier() -> None:
-    """The `catalog` link, not `self` and not `metadata.identifier`.
+    """The `catalog` link, not `self`.
 
-    `metadata.identifier` is present and ignored: the registry renders that field from
-    `catalogs.id`, so the value in the source document never reaches the database.
+    This is the *href* resolution only. `metadata.identifier` is present here and plays no part
+    in it — but it is not ignored by the import: `resolve_catalog_id` derives `catalogs.id` from
+    it, and `resolve_existing_catalog` matches on that id first. See ADR-038.
     """
     document = {
         "metadata": {
@@ -403,12 +405,12 @@ async def test_two_catalogs_cannot_share_an_identity_href(
 
 
 async def test_a_changed_href_inserts_a_second_catalog(db_session: AsyncSession) -> None:
-    """The accepted cost of href matching, asserted rather than described.
+    """The accepted cost of href matching, for a document with **no** identifier to match on.
 
-    The scenario is Project Gutenberg moving pre-prod to prod. Identity is the browsable href,
-    so a catalog that changes its feed URL is a new row, not an update — the operator's fix is
-    to wipe and re-seed. If this ever stops being acceptable, identity has to move back onto
-    something the source document owns.
+    This is `data/libraries.json`'s position, not `data/recommended.json`'s: with no
+    `metadata.identifier`, identity is the browsable href, so changing the feed URL is a new row
+    rather than an update. The fix per catalog is to give it an identifier, which
+    `test_an_identified_catalog_survives_an_href_change` asserts; failing that, wipe and re-seed.
     """
     original = {
         "metadata": {"title": "Moving Library", "kind": ["open"]},
@@ -489,6 +491,144 @@ async def test_an_identifier_added_later_does_not_move_an_existing_row(
     assert created is False
     assert second.id == first.id == uuid.uuid5(uuid.NAMESPACE_URL, href)
     assert await count(db_session, Catalog) == 1
+
+
+async def test_two_catalogs_sharing_an_identifier_are_refused(db_session: AsyncSession) -> None:
+    """Without this the second one silently overwrites the first, and the counts look normal.
+
+    Ids used to be random, so two entries were two rows. Once the id is derived from
+    `metadata.identifier`, the second entry's id lookup finds the row the first just inserted —
+    autoflush makes a pending insert visible — and replaces its title and links in place. One
+    row, `1 created, 1 updated`, no error, one catalog gone. JSON Schema cannot express
+    "unique within this document", so `assert_identities_are_unique` checks it before any write.
+    """
+    shared = "urn:uuid:11111111-2222-4333-8444-555555555555"
+    feed = {
+        "metadata": {"title": "Duplicated"},
+        "catalogs": [
+            {
+                "metadata": {"title": "First", "identifier": shared, "kind": ["open"]},
+                "links": [{"href": "https://a.example/opds", "rel": "catalog"}],
+            },
+            {
+                "metadata": {"title": "Second", "identifier": shared, "kind": ["open"]},
+                "links": [{"href": "https://b.example/opds", "rel": "catalog"}],
+            },
+        ],
+    }
+
+    with pytest.raises(ValidationError, match="'First' and 'Second' the same identity"):
+        await import_feed_document(db_session, feed, source="test")
+
+    assert await count(db_session, Catalog) == 0
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        pytest.param("urn:uuid:not-a-uuid", id="not-a-uuid"),
+        pytest.param("urn:uuid:", id="prefix-only"),
+    ],
+)
+def test_a_malformed_identifier_is_a_validation_error(identifier: str) -> None:
+    """`uuid.UUID` raises `ValueError`, which is not a `RegistryError`, so it escaped the CLI as
+    a traceback naming no catalog. The schema's pattern blocks both today, but
+    `resolve_catalog_id` is a public entry point and is called directly from the tests."""
+    document = {"metadata": {"title": "Bad Identifier", "identifier": identifier}}
+
+    with pytest.raises(ValidationError, match="Bad Identifier"):
+        resolve_catalog_id(document, "https://library.example/home.opds2")
+
+
+def test_an_uppercase_urn_prefix_is_the_same_identifier() -> None:
+    """RFC 9562 §4: the `urn:uuid:` prefix is case-insensitive."""
+    value = "30a59158-28bc-4fc1-ad99-93325968d9c1"
+    lower = {"metadata": {"title": "x", "identifier": f"urn:uuid:{value}"}}
+    upper = {"metadata": {"title": "x", "identifier": f"URN:UUID:{value.upper()}"}}
+    href = "https://library.example/home.opds2"
+
+    assert resolve_catalog_id(lower, href) == resolve_catalog_id(upper, href)
+
+
+def test_the_derived_id_is_pinned_to_a_known_value() -> None:
+    """A golden value, because every other test restates the formula.
+
+    Changing the namespace, or normalising the href, would keep those green while moving every
+    id a client has written down — the one property the derivation exists to provide.
+    """
+    document = {"metadata": {"title": "Lirtuel"}}
+
+    assert resolve_catalog_id(document, "https://www.lirtuel.be/v1/home.opds2") == uuid.UUID(
+        "6fb7a1fb-087f-54ef-95fb-9ffe0c87c012"
+    )
+
+
+async def test_malformed_json_is_a_readable_message(
+    db_session: AsyncSession, tmp_path: Path
+) -> None:
+    broken = tmp_path / "broken.json"
+    broken.write_text('{"metadata": {"title": "x"},}', encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="is not valid JSON"):
+        await seed_catalogs(db_session, broken)
+
+
+async def test_a_libraries_shaped_document_imports_through_the_validating_path(
+    db_session: AsyncSession, tmp_path: Path
+) -> None:
+    """Everything `data/libraries.json` relies on, in one test through `seed_catalogs`.
+
+    That file is not committed here (it arrives with edrlab/catalog-registry#13) and
+    `scripts/validate_fixtures.py` only checks `data/recommended.json`, so nothing else in CI
+    exercises: no `metadata.identifier`, lowercase `country`/`subdivisions`, the `FR-IDF` and
+    `CH-VS` rows added by `b41f7c9ade52`, and `recommended=False`.
+    """
+    href = "https://bibliotheques.paris.fr/numerique/"
+    seed_file = tmp_path / "libraries.json"
+    seed_file.write_text(
+        json.dumps(
+            {
+                "metadata": {"title": "Libraries"},
+                "catalogs": [
+                    {
+                        "metadata": {
+                            "title": "Bibliothèque numérique de Paris",
+                            "kind": ["public"],
+                            "country": "fr",
+                            "subdivisions": ["fr-idf"],
+                            "coverage": "subdivisions",
+                        },
+                        "links": [{"href": href, "type": "text/html", "rel": "catalog"}],
+                    },
+                    {
+                        "metadata": {
+                            "title": "Médiathèque Valais",
+                            "kind": ["public"],
+                            "country": "ch",
+                            "subdivisions": ["ch-vs"],
+                        },
+                        "links": [
+                            {"href": "https://library.example/valais.opds2", "rel": "catalog"}
+                        ],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    created, updated = await seed_catalogs(db_session, seed_file, recommended=False)
+    await db_session.commit()
+
+    assert (created, updated) == (2, 0)
+    paris = await CatalogRepository(db_session).fetch_catalog_by_identity_href(href)
+    assert paris is not None
+    assert paris.id == uuid.uuid5(uuid.NAMESPACE_URL, href)
+    assert paris.country_code == "FR"
+    assert [row.subdivision_code for row in paris.subdivisions] == ["FR-IDF"]
+    assert paris.recommended is False
+    assert paris.status is CatalogStatus.ACTIVE
+    assert await CatalogRepository(db_session).fetch_recommended_catalogs() == []
 
 
 async def test_a_catalog_removed_from_the_file_stays_recommended(
