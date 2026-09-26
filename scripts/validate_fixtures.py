@@ -12,8 +12,13 @@ from registry.core.schema_validation import build_schema_validator, load_json_do
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-#: The seed input is validated against the relaxed schema, never the published one.
-SEED_INPUT = (Path("data") / "recommended.json", "generated/seed-input.schema.json")
+#: Seed inputs are validated against the relaxed schema, never the published one. A file that is
+#: not present is skipped, not a failure: `data/libraries.json` arrives with
+#: edrlab/catalog-registry#13, and this list is what picks it up when it does.
+SEED_INPUTS = [
+    (Path("data") / "recommended.json", "generated/seed-input.schema.json"),
+    (Path("data") / "libraries.json", "generated/seed-input.schema.json"),
+]
 
 #: Fixture glob → the schema that governs it.
 FIXTURE_SCHEMAS = {
@@ -28,8 +33,10 @@ def main(argv: list[str]) -> int:
     failures = 0
     checked = 0
 
-    seed_path, seed_schema = SEED_INPUT
-    if (REPO_ROOT / seed_path).exists():
+    for seed_path, seed_schema in SEED_INPUTS:
+        if not (REPO_ROOT / seed_path).exists():
+            print(f"skip {seed_path}, not in this checkout")
+            continue
         checked += 1
         errors = sorted(
             build_schema_validator(seed_schema).iter_errors(
