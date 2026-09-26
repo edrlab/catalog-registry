@@ -428,6 +428,69 @@ async def test_a_changed_href_inserts_a_second_catalog(db_session: AsyncSession)
     assert await count(db_session, Catalog) == 2
 
 
+async def test_an_identified_catalog_survives_an_href_change(db_session: AsyncSession) -> None:
+    """The Project Gutenberg pre-prod to prod move, which `metadata.identifier` exists for.
+
+    Regression test for a real defect: deriving `catalogs.id` from the identifier while matching
+    only on the href meant a moved catalog missed the lookup, took the insert path, and violated
+    `pk_catalogs` — aborting the whole seed transaction, so every other catalog in the file went
+    un-updated too. `resolve_existing_catalog` matches on the id first.
+    """
+    identifier = "urn:uuid:7dadebbe-5276-42f4-aa7f-4c8631c965e3"
+    original = {
+        "metadata": {"title": "Moving Library", "identifier": identifier, "kind": ["open"]},
+        "links": [{"href": "https://old.example/opds", "rel": "catalog"}],
+    }
+    first, _ = await import_catalog_document(db_session, original, recommended=True)
+    await db_session.commit()
+
+    moved = {
+        "metadata": {"title": "Moving Library", "identifier": identifier, "kind": ["open"]},
+        "links": [{"href": "https://new.example/opds", "rel": "catalog"}],
+    }
+    second, created = await import_catalog_document(db_session, moved, recommended=True)
+    await db_session.commit()
+
+    assert created is False
+    assert second.id == first.id
+    assert await count(db_session, Catalog) == 1
+    assert [link.href for link in second.links] == ["https://new.example/opds"]
+
+
+async def test_an_identifier_added_later_does_not_move_an_existing_row(
+    db_session: AsyncSession,
+) -> None:
+    """The fallback the href lookup still exists for.
+
+    A catalog first seeded without an identifier holds a derived id. Giving it an explicit
+    identifier afterwards must not insert a second row: the id lookup misses, the href lookup
+    finds it, and it keeps the id it has, because an upsert does not rewrite a primary key. The
+    documented way to make the two agree is a wipe and re-seed.
+    """
+    href = "https://library.example/home.opds2"
+    before = {
+        "metadata": {"title": "Late Identifier", "kind": ["open"]},
+        "links": [{"href": href, "rel": "catalog"}],
+    }
+    first, _ = await import_catalog_document(db_session, before, recommended=True)
+    await db_session.commit()
+
+    after = {
+        "metadata": {
+            "title": "Late Identifier",
+            "identifier": "urn:uuid:c0ffee00-0000-4000-8000-000000000001",
+            "kind": ["open"],
+        },
+        "links": [{"href": href, "rel": "catalog"}],
+    }
+    second, created = await import_catalog_document(db_session, after, recommended=True)
+    await db_session.commit()
+
+    assert created is False
+    assert second.id == first.id == uuid.uuid5(uuid.NAMESPACE_URL, href)
+    assert await count(db_session, Catalog) == 1
+
+
 async def test_a_catalog_removed_from_the_file_stays_recommended(
     db_session: AsyncSession, tmp_path: Path
 ) -> None:

@@ -11,10 +11,11 @@ feed-level `links` and no `self` link on any catalog, so the published schema re
 record. `self` is synthesised at render time from the registry's own base URL, and the
 contract tests validate the output.
 
-**A catalog is matched across re-seeds by its `catalog`/`shelf` link href.** `catalogs.id` is
-the registry's only UUID; `metadata.identifier` is rendered *from* that id rather than stored
-beside it. The href is externally owned rather than stable, which is the known cost of this
-design — see `resolve_identity_href` below.
+**A catalog is matched across re-seeds by its id when the document names one, and by its
+`catalog`/`shelf` link href otherwise** — see `resolve_existing_catalog`. `catalogs.id` is the
+registry's only UUID; `metadata.identifier` is rendered *from* that id rather than stored beside
+it. The href is externally owned rather than stable, so a document relying on it carries that
+cost; one carrying an identifier does not.
 
 The id itself is **derived, not invented** — see `resolve_catalog_id`. A document that
 supplies `metadata.identifier` keeps that UUID; one that omits it gets a UUID computed from
@@ -80,14 +81,15 @@ def link_rels(link: dict[str, Any]) -> list[LinkRel]:
     return [LinkRel(value) for value in written if value in set(LinkRel)]
 
 
-# ponytail: href match - a catalog that changes its feed URL inserts a second row instead of
-# updating the first (Project Gutenberg's pre-prod to prod move is the case that bites). The
-# fix is a wipe and re-seed. Revisit if that stops being acceptable.
+# ponytail: href match, and only the fallback now - a catalog with no `metadata.identifier`
+# that changes its feed URL inserts a second row instead of updating the first. The fix is to
+# give it an identifier, which `resolve_existing_catalog` then matches on.
 def resolve_identity_href(document: dict[str, Any]) -> str:
     """The externally owned URL this catalog is matched on across seed runs.
 
-    `metadata.identifier` is deliberately *not* it: the registry renders that field from
-    `catalogs.id`, so the value in the source document is not the one clients ever see.
+    Used when the document supplies no `metadata.identifier`, and always as the value the id
+    is derived from. `resolve_existing_catalog` prefers the id when there is one, because the
+    href belongs to the library and can change under us.
     """
     for rel in IDENTITY_RELS:
         for link in document["links"]:
@@ -121,13 +123,41 @@ def resolve_catalog_id(document: dict[str, Any], identity_href: str) -> uuid.UUI
     return uuid.uuid5(uuid.NAMESPACE_URL, identity_href)
 
 
-def build_catalog(document: dict[str, Any], identity_href: str, *, recommended: bool) -> Catalog:
-    """*identity_href* comes from `resolve_identity_href`, which has already rejected a
-    document with nothing to browse — so there is no separate check for one here."""
+async def resolve_existing_catalog(
+    session: AsyncSession, document: dict[str, Any], identity_href: str, catalog_id: uuid.UUID
+) -> Catalog | None:
+    """The row this document updates, or None to insert. Two lookups, id first.
+
+    **A document that names its own id is matched on that id before its href.** Without this,
+    a catalog whose feed URL changed would miss the href lookup, take the insert path, and
+    collide on `pk_catalogs` — because the id is derived from the unchanged
+    `metadata.identifier`. That is a hard failure that aborts the whole seed transaction, so
+    the other catalogs in the file are not updated either.
+
+    It is also the point of the field. Hadrien assigned those identifiers so that "a library
+    moving pre-prod to prod" stays one row (the Project Gutenberg case); matching on them is
+    what finally delivers that. See ADR-038.
+
+    The href lookup remains, and remains the fallback, for the two cases where it is the only
+    identity available: `data/libraries.json`, which supplies no identifiers, and a catalog
+    already stored under a different id than the one the file now names — which keeps the id it
+    has, since an upsert does not rewrite a primary key.
+    """
+    repository = CatalogRepository(session)
+    if document["metadata"].get("identifier"):
+        by_id = await repository.fetch_catalog_by_identity_id(catalog_id)
+        if by_id is not None:
+            return by_id
+    return await repository.fetch_catalog_by_identity_href(identity_href)
+
+
+def build_catalog(document: dict[str, Any], catalog_id: uuid.UUID, *, recommended: bool) -> Catalog:
+    """*catalog_id* comes from `resolve_catalog_id`. The caller resolves it, because it is also
+    what `resolve_existing_catalog` looks the row up by."""
     metadata = document["metadata"]
 
     return Catalog(
-        id=resolve_catalog_id(document, identity_href),
+        id=catalog_id,
         status=CatalogStatus.ACTIVE,
         recommended=recommended,
         title=metadata["title"],
@@ -201,8 +231,9 @@ async def import_catalog_document(
     if ordered_at is None:
         ordered_at = datetime.now(UTC)
     identity_href = resolve_identity_href(document)
-    existing = await CatalogRepository(session).fetch_catalog_by_identity_href(identity_href)
-    built = build_catalog(document, identity_href, recommended=recommended)
+    catalog_id = resolve_catalog_id(document, identity_href)
+    existing = await resolve_existing_catalog(session, document, identity_href, catalog_id)
+    built = build_catalog(document, catalog_id, recommended=recommended)
 
     if existing is None:
         built.published_at = func.now()
