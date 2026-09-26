@@ -34,7 +34,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.core.config import Settings
@@ -48,6 +48,7 @@ from registry.db.models.catalog import (
     CatalogSubdivisionRow,
 )
 from registry.db.models.link import Link
+from registry.db.models.reference import Subdivision
 from registry.db.session import build_session_factory, create_database_engine
 from registry.domain.enums import (
     CatalogColor,
@@ -311,6 +312,41 @@ def assert_identities_are_unique(feed: dict[str, Any], *, source: str) -> None:
         seen[catalog_id] = title
 
 
+async def assert_subdivisions_are_known(
+    session: AsyncSession, feed: dict[str, Any], *, source: str
+) -> None:
+    """Refuse codes absent from `subdivisions` with a message. Raises `ValidationError`.
+
+    `subdivisions` is **not** a full copy of ISO 3166-2 — it holds only the codes some catalog
+    references, added per data migration. So a valid code the table has never heard of fails on
+    `fk_catalog_subdivisions_subdivision_code_subdivisions` at flush time, as a raw
+    `IntegrityError` that names a constraint rather than the code, the catalog or the remedy.
+    `make add --subdivision NL-ZH` is the easiest way to hit it; the flag's own help says
+    "ISO 3166-2", which is a promise five rows cannot keep.
+
+    One query for the whole document, before anything is written, listing every unknown code at
+    once — so an operator fixes one migration rather than rediscovering this per catalog.
+    """
+    requested = {
+        code.upper()
+        for document in feed["catalogs"]
+        for code in document["metadata"].get("subdivisions", ())
+    }
+    if not requested:
+        return
+
+    known = set(
+        await session.scalars(select(Subdivision.code).where(Subdivision.code.in_(requested)))
+    )
+    if unknown := sorted(requested - known):
+        raise ValidationError(
+            f"{source} references {', '.join(unknown)}, absent from the `subdivisions` table. "
+            "That table holds only the ISO 3166-2 codes some catalog already uses, so a valid "
+            "code can still be missing; add it in a migration, as `b41f7c9ade52` did for "
+            "FR-IDF and CH-VS."
+        )
+
+
 async def import_feed_document(
     session: AsyncSession,
     feed: dict[str, Any],
@@ -330,6 +366,7 @@ async def import_feed_document(
         raise ValidationError(f"{source} is not valid seed input. {detail}")
 
     assert_identities_are_unique(feed, source=source)
+    await assert_subdivisions_are_known(session, feed, source=source)
 
     # One clock reading for the run: each catalog is written a millisecond earlier than the
     # one before it, so position in the file survives as `created_at` order. Re-read per

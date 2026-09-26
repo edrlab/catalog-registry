@@ -631,6 +631,59 @@ async def test_a_libraries_shaped_document_imports_through_the_validating_path(
     assert await CatalogRepository(db_session).fetch_recommended_catalogs() == []
 
 
+async def test_an_unseeded_subdivision_is_a_readable_message(db_session: AsyncSession) -> None:
+    """`subdivisions` is not a full copy of ISO 3166-2, so a valid code can still be missing.
+
+    It used to fail at flush as a raw `IntegrityError` naming
+    `fk_catalog_subdivisions_subdivision_code_subdivisions` — not the code, not the catalog, not
+    the remedy. `make add --subdivision NL-ZH` is the easy way in, and that flag's help says
+    "ISO 3166-2", which five rows cannot deliver. Every unknown code is listed at once, so one
+    migration fixes the document.
+    """
+    feed = {
+        "metadata": {"title": "Dutch"},
+        "catalogs": [
+            {
+                "metadata": {
+                    "title": "Dutch Library",
+                    "kind": ["public"],
+                    "country": "nl",
+                    "subdivisions": ["nl-zh", "nl-ut"],
+                },
+                "links": [{"href": "https://library.example/nl.opds2", "rel": "catalog"}],
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError, match="NL-UT, NL-ZH"):
+        await import_feed_document(db_session, feed, source="test")
+
+    assert await count(db_session, Catalog) == 0
+
+
+async def test_a_seeded_subdivision_passes_the_check(db_session: AsyncSession) -> None:
+    """The codes `b41f7c9ade52` added are present, so the guard is not simply rejecting."""
+    feed = {
+        "metadata": {"title": "Swiss"},
+        "catalogs": [
+            {
+                "metadata": {
+                    "title": "Valais",
+                    "kind": ["public"],
+                    "country": "ch",
+                    "subdivisions": ["ch-vs"],
+                },
+                "links": [{"href": "https://library.example/valais.opds2", "rel": "catalog"}],
+            }
+        ],
+    }
+
+    created, _ = await import_feed_document(db_session, feed, source="test", recommended=False)
+    await db_session.commit()
+
+    assert created == 1
+
+
 async def test_a_catalog_removed_from_the_file_stays_recommended(
     db_session: AsyncSession, tmp_path: Path
 ) -> None:

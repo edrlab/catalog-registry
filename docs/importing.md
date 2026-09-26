@@ -34,7 +34,7 @@ kind of institution this is*, no OPDS document expresses that, so the rest is fl
 --color             gray | red | yellow | blue | green | purple | orange | pink
 --description       free text
 --language          BCP-47, repeatable        --country      ISO 3166-1 alpha-2
---subdivision       ISO 3166-2, repeatable    --city         free text
+--subdivision       ISO 3166-2, repeatable*   --city         free text
 --coverage          global | country | subdivisions | local
 --publication-type  ebook | audiobook | comic | newspaper | magazine | journal | article
 --dry-run           print the document, write nothing
@@ -63,6 +63,11 @@ not store. Those are skipped, and the rest are kept: `["catalog", "start"]` stor
 | `search` | `search`, `templated` preserved |
 | `profile`, `icon`, `alternate`, `authenticate` | unchanged |
 | anything else, `self` and paging rels included | dropped |
+
+\* **`--subdivision` only accepts codes already in the `subdivisions` table.** That table is
+not a full copy of ISO 3166-2 — it holds the codes some catalog already uses, five at the
+time of writing. A valid code that is missing is refused with a message telling you to add
+it in a migration; see `migrations/versions/b41f7c9ade52_…` for the shape.
 
 **Your URL becomes `catalog`, never the feed's own `self`.** A remote feed's `self` is not
 something this registry trusts for anything.
