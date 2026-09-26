@@ -7,11 +7,19 @@ authoring time. The service synthesises those at render time, and the contract t
 the output, which is where it matters.
 
 The relaxed variant is **derived, not hand-written**, so it cannot drift from the published
-schema when Hadrien edits it. Three relaxations, and nothing else:
+schema when Hadrien edits it. Four relaxations, and nothing else:
 
 1. feed-level `links` is not required
 2. the feed's "must contain a `self` link" constraint is dropped
 3. the same `self` constraint is dropped from every catalog
+4. `metadata.identifier` is not required
+
+The fourth has the same justification as the other three: the field is not authored, it is
+answered by the registry. `catalogs.id` is derived from the identity href when the document
+omits an identifier, and rendered back out as `urn:uuid:{id}`, so requiring it on input would
+demand a value the author has no way to compute. Supplying one is still allowed, and still
+wins. The published `catalog.schema.json` keeps it required, because every *rendered* catalog
+does have one.
 
 Everything else the published schemas assert. Enums, the BCP-47 pattern, `minItems` on
 `kind`, `additionalProperties: false` on `metadata`, still applies.
@@ -33,10 +41,12 @@ BANNER = (
 
 
 def relax_catalog(catalog_schema: dict[str, Any]) -> dict[str, Any]:
-    """Drop the `self` requirement from a catalog document."""
+    """Drop the `self` and `metadata.identifier` requirements from a catalog document."""
     relaxed = json.loads(json.dumps(catalog_schema))
     relaxed.pop("$id", None)
     relaxed["properties"]["links"].pop("contains", None)
+    metadata = relaxed["properties"]["metadata"]
+    metadata["required"] = [name for name in metadata["required"] if name != "identifier"]
     return relaxed
 
 

@@ -3,12 +3,7 @@
 import pytest
 
 from registry.domain.enums import LinkRel
-from registry.domain.links import (
-    LINK_REL_PRIORITY,
-    find_self_link,
-    has_browsable_rel,
-    order_links,
-)
+from registry.domain.links import LINK_REL_PRIORITY, find_self_link, order_links
 
 pytestmark = pytest.mark.unit
 
@@ -42,19 +37,3 @@ def test_two_links_with_the_same_rel_keep_their_input_order() -> None:
 
 def test_find_self_link_returns_none_when_absent() -> None:
     assert find_self_link([Stub(LinkRel.CATALOG, "c")], rel_of=rel_of) is None
-
-
-@pytest.mark.parametrize(
-    ("rels", "expected"),
-    [
-        ([LinkRel.CATALOG], True),
-        ([LinkRel.SHELF], True),
-        ([LinkRel.CATALOG, LinkRel.ICON], True),
-        ([LinkRel.ICON], False),
-        ([LinkRel.ALTERNATE], False),
-        # `self` is synthesised, so it is neither required nor sufficient on input.
-        ([LinkRel.SELF], False),
-    ],
-)
-def test_has_browsable_rel(rels: list[LinkRel], expected: bool) -> None:
-    assert has_browsable_rel(rels) is expected

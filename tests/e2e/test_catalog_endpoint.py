@@ -7,6 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from registry.cli.seed import import_catalog_document
 from registry.core.constants import OPDS_CATALOG_MEDIA_TYPE, PROBLEM_JSON_MEDIA_TYPE
 from registry.db.models.catalog import Catalog
 from registry.domain.enums import CatalogStatus
@@ -64,3 +65,31 @@ async def test_a_suggested_catalog_is_not_publicly_readable(
     await db_session.commit()
 
     assert (await client.get(f"/catalogs/{catalog.id}")).status_code == 404
+
+
+async def test_a_not_recommended_catalog_is_readable_at_its_derived_id(
+    client: AsyncClient, db_session: AsyncSession, seeded_catalogs: int
+) -> None:
+    """The `data/libraries.json` case, end to end and through HTTP.
+
+    Absent from the feed, present at `/catalogs/{id}`, and the id is computable from the
+    catalog's `catalog` href without asking the database — which is the only reason Hadrien can
+    fetch one of these at all.
+    """
+    href = "https://www.lirtuel.be/v1/home.opds2"
+    document = {
+        "metadata": {"title": "Lirtuel", "kind": ["public"], "country": "be"},
+        "links": [{"href": href, "rel": "catalog"}],
+    }
+    await import_catalog_document(db_session, document, recommended=False)
+    await db_session.commit()
+    derived = uuid.uuid5(uuid.NAMESPACE_URL, href)
+
+    feed = (await client.get("/")).json()
+    response = await client.get(f"/catalogs/{derived}")
+
+    assert "Lirtuel" not in [catalog["metadata"]["title"] for catalog in feed["catalogs"]]
+    assert len(feed["catalogs"]) == seeded_catalogs
+    assert response.status_code == 200
+    assert response.json()["metadata"]["identifier"] == f"urn:uuid:{derived}"
+    assert response.json()["metadata"]["country"] == "BE"

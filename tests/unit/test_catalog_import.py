@@ -76,9 +76,9 @@ def test_templated_survives_and_empty_editorial_fields_are_dropped() -> None:
     search = next(link for link in document["links"] if link["rel"] == "search")
     assert search["templated"] is True
     # `additionalProperties: false` on metadata means a null is not merely useless, it is
-    # invalid, so absent flags must not become keys. `identifier` is always present: it's
-    # generated, not an editorial flag.
-    assert set(document["metadata"]) == {"title", "identifier", "kind"}
+    # invalid, so absent flags must not become keys. No `identifier` either: the import derives
+    # `catalogs.id` from the feed URL, so generating one here would only discard information.
+    assert set(document["metadata"]) == {"title", "kind"}
 
 
 def test_a_feed_without_a_title_is_refused() -> None:

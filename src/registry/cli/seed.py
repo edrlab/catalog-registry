@@ -1,8 +1,9 @@
-"""Import `data/recommended.json` into the registry. Idempotent.
+"""Import a feed-shaped document into the registry. Idempotent.
 
-`data/recommended.json` is the seed source, and presence in the file *is* the
-recommended flag. `demo/` is example output and the contract-test corpus; `archive/` is out
-of scope for v0.
+`data/recommended.json` is the default source, and presence in *that* file is the recommended
+flag. `data/libraries.json` is the second data set and is imported `--no-recommended`: its
+catalogs are `active`, so they are real published catalogs reachable at `/catalogs/{id}`, but
+they stay out of the top-level feed. `demo/` is example output and the contract-test corpus.
 
 the input is validated against the *relaxed* schema derived by
 `scripts/generate_seed_schema.py`, not against `catalog.schema.json`. The file has no
@@ -11,16 +12,22 @@ record. `self` is synthesised at render time from the registry's own base URL, a
 contract tests validate the output.
 
 **A catalog is matched across re-seeds by its `catalog`/`shelf` link href.** `catalogs.id` is
-the registry's only UUID and is generated fresh per environment, so it never conflicts with
-anything in the source document; `metadata.identifier` is rendered *from* that id rather than
-stored, so the hand-assigned `urn:uuid:` values in `data/recommended.json` are read past and
-discarded here. The href is externally owned rather than stable, which is the known cost of
-this design — see `resolve_identity_href` below.
+the registry's only UUID; `metadata.identifier` is rendered *from* that id rather than stored
+beside it. The href is externally owned rather than stable, which is the known cost of this
+design — see `resolve_identity_href` below.
+
+The id itself is **derived, not invented** — see `resolve_catalog_id`. A document that
+supplies `metadata.identifier` keeps that UUID; one that omits it gets a UUID computed from
+its identity href, which is the same value in every environment and across a wipe. Neither
+path lets Postgres pick, because a randomly picked id cannot be addressed by anyone who has
+only the source file.
 """
 
+import argparse
 import asyncio
 import json
 import sys
+import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -50,7 +57,7 @@ from registry.domain.enums import (
     PublicationType,
 )
 from registry.domain.language import normalise_language_tag
-from registry.domain.links import IDENTITY_RELS, has_browsable_rel
+from registry.domain.links import IDENTITY_RELS
 from registry.repositories.catalog_repository import CatalogRepository
 
 #: Presence in `data/recommended.json` is the recommended flag.
@@ -92,15 +99,35 @@ def resolve_identity_href(document: dict[str, Any]) -> str:
     )
 
 
-def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
+def resolve_catalog_id(document: dict[str, Any], identity_href: str) -> uuid.UUID:
+    """The UUID this catalog is stored under, derived rather than generated.
+
+    A supplied `metadata.identifier` wins: it is the author's own name for the catalog, and
+    honouring it means editing the file can address an existing row. When the field is absent
+    the id is `uuid5(NAMESPACE_URL, identity_href)` — a name-based UUID (RFC 9562 §5.5), so the
+    same catalog lands on the same UUID in local Docker, in CI and on Cloud Run, and keeps it
+    across a wipe and re-seed.
+
+    The alternative, letting `gen_random_uuid()` decide, produces an id that exists only in
+    whichever database happened to run the seed. A catalog that is not `recommended` appears
+    in no feed, so that id would be unreachable except by querying Postgres directly.
+    """
+    identifier = document["metadata"].get("identifier")
+    if identifier:
+        return uuid.UUID(identifier.removeprefix("urn:uuid:"))
+    # ponytail: derived from the href, so it inherits the href's instability - a catalog that
+    # moves its feed URL gets a new id as well as a new row. Supplying `metadata.identifier`
+    # is the escape hatch, and is what to reach for if that becomes a problem.
+    return uuid.uuid5(uuid.NAMESPACE_URL, identity_href)
+
+
+def build_catalog(document: dict[str, Any], identity_href: str, *, recommended: bool) -> Catalog:
+    """*identity_href* comes from `resolve_identity_href`, which has already rejected a
+    document with nothing to browse — so there is no separate check for one here."""
     metadata = document["metadata"]
-    # `self` is not required on input; it is synthesised at render time. What the
-    # registry cannot synthesise is somewhere to actually browse or borrow.
-    rels = [rel for link in document["links"] for rel in link_rels(link)]
-    if not has_browsable_rel(rels):
-        raise ValidationError(f"{metadata['title']} needs a `catalog` or `shelf` link")
 
     return Catalog(
+        id=resolve_catalog_id(document, identity_href),
         status=CatalogStatus.ACTIVE,
         recommended=recommended,
         title=metadata["title"],
@@ -175,7 +202,7 @@ async def import_catalog_document(
         ordered_at = datetime.now(UTC)
     identity_href = resolve_identity_href(document)
     existing = await CatalogRepository(session).fetch_catalog_by_identity_href(identity_href)
-    built = build_catalog(document, recommended=recommended)
+    built = build_catalog(document, identity_href, recommended=recommended)
 
     if existing is None:
         built.published_at = func.now()
@@ -277,24 +304,61 @@ async def seed_catalogs(
     )
 
 
-async def seed_from_file(seed_file: Path, settings: Settings) -> tuple[int, int]:
+async def seed_from_file(
+    seed_file: Path, settings: Settings, *, recommended: bool = RECOMMENDED_AT_LAUNCH
+) -> tuple[int, int]:
     engine = create_database_engine(settings)
     try:
         async with build_session_factory(engine)() as session:
-            created, updated = await seed_catalogs(session, seed_file)
+            created, updated = await seed_catalogs(session, seed_file, recommended=recommended)
             await session.commit()
     finally:
         await engine.dispose()
     return created, updated
 
 
+def build_seed_parser() -> argparse.ArgumentParser:
+    """Separate from `main` so the flags are testable without a database.
+
+    `--no-recommended` is the one that matters: getting it wrong seeds Hadrien's library data
+    straight into the top-level feed, which is silent and wrong rather than loud and wrong.
+    """
+    parser = argparse.ArgumentParser(
+        prog="python -m registry.cli seed",
+        description="Import a feed-shaped document into the registry. Idempotent.",
+    )
+    parser.add_argument(
+        "file",
+        nargs="?",
+        type=Path,
+        help="feed-shaped JSON to import. Defaults to REGISTRY_SEED_FILE",
+    )
+    parser.add_argument(
+        "--no-recommended",
+        dest="recommended",
+        action="store_false",
+        help="import the catalogs active but not recommended, so they stay out of the feed "
+        "and are reachable only at /catalogs/{id}",
+    )
+    return parser
+
+
 def main(argv: Sequence[str] = ()) -> int:
-    if argv:
-        print(f"seed takes no arguments, got {' '.join(argv)}")
-        return 2
+    """`REGISTRY_SEED_FILE` remains the default so `make seed` needs no argument.
+
+    A named file is the second data set's route in: `data/libraries.json` is imported
+    `--no-recommended`, which is the only difference between it and `data/recommended.json`
+    as far as this command is concerned. Both go through `seed_catalogs`.
+    """
+    arguments = build_seed_parser().parse_args(argv)
+
     settings = Settings()
-    created, updated = asyncio.run(seed_from_file(settings.seed_file, settings))
-    print(f"seeded: {created} created, {updated} updated")
+    seed_file = arguments.file or settings.seed_file
+    created, updated = asyncio.run(
+        seed_from_file(seed_file, settings, recommended=arguments.recommended)
+    )
+    flag = "" if arguments.recommended else ", not recommended"
+    print(f"seeded {seed_file}: {created} created, {updated} updated{flag}")
     return 0
 
 

@@ -39,12 +39,3 @@ def order_links[T](links: Sequence[T], *, rel_of: Callable[[T], LinkRel]) -> tup
 
 def find_self_link[T](links: Sequence[T], *, rel_of: Callable[[T], LinkRel]) -> T | None:
     return next((link for link in links if rel_of(link) is LinkRel.SELF), None)
-
-
-def has_browsable_rel(rels: Sequence[LinkRel]) -> bool:
-    """A catalog needs somewhere to actually browse or borrow.
-
-    `self` is deliberately not checked: it points at this registry, so it is synthesised at
-    render time rather than supplied by whoever authored the catalog.
-    """
-    return bool(set(rels) & set(IDENTITY_RELS))

@@ -20,7 +20,6 @@ import json
 import socket
 import sys
 import urllib.request
-import uuid
 from collections.abc import Sequence
 from typing import Any, override
 from urllib.parse import urlsplit
@@ -206,9 +205,10 @@ def build_catalog_document(feed: dict[str, Any], url: str, **editorial: Any) -> 
             imported["templated"] = True
         links.append(imported)
 
-    # The seed input schema requires `metadata.identifier`, so one is generated to satisfy it.
-    # The import discards the value: the registry renders `identifier` from `catalogs.id`.
-    metadata: dict[str, Any] = {"title": title.strip(), "identifier": f"urn:uuid:{uuid.uuid4()}"}
+    # No `identifier` is generated. The seed input schema no longer requires one, and the
+    # import derives `catalogs.id` from this document's `catalog` href — which is *url* — so
+    # a re-`add` of the same feed lands on the same id instead of a fresh random one.
+    metadata: dict[str, Any] = {"title": title.strip()}
     metadata.update({key: value for key, value in editorial.items() if value})
     return {"metadata": metadata, "links": links}
 

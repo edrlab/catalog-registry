@@ -69,9 +69,10 @@ something this registry trusts for anything.
 
 **The identity later imports match on is that `catalog` link, not `metadata.identifier`.**
 Re-running `add` on the same URL finds the row it created the first time and updates it.
-An `identifier` is still generated (`uuid.uuid4()`) because the seed input schema requires
-the field, but the import discards it: the registry renders `metadata.identifier` from
-`catalogs.id`. Change the URL and you get a second catalog, not an updated one.
+No `identifier` is generated: the input schema does not require one, and the import derives
+`catalogs.id` as `uuid5(NAMESPACE_URL, <that URL>)`. So the id is a function of the URL you
+typed — the same URL gives the same id on any machine, and `--dry-run` twice produces
+byte-identical documents. Change the URL and you get a second catalog, not an updated one.
 
 `http://opds-spec.org/shelf` is the single alias accepted. OPDS 1.2 §6.1 defines the
 relation that way and gives it no short form. There is no generic prefix rule, so a rel that
