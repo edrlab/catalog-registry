@@ -33,7 +33,9 @@ async def test_the_top_level_feed_validates_against_feed_schema(
 ) -> None:
     response = await client.get("/")
 
-    errors = sorted(build_schema_validator("feed.schema.json").iter_errors(response.json()))
+    errors = sorted(
+        build_schema_validator("feed.schema.json").iter_errors(response.json()), key=str
+    )
     assert not errors, [error.message for error in errors]
 
 
@@ -44,7 +46,7 @@ async def test_every_catalog_validates_against_catalog_schema(
     validator = build_schema_validator("catalog.schema.json")
 
     for catalog in response.json()["catalogs"]:
-        errors = sorted(validator.iter_errors(catalog))
+        errors = sorted(validator.iter_errors(catalog), key=str)
         assert not errors, [catalog["metadata"]["title"], [e.message for e in errors]]
 
 
@@ -98,7 +100,9 @@ async def test_a_not_recommended_catalog_validates_against_catalog_schema(
     response = await client.get(f"/catalogs/{uuid.uuid5(uuid.NAMESPACE_URL, href)}")
 
     assert response.status_code == 200
-    errors = sorted(build_schema_validator("catalog.schema.json").iter_errors(response.json()))
+    errors = sorted(
+        build_schema_validator("catalog.schema.json").iter_errors(response.json()), key=str
+    )
     assert not errors, [error.message for error in errors]
 
 
@@ -107,7 +111,9 @@ async def test_an_empty_feed_still_validates(client: AsyncClient) -> None:
     response = await client.get("/")
 
     assert response.json()["catalogs"] == []
-    errors = sorted(build_schema_validator("feed.schema.json").iter_errors(response.json()))
+    errors = sorted(
+        build_schema_validator("feed.schema.json").iter_errors(response.json()), key=str
+    )
     assert not errors, [error.message for error in errors]
 
 

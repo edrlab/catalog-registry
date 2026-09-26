@@ -176,9 +176,16 @@ the mistake. The seed validates against a **relaxed** variant:
 | feed-level `links` not required | Nothing to link to yet |
 | the feed's "must contain a `self` link" constraint dropped | Same |
 | the same constraint dropped from every catalog | `self` is synthesised at render time |
+| `metadata.identifier` not required | The registry answers it. `catalogs.id` is derived from the identity href when the document omits it, then rendered back as `urn:uuid:{id}`, so requiring it would demand a value the author cannot compute (ADR-038) |
+| `country`/`subdivisions` accept lowercase | ISO 3166-1/-2 codes are case-insensitive and `data/libraries.json` writes `be`/`be-wal`. The import uppercases on ingest and two check constraints enforce the stored form — the arrangement R2 already describes for `language_tag` |
 
-Everything else still applies. Enums, the BCP-47 pattern, `minItems` on `kind`,
-`additionalProperties: false`.
+Five, and nothing else. Everything else still applies. Enums, the BCP-47 pattern, `minItems` on
+`kind`, `additionalProperties: false`.
+
+**The last two are input-only on purpose.** `schema/catalog.schema.json` still requires
+`identifier` and still demands uppercase, because it validates *rendered output*, where both hold
+without exception. Relaxing them there would delete a working R7 tripwire and be undone by the
+next `git merge upstream/main`.
 
 `tests/integration/test_seed.py::test_the_seed_input_is_rejected_by_the_published_schema` is
 the tripwire: it asserts the seed file **fails** the published schema. If it ever starts
@@ -190,10 +197,8 @@ The rule is explicit: derived at build time, not hand-written, **so it cannot dr
 Hadrien edits the originals. A hand-maintained second copy of a schema is a copy that silently
 disagrees with the first six months later.
 
-The generator deep-copies `feed.schema.json`, removes exactly those three constraints, drops
-the `metadata.identifier` requirement, widens the `country`/`subdivisions` patterns to accept
-lowercase, and
-inlines a relaxed copy of `catalog.schema.json` in place of the `$ref`. Inlined rather than
+The generator deep-copies `feed.schema.json`, applies the five relaxations above, and inlines a
+relaxed copy of `catalog.schema.json` in place of the `$ref`. Inlined rather than
 referenced because the relaxation applies to *this* copy only; the published
 `catalog.schema.json` must keep requiring `self`.
 
@@ -244,28 +249,33 @@ is not used.
 
 ## Where each schema is used
 
+Cited by **symbol, not line number** — an earlier version of this table pinned lines and every
+one of them was wrong within a single branch.
+
 | Schema | Used at | For |
 |---|---|---|
-| `catalog.schema.json` | `scripts/generate_enums.py:73` | Generating `domain/enums.py`, the vocabularies come from the contract, never transcribed |
-| | `scripts/generate_seed_schema.py:45` | The relaxed copy inlined into the seed-input schema |
-| | `tests/contract/test_schema_conformance.py:41` | Every catalog in a live response validates |
-| | `tests/contract/test_schema_conformance.py:64` | The `demo/` fixtures validate |
-| | `scripts/validate_fixtures.py:20` | Same check, as a CI job |
-| `feed.schema.json` | `tests/contract/test_schema_conformance.py:33,53` | The live feed response validates, seeded and empty |
-| | `scripts/generate_seed_schema.py:44` | The base the relaxed schema is derived from |
-| | `tests/integration/test_seed.py:70` | Asserts the seed file **fails** it, the tripwire |
-| | `scripts/validate_fixtures.py:21-22` | `demo/index.json` and `demo/search.json` validate |
-| `generated/seed-input.schema.json` | `src/registry/cli/seed.py:63` | **Runtime.** Every seed run validates its input first |
-| | `scripts/validate_fixtures.py:16` | `data/recommended.json` validates, as a CI job |
+| `catalog.schema.json` | `generate_enums.py` → `main` | Generating `domain/enums.py`, the vocabularies come from the contract, never transcribed |
+| | `generate_seed_schema.py` → `build_seed_schema` | The relaxed copy inlined into the seed-input schema |
+| | `test_schema_conformance.py` → `test_every_catalog_validates_against_catalog_schema` | Every catalog in the live feed validates |
+| | → `test_a_not_recommended_catalog_validates_against_catalog_schema` | **`GET /catalogs/{id}`** validates. The only route to a not-recommended catalog, so this is the only contract cover such a catalog gets |
+| | → `test_the_demo_fixtures_validate` | Every `demo/catalogs/*.json` validates |
+| | `validate_fixtures.py` → `FIXTURE_SCHEMAS` | The same fixture check, as a CI job |
+| `feed.schema.json` | `test_schema_conformance.py` → `test_the_top_level_feed_validates_against_feed_schema`, `test_an_empty_feed_still_validates` | The live feed response validates, seeded and empty |
+| | `generate_seed_schema.py` → `build_seed_schema` | The base the relaxed schema is derived from |
+| | `test_seed.py` → `test_the_seed_input_is_rejected_by_the_published_schema` | Asserts the seed file **fails** it, the tripwire |
+| | `validate_fixtures.py` → `FIXTURE_SCHEMAS` | `demo/index.json` and `demo/search.json` validate |
+| `generated/seed-input.schema.json` | `cli/seed.py` → `SEED_INPUT_SCHEMA`, used by `import_feed_document` | **Runtime.** Every seed run validates its input first |
+| | `validate_fixtures.py` → `SEED_INPUTS` | Every seed file present in the checkout validates, as a CI job. A file that is absent is reported as skipped — `data/libraries.json` arrives with upstream PR #13 |
 | `vendor/*` | Never referenced by name | Resolved automatically through `$ref` by `build_schema_registry()` |
-| all of them | `scripts/validate_schemas.py:19` | Every file is valid JSON and a valid draft-07 schema |
+| all of them | `validate_schemas.py` → `main` | Every file is valid JSON and a valid draft-07 schema |
 
 That last one exists because a **trailing comma** in `catalog.schema.json` once sat unnoticed
 until someone read it by eye. It is a one-line CI job that makes that impossible to repeat, and
 it matters because Hadrien edits these files directly.
 
 `jsonschema` is a **runtime** dependency, not a dev one, precisely because of
-`src/registry/cli/seed.py:63`. Validating input before persisting it is production behaviour.
+`cli/seed.py`'s `SEED_INPUT_SCHEMA`. Validating input before persisting it is production
+behaviour.
 
 ---
 

@@ -249,7 +249,12 @@ def main(argv: Sequence[str] = ()) -> int:
     parser.add_argument("--country", help="ISO 3166-1 alpha-2")
     parser.add_argument("--coverage", choices=[scope.value for scope in CoverageScope])
     parser.add_argument("--language", action="append", help="BCP-47; repeatable")
-    parser.add_argument("--subdivision", action="append", help="ISO 3166-2; repeatable")
+    parser.add_argument(
+        "--subdivision",
+        action="append",
+        help="ISO 3166-2, repeatable. Must already be in the `subdivisions` table, which "
+        "holds only the codes some catalog uses; a missing one is refused with the remedy",
+    )
     parser.add_argument(
         "--publication-type",
         action="append",

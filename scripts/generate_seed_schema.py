@@ -52,10 +52,15 @@ BANNER = (
 
 
 def accept_either_case(pattern: str) -> str:
-    """Widen every `A-Z` character class in *pattern* to accept lowercase too.
+    """Widen the `A-Z` ranges in *pattern* so it accepts lowercase too.
 
-    A transform rather than a literal, so it still applies if Hadrien rewrites the pattern —
-    the whole point of generating this file instead of keeping a second copy by hand.
+    A textual substitution, which is right for the two patterns it is applied to
+    (`^[A-Z]{2}$` and `^[A-Z]{2}-[A-Z0-9]{1,3}$`) and is **not** a general regex transform. It
+    would narrow a negated class (`[^A-Z]` → `[^A-Za-z]`), it is not idempotent
+    (`[A-Za-z]` → `[A-Za-za-z]`, harmless but redundant), and it would rewrite a literal `A-Z`
+    outside a character class. Preferred over hardcoding the relaxed patterns because a literal
+    would silently stop matching if upstream rewrote them, where this at least keeps applying;
+    `tests/unit/test_seed_schema.py` pins both current results.
     """
     return pattern.replace("A-Z", "A-Za-z")
 
@@ -69,10 +74,14 @@ def relax_catalog(catalog_schema: dict[str, Any]) -> dict[str, Any]:
     metadata = relaxed["properties"]["metadata"]
     metadata["required"] = [name for name in metadata["required"] if name != "identifier"]
 
-    properties = metadata["properties"]
-    properties["country"]["pattern"] = accept_either_case(properties["country"]["pattern"])
-    subdivision = properties["subdivisions"]["items"]
-    subdivision["pattern"] = accept_either_case(subdivision["pattern"])
+    # Defensively, like the `.pop(..., None)` relaxations above: if upstream ever replaces a
+    # pattern with an `enum` of ISO codes, `make seed-schema` should not die on a `KeyError`.
+    for schema in (
+        (properties := metadata["properties"])["country"],
+        properties["subdivisions"]["items"],
+    ):
+        if "pattern" in schema:
+            schema["pattern"] = accept_either_case(schema["pattern"])
     return relaxed
 
 

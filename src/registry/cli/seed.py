@@ -297,17 +297,29 @@ def assert_identities_are_unique(feed: dict[str, Any], *, source: str) -> None:
     in a hand-edited file silently deletes a catalog.
 
     JSON Schema cannot express "unique within this document", so it is checked here, before
-    anything is written. Hrefs are not checked: `uq_links_identity_href` already rejects a
-    duplicate in the database, loudly.
+    anything is written.
+
+    **Two entries with no identifier and the same href collide too**, because the id is then
+    derived from that href — and `data/libraries.json` carries no identifiers, so that is the
+    likelier way to arrive here, not the unlikelier one. The message has to say which of the two
+    fields to go and look at, or it sends the operator to the wrong line of the file. It also
+    means this pre-empts `uq_links_identity_href`, which would otherwise have caught the href
+    case in the database.
     """
     seen: dict[uuid.UUID, str] = {}
     for document in feed["catalogs"]:
-        title = document["metadata"]["title"]
+        metadata = document["metadata"]
+        title = metadata["title"]
         catalog_id = resolve_catalog_id(document, resolve_identity_href(document))
         if (owner := seen.get(catalog_id)) is not None:
+            shared = (
+                "`metadata.identifier`"
+                if metadata.get("identifier")
+                else "`catalog`/`shelf` href, which is what their ids are derived from"
+            )
             raise ValidationError(
                 f"{source} gives {owner!r} and {title!r} the same identity ({catalog_id}). "
-                "Two catalogs cannot share a `metadata.identifier`."
+                f"Two catalogs cannot share a {shared}."
             )
         seen[catalog_id] = title
 

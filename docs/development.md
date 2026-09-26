@@ -261,6 +261,10 @@ make seed             # data/recommended.json  → recommended, in the top-level
 make seed-libraries   # data/libraries.json    → active, NOT recommended, feed omits them
 ```
 
+`data/libraries.json` arrives with upstream PR edrlab/catalog-registry#13. Until it merges,
+`make seed-libraries` reports `data/libraries.json is not a file. Nothing to seed.` and writes
+nothing — the registry works without it, and `make seed` is unaffected.
+
 `--no-recommended` is the only difference; both go through the same validation and upsert.
 `status` and `recommended` are separate columns, so a library catalog is a real published
 catalog reachable at `/catalogs/{id}` while staying out of `GET /`.

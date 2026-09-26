@@ -18,7 +18,7 @@ export DB_PORT
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup env enums seed-schema up down clean run seed add seed-sample migrate revision psql \
+.PHONY: help setup env enums seed-schema up down clean run seed seed-libraries seed-sample add migrate revision psql \
         test lint fmt bench check-db schema-check docker-build docker-run logs stop
 
 # Self-documenting: a target appears here when its line carries a `## ` description, and
