@@ -1,10 +1,10 @@
-"""Identity resolution and the derived seed-input schema. Pure — no database.
+"""Identity resolution and the derived seed-input schema. Pure, no database.
 
 These were briefly in `tests/integration/test_seed.py`, which was wrong: the `integration`
 marker means "requires a database" (`pyproject.toml`) and `conventions/testing.md` puts pure
 logic here. `test_only_a_browsable_rel_gives_a_document_an_identity` is the parametrised table
 that used to cover `has_browsable_rel` in `tests/unit/test_links.py`, before
-`resolve_identity_href` absorbed that job — it belongs in the same millisecond lane it started in.
+`resolve_identity_href` absorbed that job. It belongs in the same millisecond lane it started in.
 """
 
 import uuid
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.unit
 def test_accept_either_case_widens_both_published_patterns() -> None:
     """Pins the transform's result on the two patterns it is actually applied to.
 
-    It is a textual substitution, not a regex transform — see its docstring. If upstream
+    It is a textual substitution, not a regex transform; see its docstring. If upstream
     rewrites either pattern this is where the surprise shows up.
     """
     assert accept_either_case("^[A-Z]{2}$") == "^[A-Za-z]{2}$"
@@ -31,7 +31,7 @@ def test_accept_either_case_widens_both_published_patterns() -> None:
 
 def test_the_published_schema_still_demands_uppercase() -> None:
     """The relaxation is input-only. `schema/catalog.schema.json` is upstream's contract and
-    validates *rendered output*, where codes are always uppercase — reverting that file was the
+    validates *rendered output*, where codes are always uppercase. Reverting that file was the
     point of the fix, so a regression here means the output tripwire is gone again."""
     published = build_schema_validator("catalog.schema.json")
     document = {
@@ -183,7 +183,7 @@ def test_the_derived_id_is_pinned_to_a_known_value() -> None:
     """A golden value, because every other test restates the formula.
 
     Changing the namespace, or normalising the href, would keep those green while moving every
-    id a client has written down — the one property the derivation exists to provide.
+    id a client has written down, the one property the derivation exists to provide.
     """
     document = {"metadata": {"title": "Lirtuel"}}
 

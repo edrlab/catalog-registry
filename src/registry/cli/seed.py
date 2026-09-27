@@ -12,12 +12,12 @@ record. `self` is synthesised at render time from the registry's own base URL, a
 contract tests validate the output.
 
 **A catalog is matched across re-seeds by its id when the document names one, and by its
-`catalog`/`shelf` link href otherwise** — see `resolve_existing_catalog`. `catalogs.id` is the
+`catalog`/`shelf` link href otherwise**; see `resolve_existing_catalog`. `catalogs.id` is the
 registry's only UUID; `metadata.identifier` is rendered *from* that id rather than stored beside
 it. The href is externally owned rather than stable, so a document relying on it carries that
 cost; one carrying an identifier does not.
 
-The id itself is **derived, not invented** — see `resolve_catalog_id`. A document that
+The id itself is **derived, not invented**; see `resolve_catalog_id`. A document that
 supplies `metadata.identifier` keeps that UUID; one that omits it gets a UUID computed from
 its identity href, which is the same value in every environment and across a wipe. Neither
 path lets Postgres pick, because a randomly picked id cannot be addressed by anyone who has
@@ -106,11 +106,11 @@ def resolve_catalog_id(document: dict[str, Any], identity_href: str) -> uuid.UUI
     """The UUID this catalog is stored under, derived rather than generated.
 
     A supplied `metadata.identifier` wins: it is the author's own name for the catalog, so the
-    file can name the id a client will fetch it at. Note the limit — this decides the id a row is
+    file can name the id a client will fetch it at. Note the limit: this decides the id a row is
     *inserted* with. Adding an identifier to a catalog already stored does not move it onto that
     id, because an upsert does not rewrite a primary key
     (`test_an_identifier_added_later_does_not_move_an_existing_row`). When the field is absent
-    the id is `uuid5(NAMESPACE_URL, identity_href)` — a name-based UUID (RFC 9562 §5.5), so the
+    the id is `uuid5(NAMESPACE_URL, identity_href)`, a name-based UUID (RFC 9562 §5.5), so the
     same catalog lands on the same UUID in local Docker, in CI and on Cloud Run, and keeps it
     across a wipe and re-seed.
 
@@ -144,7 +144,7 @@ async def resolve_existing_catalog(
 
     **A document that names its own id is matched on that id before its href.** Without this,
     a catalog whose feed URL changed would miss the href lookup, take the insert path, and
-    collide on `pk_catalogs` — because the id is derived from the unchanged
+    collide on `pk_catalogs`, because the id is derived from the unchanged
     `metadata.identifier`. That is a hard failure that aborts the whole seed transaction, so
     the other catalogs in the file are not updated either.
 
@@ -154,7 +154,7 @@ async def resolve_existing_catalog(
 
     The href lookup remains, and remains the fallback, for the two cases where it is the only
     identity available: `data/libraries.json`, which supplies no identifiers, and a catalog
-    already stored under a different id than the one the file now names — which keeps the id it
+    already stored under a different id than the one the file now names, which keeps the id it
     has, since an upsert does not rewrite a primary key.
     """
     repository = CatalogRepository(session)
@@ -291,37 +291,47 @@ def assert_identities_are_unique(feed: dict[str, Any], *, source: str) -> None:
     """Refuse a document where two catalogs resolve to the same id. Raises `ValidationError`.
 
     Two entries sharing a `metadata.identifier` used to be two rows, because ids were random.
-    Now the second one's id lookup finds the row the first one just inserted — pending inserts
-    are visible to the next query through autoflush — and *overwrites it in place*: one row,
+    Now the second one's id lookup finds the row the first one just inserted (pending inserts
+    are visible to the next query through autoflush) and *overwrites it in place*: one row,
     the first catalog's title and links gone, `created 1, updated 1` printed, no error. A typo
     in a hand-edited file silently deletes a catalog.
 
     JSON Schema cannot express "unique within this document", so it is checked here, before
     anything is written.
 
-    **Two entries with no identifier and the same href collide too**, because the id is then
-    derived from that href — and `data/libraries.json` carries no identifiers, so that is the
-    likelier way to arrive here, not the unlikelier one. The message has to say which of the two
-    fields to go and look at, or it sends the operator to the wrong line of the file. It also
-    means this pre-empts `uq_links_identity_href`, which would otherwise have caught the href
-    case in the database.
+    **Both keys the upsert can match on are checked, not just the id.** `resolve_existing_catalog`
+    falls back to the href, so two entries with *different* explicit identifiers and the same
+    `catalog`/`shelf` href collide by the other route: the second one misses the id lookup, finds
+    the first by href, and overwrites it. Checking ids alone left that open. Href is checked
+    first, because a document with no identifier derives its id *from* the href and would
+    otherwise be reported as an identifier clash it does not have.
+
+    This pre-empts `uq_links_identity_href`, which would have caught the href case in the
+    database, but only once the write was attempted and without naming either catalog.
     """
-    seen: dict[uuid.UUID, str] = {}
+    by_href: dict[str, str] = {}
+    by_id: dict[uuid.UUID, str] = {}
+
     for document in feed["catalogs"]:
-        metadata = document["metadata"]
-        title = metadata["title"]
-        catalog_id = resolve_catalog_id(document, resolve_identity_href(document))
-        if (owner := seen.get(catalog_id)) is not None:
-            shared = (
-                "`metadata.identifier`"
-                if metadata.get("identifier")
-                else "`catalog`/`shelf` href, which is what their ids are derived from"
-            )
+        title = document["metadata"]["title"]
+        identity_href = resolve_identity_href(document)
+        catalog_id = resolve_catalog_id(document, identity_href)
+
+        if (owner := by_href.get(identity_href)) is not None:
             raise ValidationError(
-                f"{source} gives {owner!r} and {title!r} the same identity ({catalog_id}). "
-                f"Two catalogs cannot share a {shared}."
+                f"{source} gives {owner!r} and {title!r} the same `catalog`/`shelf` href "
+                f"({identity_href}), so the second would replace the first. Two catalogs cannot "
+                "share the href they are matched on."
             )
-        seen[catalog_id] = title
+        if (owner := by_id.get(catalog_id)) is not None:
+            raise ValidationError(
+                f"{source} gives {owner!r} and {title!r} the same id ({catalog_id}), so the "
+                "second would replace the first. Two catalogs cannot share a "
+                "`metadata.identifier`."
+            )
+
+        by_href[identity_href] = title
+        by_id[catalog_id] = title
 
 
 async def assert_subdivisions_are_known(
@@ -329,7 +339,7 @@ async def assert_subdivisions_are_known(
 ) -> None:
     """Refuse codes absent from `subdivisions` with a message. Raises `ValidationError`.
 
-    `subdivisions` is **not** a full copy of ISO 3166-2 — it holds only the codes some catalog
+    `subdivisions` is **not** a full copy of ISO 3166-2. It holds only the codes some catalog
     references, added per data migration. So a valid code the table has never heard of fails on
     `fk_catalog_subdivisions_subdivision_code_subdivisions` at flush time, as a raw
     `IntegrityError` that names a constraint rather than the code, the catalog or the remedy.
@@ -337,7 +347,7 @@ async def assert_subdivisions_are_known(
     "ISO 3166-2", which is a promise five rows cannot keep.
 
     One query for the whole document, before anything is written, listing every unknown code at
-    once — so an operator fixes one migration rather than rediscovering this per catalog.
+    once, so an operator fixes one migration rather than rediscovering this per catalog.
     """
     requested = {
         code.upper()

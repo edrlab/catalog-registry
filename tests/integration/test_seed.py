@@ -299,7 +299,7 @@ async def test_an_identified_catalog_survives_an_href_change(db_session: AsyncSe
 
     Regression test for a real defect: deriving `catalogs.id` from the identifier while matching
     only on the href meant a moved catalog missed the lookup, took the insert path, and violated
-    `pk_catalogs` — aborting the whole seed transaction, so every other catalog in the file went
+    `pk_catalogs`, aborting the whole seed transaction, so every other catalog in the file went
     un-updated too. `resolve_existing_catalog` matches on the id first.
     """
     identifier = "urn:uuid:7dadebbe-5276-42f4-aa7f-4c8631c965e3"
@@ -361,8 +361,8 @@ async def test_two_catalogs_sharing_an_identifier_are_refused(db_session: AsyncS
     """Without this the second one silently overwrites the first, and the counts look normal.
 
     Ids used to be random, so two entries were two rows. Once the id is derived from
-    `metadata.identifier`, the second entry's id lookup finds the row the first just inserted —
-    autoflush makes a pending insert visible — and replaces its title and links in place. One
+    `metadata.identifier`, the second entry's id lookup finds the row the first just inserted
+    (autoflush makes a pending insert visible) and replaces its title and links in place. One
     row, `1 created, 1 updated`, no error, one catalog gone. JSON Schema cannot express
     "unique within this document", so `assert_identities_are_unique` checks it before any write.
     """
@@ -385,7 +385,7 @@ async def test_two_catalogs_sharing_an_identifier_are_refused(db_session: AsyncS
     with pytest.raises(ValidationError, match=blames_identifier) as failure:
         await import_feed_document(db_session, feed, source="test")
 
-    assert "'First' and 'Second' the same identity" in str(failure.value)
+    assert "'First' and 'Second' the same id" in str(failure.value)
     assert await count(db_session, Catalog) == 0
 
 
@@ -412,7 +412,7 @@ async def test_two_catalogs_sharing_an_href_blame_the_href_not_the_identifier(
         ],
     }
 
-    blames_href = re.escape("cannot share a `catalog`/`shelf` href")
+    blames_href = re.escape("the same `catalog`/`shelf` href")
     with pytest.raises(ValidationError, match=blames_href) as failure:
         await import_feed_document(db_session, feed, source="test", recommended=False)
 
@@ -492,7 +492,7 @@ async def test_an_unseeded_subdivision_is_a_readable_message(db_session: AsyncSe
     """`subdivisions` is not a full copy of ISO 3166-2, so a valid code can still be missing.
 
     It used to fail at flush as a raw `IntegrityError` naming
-    `fk_catalog_subdivisions_subdivision_code_subdivisions` — not the code, not the catalog, not
+    `fk_catalog_subdivisions_subdivision_code_subdivisions`: not the code, not the catalog, not
     the remedy. `make add --subdivision NL-ZH` is the easy way in, and that flag's help says
     "ISO 3166-2", which five rows cannot deliver. Every unknown code is listed at once, so one
     migration fixes the document.
@@ -539,6 +539,47 @@ async def test_a_seeded_subdivision_passes_the_check(db_session: AsyncSession) -
     await db_session.commit()
 
     assert created == 1
+
+
+async def test_different_identifiers_with_one_href_are_refused(
+    db_session: AsyncSession,
+) -> None:
+    """The hole in an id-only uniqueness check, found by Copilot on the PR.
+
+    Both keys the upsert can match on have to be checked. With distinct identifiers the two ids
+    differ, so an id-only guard passes them; then the second document misses `by_id`, falls back
+    to the href, finds the row the first one just inserted, and replaces its title and links.
+    One row, `1 created, 1 updated`, no error, one catalog silently gone.
+    """
+    href = "https://library.example/shared.opds2"
+    feed = {
+        "metadata": {"title": "Duplicated"},
+        "catalogs": [
+            {
+                "metadata": {
+                    "title": "First",
+                    "identifier": "urn:uuid:11111111-2222-4333-8444-555555555555",
+                    "kind": ["open"],
+                },
+                "links": [{"href": href, "rel": "catalog"}],
+            },
+            {
+                "metadata": {
+                    "title": "Second",
+                    "identifier": "urn:uuid:66666666-7777-4888-8999-aaaaaaaaaaaa",
+                    "kind": ["open"],
+                },
+                "links": [{"href": href, "rel": "catalog"}],
+            },
+        ],
+    }
+
+    blames_href = re.escape("the same `catalog`/`shelf` href")
+    with pytest.raises(ValidationError, match=blames_href) as failure:
+        await import_feed_document(db_session, feed, source="test")
+
+    assert "'First' and 'Second'" in str(failure.value)
+    assert await count(db_session, Catalog) == 0
 
 
 async def test_a_catalog_removed_from_the_file_stays_recommended(

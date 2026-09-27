@@ -65,19 +65,27 @@ not store. Those are skipped, and the rest are kept: `["catalog", "start"]` stor
 | anything else, `self` and paging rels included | dropped |
 
 \* **`--subdivision` only accepts codes already in the `subdivisions` table.** That table is
-not a full copy of ISO 3166-2 — it holds the codes some catalog already uses, five at the
+not a full copy of ISO 3166-2. It holds the codes some catalog already uses, five at the
 time of writing. A valid code that is missing is refused with a message telling you to add
 it in a migration; see `migrations/versions/b41f7c9ade52_…` for the shape.
 
 **Your URL becomes `catalog`, never the feed's own `self`.** A remote feed's `self` is not
 something this registry trusts for anything.
 
-**The identity later imports match on is that `catalog` link, not `metadata.identifier`.**
+**For a catalog `add` created, the identity later imports match on is that `catalog` link.**
 Re-running `add` on the same URL finds the row it created the first time and updates it.
 No `identifier` is generated: the input schema does not require one, and the import derives
 `catalogs.id` as `uuid5(NAMESPACE_URL, <that URL>)`. So the id is a function of the URL you
-typed — the same URL gives the same id on any machine, and `--dry-run` twice produces
+typed, the same URL gives the same id on any machine, and `--dry-run` twice produces
 byte-identical documents. Change the URL and you get a second catalog, not an updated one.
+
+The href is the *fallback*, though, not the only rule. The shared import path matches on
+**`metadata.identifier` first when the document supplies one**, and only then on the
+`catalog`/`shelf` href (`resolve_existing_catalog`). `add` never supplies one, so it always
+takes the href branch. `data/recommended.json` does supply one for every entry, which is why a
+catalog in that file survives a feed-URL change as a single updated row while an `add`-created
+one does not. Adding an `identifier` to a document is how you opt into that; see
+[`development.md`](development.md) and ADR-038.
 
 `http://opds-spec.org/shelf` is the single alias accepted. OPDS 1.2 §6.1 defines the
 relation that way and gives it no short form. There is no generic prefix rule, so a rel that

@@ -46,7 +46,7 @@ def test_no_recommended_requires_a_file() -> None:
     """Without a file it would target `REGISTRY_SEED_FILE` and un-recommend the whole feed.
 
     `import_catalog_document` writes `recommended` unconditionally, so one command would flip
-    all of `data/recommended.json` out of `GET /` — the inverse of the mistake this flag exists
+    all of `data/recommended.json` out of `GET /`, the inverse of the mistake this flag exists
     to prevent, and it contradicts `seed_catalogs`' promise that unrecommending is manual.
     """
     with pytest.raises(SystemExit) as exit_info:
@@ -59,7 +59,7 @@ def test_a_missing_file_is_a_readable_message_not_a_database_error(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """`FileNotFoundError` is an `OSError`, and `cli/__main__.py` reports those as an unreachable
-    database — so a mistyped path used to print "Is it running? make up" and never name the file.
+    database, so a mistyped path used to print "Is it running? make up" and never name the file.
     """
     missing = tmp_path / "not-here.json"
 

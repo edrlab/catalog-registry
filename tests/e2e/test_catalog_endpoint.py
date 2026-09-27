@@ -73,7 +73,7 @@ async def test_a_not_recommended_catalog_is_readable_at_its_derived_id(
     """The `data/libraries.json` case, end to end and through HTTP.
 
     Absent from the feed, present at `/catalogs/{id}`, and the id is computable from the
-    catalog's `catalog` href without asking the database — which is the only reason Hadrien can
+    catalog's `catalog` href without asking the database, which is the only reason Hadrien can
     fetch one of these at all.
     """
     href = "https://www.lirtuel.be/v1/home.opds2"

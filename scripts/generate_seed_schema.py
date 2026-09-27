@@ -60,7 +60,7 @@ def accept_either_case(pattern: str) -> str:
     (`[A-Za-z]` → `[A-Za-za-z]`, harmless but redundant), and it would rewrite a literal `A-Z`
     outside a character class. Preferred over hardcoding the relaxed patterns because a literal
     would silently stop matching if upstream rewrote them, where this at least keeps applying;
-    `tests/unit/test_seed_schema.py` pins both current results.
+    `tests/unit/test_seed_identity.py` pins both current results.
     """
     return pattern.replace("A-Z", "A-Za-z")
 

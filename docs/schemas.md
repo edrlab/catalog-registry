@@ -177,7 +177,7 @@ the mistake. The seed validates against a **relaxed** variant:
 | the feed's "must contain a `self` link" constraint dropped | Same |
 | the same constraint dropped from every catalog | `self` is synthesised at render time |
 | `metadata.identifier` not required | The registry answers it. `catalogs.id` is derived from the identity href when the document omits it, then rendered back as `urn:uuid:{id}`, so requiring it would demand a value the author cannot compute (ADR-038) |
-| `country`/`subdivisions` accept lowercase | ISO 3166-1/-2 codes are case-insensitive and `data/libraries.json` writes `be`/`be-wal`. The import uppercases on ingest and two check constraints enforce the stored form — the arrangement R2 already describes for `language_tag` |
+| `country`/`subdivisions` accept lowercase | ISO 3166-1/-2 codes are case-insensitive and `data/libraries.json` writes `be`/`be-wal`. The import uppercases on ingest and two check constraints enforce the stored form, the arrangement R2 already describes for `language_tag` |
 
 Five, and nothing else. Everything else still applies. Enums, the BCP-47 pattern, `minItems` on
 `kind`, `additionalProperties: false`.
@@ -249,7 +249,7 @@ is not used.
 
 ## Where each schema is used
 
-Cited by **symbol, not line number** — an earlier version of this table pinned lines and every
+Cited by **symbol, not line number**. An earlier version of this table pinned lines and every
 one of them was wrong within a single branch.
 
 | Schema | Used at | For |
@@ -265,7 +265,7 @@ one of them was wrong within a single branch.
 | | `test_seed.py` → `test_the_seed_input_is_rejected_by_the_published_schema` | Asserts the seed file **fails** it, the tripwire |
 | | `validate_fixtures.py` → `FIXTURE_SCHEMAS` | `demo/index.json` and `demo/search.json` validate |
 | `generated/seed-input.schema.json` | `cli/seed.py` → `SEED_INPUT_SCHEMA`, used by `import_feed_document` | **Runtime.** Every seed run validates its input first |
-| | `validate_fixtures.py` → `SEED_INPUTS` | Every seed file present in the checkout validates, as a CI job. A file that is absent is reported as skipped — `data/libraries.json` arrives with upstream PR #13 |
+| | `validate_fixtures.py` → `SEED_INPUTS` | Every seed file present in the checkout validates, as a CI job. A file that is absent is reported as skipped; `data/libraries.json` arrives with upstream PR #13 |
 | `vendor/*` | Never referenced by name | Resolved automatically through `$ref` by `build_schema_registry()` |
 | all of them | `validate_schemas.py` → `main` | Every file is valid JSON and a valid draft-07 schema |
 

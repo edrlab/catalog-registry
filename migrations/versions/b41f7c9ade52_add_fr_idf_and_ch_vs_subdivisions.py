@@ -3,7 +3,7 @@
 `subdivisions` is not a full copy of ISO 3166-2. The initial migration seeds only the codes
 some catalog actually references, which was `BE-BRU`, `BE-VLG` and `BE-WAL`. `data/libraries.json`
 adds a Paris catalog covering Île-de-France and a Valais one covering the canton of Valais, and
-`fk_catalog_subdivisions_subdivision_code_subdivisions` rejects a code that is not here — so the
+`fk_catalog_subdivisions_subdivision_code_subdivisions` rejects a code that is not here, so the
 seed fails before it writes a row.
 
 Data only: no schema change, and `c8e1b73f2d04` is not edited (R6, forward-only). Every later
@@ -49,10 +49,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # A catalog referencing one of these would block the delete, which is the correct
-    # outcome: the reference has to go first.
-    op.execute(
-        sa.text("DELETE FROM subdivisions WHERE code IN :codes").bindparams(
-            sa.bindparam("codes", [code for code, *_ in SUBDIVISIONS], expanding=True)
-        )
-    )
+    """Deliberately a no-op. Deleting these rows could destroy data this migration never wrote.
+
+    `upgrade()` is `ON CONFLICT (code) DO NOTHING`, so a code an operator had already added by
+    hand is left exactly as it was and is *not* owned by this revision. A `DELETE ... WHERE code
+    IN (...)` on the way down cannot tell the two apart, so rolling back would remove somebody
+    else's row. Nothing here distinguishes them: there is no provenance column, and adding one to
+    a reference table for the sake of a downgrade is a worse trade than leaving two rows behind.
+
+    Leaving them is harmless. They are reference data with no catalog attached, which is the
+    whole reason the FK rejected them before this migration existed. Whoever genuinely needs
+    them gone can delete them by hand, having decided which are theirs.
+    """

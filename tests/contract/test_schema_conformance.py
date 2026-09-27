@@ -86,7 +86,7 @@ async def test_a_not_recommended_catalog_validates_against_catalog_schema(
 
     Only the catalogs *inside the feed* were validated. A not-recommended catalog appears in no
     feed, so after ADR-038 an entire data set (`data/libraries.json`) is rendered exclusively by
-    a path nothing schema-checked — including the `self` link this endpoint synthesises, which
+    a path nothing schema-checked, including the `self` link this endpoint synthesises, which
     `catalog.schema.json` requires via its `contains` constraint.
     """
     href = "https://library.example/unlisted.opds2"

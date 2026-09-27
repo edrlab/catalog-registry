@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 #: Seed inputs, validated against the relaxed schema and never the published one.
 #: `(path, schema, required)`. An optional file that is absent is reported as skipped rather than
-#: failing — `data/libraries.json` arrives with edrlab/catalog-registry#13, and this list is what
+#: failing. `data/libraries.json` arrives with edrlab/catalog-registry#13, and this list is what
 #: picks it up when it does. `required` exists so a **typo** in a path cannot skip quietly for
 #: ever: `demo/` always contributes fixtures, so the `checked == 0` backstop below would never
 #: notice one.
