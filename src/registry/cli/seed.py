@@ -177,7 +177,9 @@ def build_catalog(document: dict[str, Any], catalog_id: uuid.UUID, *, recommende
         title=metadata["title"],
         description=metadata.get("description"),
         color=CatalogColor(metadata.get("color", CatalogColor.GRAY.value)),
-        country_code=(metadata["country"].upper() if metadata.get("country") else None),
+        # No case folding. ISO 3166-1 is officially uppercase and the input schema enforces it,
+        # so a lowercase code is rejected in validation rather than quietly corrected here.
+        country_code=metadata.get("country"),
         city=metadata.get("city"),
         # Absent means NULL, not `global`. Storing an undeclared coverage as
         # `global` would assert worldwide reach on the catalog's behalf.
@@ -189,15 +191,17 @@ def build_catalog(document: dict[str, Any], catalog_id: uuid.UUID, *, recommende
             CatalogPublicationTypeRow(publication_type=PublicationType(value))
             for value in metadata.get("publicationTypes", ())
         ],
-        # Lowercase on ingest. The repository's own fixtures are already lowercase, so
-        # this is not defensive: BCP-47 declares tags case-insensitive and real producers do
-        # send `EN`. The check constraint rejects anything else, so a regression fails loudly.
+        # Languages are the one field still folded, and deliberately: BCP-47 writes a language
+        # subtag lowercase and a region subtag uppercase, `Accept-Language` arrives lowercase, and
+        # the published pattern accepts either case because the spec does (R2). Country and
+        # subdivision codes are *not* folded; their patterns admit uppercase only.
         languages=[
             CatalogLanguageRow(language_tag=normalise_language_tag(value))
             for value in metadata.get("supportedLanguages", ())
         ],
+        # Uppercase already, for the same reason as `country_code` above.
         subdivisions=[
-            CatalogSubdivisionRow(subdivision_code=value.upper())
+            CatalogSubdivisionRow(subdivision_code=value)
             for value in metadata.get("subdivisions", ())
         ],
         # One row per rel: a link declaring `["catalog", "start"]` is two relations to the
@@ -214,6 +218,41 @@ def build_catalog(document: dict[str, Any], catalog_id: uuid.UUID, *, recommende
             for rel in link_rels(link)
         ],
     )
+
+
+def assert_iso_codes_are_uppercase(document: dict[str, Any]) -> None:
+    """Refuse a lowercase `country` or `subdivisions` entry. Raises `ValidationError`.
+
+    ISO 3166-1 and 3166-2 codes are uppercase, and the registry enforces that rather than folding
+    it: a lowercase code in a data file is an authoring mistake its author should see, not
+    something the importer silently rewrites.
+
+    The generated input schema already rejects it, so for `seed` and `add` this check never fires.
+    It exists because the schema is only one of the ways into the write path. `build_catalog` and
+    `import_catalog_document` are public, called directly by tests today and by whatever drives
+    the back office later, and without this a lowercase code would reach Postgres and fail on
+    `ck_catalogs_country_uppercase` or `ck_catalog_subdivisions_subdivision_code_uppercase`, as an
+    `IntegrityError` naming a constraint instead of the value. Three layers, same answer at each:
+    the schema at the boundary, this in the core, the constraints in the database.
+
+    `supportedLanguages` is deliberately not checked here. BCP-47 declares case insignificant and
+    writes a region subtag uppercase, so `normalise_language_tag` folds those on ingest instead.
+    """
+    metadata = document["metadata"]
+    candidates: list[tuple[str, str]] = []
+    if (country := metadata.get("country")) is not None:
+        candidates.append(("country", country))
+    candidates.extend(("subdivisions", code) for code in metadata.get("subdivisions") or ())
+
+    offenders = [(field, value) for field, value in candidates if value != value.upper()]
+    if offenders:
+        detail = ", ".join(
+            f"{field} {value!r} should be {value.upper()!r}" for field, value in offenders
+        )
+        raise ValidationError(
+            f"{metadata['title']} has lowercase ISO codes: {detail}. These are uppercase by "
+            "specification and are enforced rather than converted, so fix them at the source."
+        )
 
 
 async def import_catalog_document(
@@ -244,6 +283,7 @@ async def import_catalog_document(
     # needs an order the seed file cannot express.
     if ordered_at is None:
         ordered_at = datetime.now(UTC)
+    assert_iso_codes_are_uppercase(document)
     identity_href = resolve_identity_href(document)
     catalog_id = resolve_catalog_id(document, identity_href)
     existing = await resolve_existing_catalog(session, document, identity_href, catalog_id)
@@ -350,7 +390,7 @@ async def assert_subdivisions_are_known(
     once, so an operator fixes one migration rather than rediscovering this per catalog.
     """
     requested = {
-        code.upper()
+        code
         for document in feed["catalogs"]
         for code in document["metadata"].get("subdivisions", ())
     }

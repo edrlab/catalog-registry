@@ -79,13 +79,11 @@ No `identifier` is generated: the input schema does not require one, and the imp
 typed, the same URL gives the same id on any machine, and `--dry-run` twice produces
 byte-identical documents. Change the URL and you get a second catalog, not an updated one.
 
-The href is the *fallback*, though, not the only rule. The shared import path matches on
-**`metadata.identifier` first when the document supplies one**, and only then on the
-`catalog`/`shelf` href (`resolve_existing_catalog`). `add` never supplies one, so it always
-takes the href branch. `data/recommended.json` does supply one for every entry, which is why a
-catalog in that file survives a feed-URL change as a single updated row while an `add`-created
-one does not. Adding an `identifier` to a document is how you opt into that; see
-[`development.md`](development.md) and ADR-038.
+The href is the *fallback*, not the only rule. The import matches on **`metadata.identifier`
+first when a document supplies one**, and on the `catalog`/`shelf` href otherwise. `add` never
+supplies one, so it always takes the href branch. Every entry in `data/recommended.json` does, which
+is why a catalog in that file survives a feed-URL change as one updated row while an `add`-created
+one becomes a second row. Adding an `identifier` is how you opt into that.
 
 `http://opds-spec.org/shelf` is the single alias accepted. OPDS 1.2 §6.1 defines the
 relation that way and gives it no short form. There is no generic prefix rule, so a rel that

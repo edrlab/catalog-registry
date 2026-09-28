@@ -10,7 +10,6 @@ that used to cover `has_browsable_rel` in `tests/unit/test_links.py`, before
 import uuid
 
 import pytest
-from scripts.generate_seed_schema import accept_either_case
 
 from registry.cli.seed import SEED_INPUT_SCHEMA, resolve_catalog_id, resolve_identity_href
 from registry.core.errors import ValidationError
@@ -19,20 +18,12 @@ from registry.core.schema_validation import build_schema_validator
 pytestmark = pytest.mark.unit
 
 
-def test_accept_either_case_widens_both_published_patterns() -> None:
-    """Pins the transform's result on the two patterns it is actually applied to.
-
-    It is a textual substitution, not a regex transform; see its docstring. If upstream
-    rewrites either pattern this is where the surprise shows up.
-    """
-    assert accept_either_case("^[A-Z]{2}$") == "^[A-Za-z]{2}$"
-    assert accept_either_case("^[A-Z]{2}-[A-Z0-9]{1,3}$") == "^[A-Za-z]{2}-[A-Za-z0-9]{1,3}$"
-
-
 def test_the_published_schema_still_demands_uppercase() -> None:
-    """The relaxation is input-only. `schema/catalog.schema.json` is upstream's contract and
-    validates *rendered output*, where codes are always uppercase. Reverting that file was the
-    point of the fix, so a regression here means the output tripwire is gone again."""
+    """Uppercase is the one accepted form, on input and on output alike.
+
+    `schema/catalog.schema.json` is upstream's contract and was never edited by this branch. The
+    input schema is generated from it and does not relax the pattern either, so this assertion and
+    `test_lowercase_codes_are_rejected_on_input` are the same rule seen from both ends."""
     published = build_schema_validator("catalog.schema.json")
     document = {
         "metadata": {
@@ -111,20 +102,49 @@ def test_a_supplied_identifier_wins_over_the_derived_one() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "metadata",
-    [
-        pytest.param({"country": "be", "subdivisions": ["be-wal"]}, id="lowercase"),
-        pytest.param({"country": "BE", "subdivisions": ["BE-WAL"]}, id="uppercase"),
-    ],
-)
-def test_the_seed_input_schema_accepts_either_case(metadata: dict[str, object]) -> None:
-    """Both, because the published schema used to accept only one and rejected real data."""
+def test_lowercase_codes_are_rejected_on_input() -> None:
+    """The generated input schema does not relax the case, because Hadrien asked it not to.
+
+    An earlier version of this branch widened both patterns to `[A-Za-z]` and folded the case in
+    `build_catalog`. That is reverted: one canonical form, enforced at import. The rejection has to
+    be asserted here as well as in the integration test, because this is the layer that produces
+    the message the author reads.
+    """
     feed = {
         "metadata": {"title": "Libraries"},
         "catalogs": [
             {
-                "metadata": {"title": "Either Case", "kind": ["public"], **metadata},
+                "metadata": {
+                    "title": "Lowercase",
+                    "kind": ["public"],
+                    "country": "be",
+                    "subdivisions": ["be-wal"],
+                },
+                "links": [{"href": "https://library.example/home.opds2", "rel": "catalog"}],
+            }
+        ],
+    }
+
+    messages = [
+        error.message for error in build_schema_validator(SEED_INPUT_SCHEMA).iter_errors(feed)
+    ]
+
+    assert any("'be' does not match" in message for message in messages)
+    assert any("'be-wal' does not match" in message for message in messages)
+
+
+def test_uppercase_codes_are_accepted_on_input() -> None:
+    """The other half, so the rejection above cannot pass by rejecting everything."""
+    feed = {
+        "metadata": {"title": "Libraries"},
+        "catalogs": [
+            {
+                "metadata": {
+                    "title": "Uppercase",
+                    "kind": ["public"],
+                    "country": "BE",
+                    "subdivisions": ["BE-WAL"],
+                },
                 "links": [{"href": "https://library.example/home.opds2", "rel": "catalog"}],
             }
         ],

@@ -10,8 +10,8 @@
         "color": "red",
         "supportedLanguages": ["fr"],
         "publicationTypes": ["ebook", "comic", "audiobook"],
-        "country": "fr",
-        "subdivisions": ["fr-idf"],
+        "country": "FR",
+        "subdivisions": ["FR-IDF"],
         "coverage": "subdivisions"
       },
       "links": [
@@ -34,8 +34,8 @@
         "color": "red",
         "supportedLanguages": ["fr", "en"],
         "publicationTypes": ["ebook", "comic"],
-        "country": "be",
-        "subdivisions": ["be-wal", "be-bru"],
+        "country": "BE",
+        "subdivisions": ["BE-WAL", "BE-BRU"],
         "coverage": "subdivisions"
       },
       "links": [
@@ -84,8 +84,8 @@
         "color": "yellow",
         "supportedLanguages": ["nl", "en", "fr"],
         "publicationTypes": ["ebook", "comic", "audiobook"],
-        "country": "be",
-        "subdivisions": ["be-vlg", "be-bru"],
+        "country": "BE",
+        "subdivisions": ["BE-VLG", "BE-BRU"],
         "coverage": "subdivisions"
       },
       "links": [
@@ -134,8 +134,8 @@
         "color": "red",
         "supportedLanguages": ["fr"],
         "publicationTypes": ["ebook", "comic", "audiobook"],
-        "country": "ch",
-        "subdivisions": ["ch-vs"],
+        "country": "CH",
+        "subdivisions": ["CH-VS"],
         "coverage": "subdivisions"
       },
       "links": [

@@ -168,9 +168,10 @@ shell on the development database.
 
 Constraints worth knowing, because they will reject your data rather than quietly accept it:
 
-- `language_tag` must be lowercase, `country_code` and `subdivision_code` uppercase. The
-  *input* schema accepts either case for all three and the import normalises them: ISO 3166
-  and BCP-47 both declare their codes case-insensitive, and real data arrives both ways
+- `country` and `subdivisions` must be **uppercase** (`BE`, `BE-WAL`). Lowercase is rejected on
+  import with a message naming the value, not silently corrected, so fix it in the source file
+- `language_tag` must be lowercase. Unlike the ISO codes it *is* normalised on import, because
+  BCP-47 treats case as insignificant and `Accept-Language` arrives lowercase
 - an `active` catalog must have a `published_at`
 - `templated` is only allowed on a `search` link
 - `(catalog_id, rel, href)` is unique across links
@@ -216,7 +217,7 @@ make revision m="drift check"
 ## The seed
 
 `data/recommended.json` is the seed source — presence in the file **is** the `recommended`
-flag. `demo/` is example output + contract-test corpus; `archive/` is out of scope currently.
+flag. `demo/` is example output + contract-test corpus.
 
 ```
 make seed          # idempotent

@@ -176,16 +176,18 @@ the mistake. The seed validates against a **relaxed** variant:
 | feed-level `links` not required | Nothing to link to yet |
 | the feed's "must contain a `self` link" constraint dropped | Same |
 | the same constraint dropped from every catalog | `self` is synthesised at render time |
-| `metadata.identifier` not required | The registry answers it. `catalogs.id` is derived from the identity href when the document omits it, then rendered back as `urn:uuid:{id}`, so requiring it would demand a value the author cannot compute (ADR-038) |
-| `country`/`subdivisions` accept lowercase | ISO 3166-1/-2 codes are case-insensitive and `data/libraries.json` writes `be`/`be-wal`. The import uppercases on ingest and two check constraints enforce the stored form, the arrangement R2 already describes for `language_tag` |
+| `metadata.identifier` not required | The registry supplies it. `catalogs.id` is derived from the identity href when a document omits it, then rendered back as `urn:uuid:{id}`, so requiring it on input would demand a value the author cannot compute |
 
-Five, and nothing else. Everything else still applies. Enums, the BCP-47 pattern, `minItems` on
+Four, and nothing else. Everything else still applies. Enums, the BCP-47 pattern, `minItems` on
 `kind`, `additionalProperties: false`.
 
-**The last two are input-only on purpose.** `schema/catalog.schema.json` still requires
-`identifier` and still demands uppercase, because it validates *rendered output*, where both hold
-without exception. Relaxing them there would delete a working R7 tripwire and be undone by the
-next `git merge upstream/main`.
+`schema/catalog.schema.json` still requires `identifier`, because it validates rendered output,
+where every catalog has one.
+
+**Case is not relaxed.** `country` and `subdivisions` are uppercase on input as well as output:
+ISO 3166-1 and 3166-2 codes are uppercase, and a lowercase one is rejected rather than converted.
+`supportedLanguages` is the exception and is lowercased on import, because BCP-47 treats case as
+insignificant and `Accept-Language` arrives lowercase.
 
 `tests/integration/test_seed.py::test_the_seed_input_is_rejected_by_the_published_schema` is
 the tripwire: it asserts the seed file **fails** the published schema. If it ever starts

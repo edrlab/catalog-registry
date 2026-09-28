@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -212,21 +212,22 @@ async def test_a_not_recommended_import_stays_out_of_the_feed_query(
     assert await CatalogRepository(db_session).fetch_catalog_by_id(catalog.id) is not None
 
 
-async def test_country_and_subdivisions_are_uppercased_on_ingest(
+async def test_uppercase_country_and_subdivisions_are_stored_verbatim(
     db_session: AsyncSession,
 ) -> None:
-    """ISO 3166-1 and 3166-2 are canonically uppercase; the input schema accepts either case.
+    """No case folding. The codes reach the database exactly as the file wrote them.
 
-    `data/libraries.json` writes `be` and `be-wal`. The mirror of
-    `test_language_tags_are_lowercased_on_ingest`: normalise on ingest, enforce in the
-    database, stay permissive at the boundary.
+    Hadrien, 2026-09-29, on which case to standardise: "I think that officially it's all uppercase
+    for ISO 3166-2", and "it's better to enforce this at import than convert". So uppercase is the
+    only accepted form, the input schema rejects anything else, and nothing here calls `.upper()`.
+    `test_lowercase_codes_are_rejected_rather_than_converted` is the other half.
     """
     document = {
         "metadata": {
-            "title": "Lowercase Codes",
+            "title": "Uppercase Codes",
             "kind": ["public"],
-            "country": "be",
-            "subdivisions": ["be-wal", "be-bru"],
+            "country": "BE",
+            "subdivisions": ["BE-WAL", "BE-BRU"],
         },
         "links": [{"href": "https://library.example/home.opds2", "rel": "catalog"}],
     }
@@ -235,6 +236,131 @@ async def test_country_and_subdivisions_are_uppercased_on_ingest(
 
     assert catalog.country_code == "BE"
     assert sorted(row.subdivision_code for row in catalog.subdivisions) == ["BE-BRU", "BE-WAL"]
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    [
+        pytest.param({"country": "be"}, "country 'be' should be 'BE'", id="country-lower"),
+        pytest.param({"country": "Be"}, "country 'Be' should be 'BE'", id="country-mixed"),
+        pytest.param(
+            {"country": "BE", "subdivisions": ["be-wal"]},
+            "subdivisions 'be-wal' should be 'BE-WAL'",
+            id="subdivision-lower",
+        ),
+        pytest.param(
+            {"country": "BE", "subdivisions": ["Be-Wal"]},
+            "subdivisions 'Be-Wal' should be 'BE-WAL'",
+            id="subdivision-mixed",
+        ),
+        pytest.param(
+            {"country": "BE", "subdivisions": ["BE-BRU", "be-wal"]},
+            "subdivisions 'be-wal' should be 'BE-WAL'",
+            id="one-bad-among-good",
+        ),
+    ],
+)
+async def test_the_core_refuses_lowercase_codes_even_without_schema_validation(
+    db_session: AsyncSession, metadata: dict[str, object], expected: str
+) -> None:
+    """Layer two. `import_catalog_document` does not validate against the schema, so it needs its
+    own check, or a caller that skips validation reaches Postgres and fails on a check constraint
+    naming the constraint instead of the value.
+
+    Every case here would be caught by the schema on the `seed` and `add` paths. The point is that
+    it is caught anyway, with the same message, by the only function every write goes through.
+    """
+    document = {
+        "metadata": {"title": "Lowercase Codes", "kind": ["public"], **metadata},
+        "links": [{"href": "https://library.example/home.opds2", "rel": "catalog"}],
+    }
+
+    with pytest.raises(ValidationError, match="lowercase ISO codes") as failure:
+        await import_catalog_document(db_session, document, recommended=False)
+
+    assert expected in str(failure.value)
+    assert await count(db_session, Catalog) == 0
+
+
+async def test_lowercase_codes_are_rejected_by_input_validation(db_session: AsyncSession) -> None:
+    """Layer one, and the one an author actually hits: the schema, naming both fields at once."""
+    feed = {
+        "metadata": {"title": "Lowercase"},
+        "catalogs": [
+            {
+                "metadata": {
+                    "title": "Lowercase Codes",
+                    "kind": ["public"],
+                    "country": "be",
+                    "subdivisions": ["be-wal"],
+                },
+                "links": [{"href": "https://library.example/home.opds2", "rel": "catalog"}],
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError, match="not valid seed input") as failure:
+        await import_feed_document(db_session, feed, source="test", recommended=False)
+
+    message = str(failure.value)
+    assert "'be' does not match" in message
+    assert "'be-wal' does not match" in message
+    assert await count(db_session, Catalog) == 0
+
+
+@pytest.mark.parametrize(
+    ("table", "columns", "values"),
+    [
+        pytest.param(
+            "catalogs",
+            "id, status, recommended, title, country_code, published_at",
+            "'0b6e5f2a-1111-4111-8111-111111111111', 'active', false, 'Lower', 'be', now()",
+            id="catalogs-country",
+        ),
+        pytest.param(
+            "catalog_subdivisions",
+            "catalog_id, subdivision_code",
+            "'0b6e5f2a-2222-4222-8222-222222222222', 'be-wal'",
+            id="catalog-subdivisions",
+        ),
+    ],
+)
+async def test_the_database_is_the_last_line_of_defence(
+    db_session: AsyncSession, table: str, columns: str, values: str
+) -> None:
+    """Layer three. Asserted with raw SQL, because that is the only way to get past layers one and
+    two, and a constraint nothing exercises is a constraint that can be dropped by accident.
+
+    `catalog_subdivisions` also has a foreign key to `subdivisions`, and either constraint failing
+    is the correct outcome, so this asserts an `IntegrityError` rather than naming one of them.
+    """
+    with pytest.raises(IntegrityError):
+        await db_session.execute(text(f"INSERT INTO {table} ({columns}) VALUES ({values})"))
+    await db_session.rollback()
+
+
+async def test_an_uppercase_language_tag_is_still_lowercased(db_session: AsyncSession) -> None:
+    """Languages keep the opposite treatment, and that is not an oversight.
+
+    BCP-47 says case is insignificant and writes regions uppercase, `Accept-Language` arrives
+    lowercase, and the feed compares tags as strings. So language tags are folded on ingest while
+    ISO codes are refused. A regression that "made case handling consistent" would break the
+    language bucket silently, which is why this sits next to the tests above.
+    """
+    document = {
+        "metadata": {
+            "title": "Uppercase Language",
+            "kind": ["public"],
+            "country": "BE",
+            "supportedLanguages": ["FR", "en-GB"],
+        },
+        "links": [{"href": "https://library.example/home.opds2", "rel": "catalog"}],
+    }
+    catalog, _ = await import_catalog_document(db_session, document, recommended=False)
+    await db_session.commit()
+
+    assert sorted(row.language_tag for row in catalog.languages) == ["en-gb", "fr"]
+    assert catalog.country_code == "BE"
 
 
 @pytest.mark.parametrize("second_rel", [LinkRel.CATALOG, LinkRel.SHELF])
@@ -451,8 +577,8 @@ async def test_a_libraries_shaped_document_imports_through_the_validating_path(
                         "metadata": {
                             "title": "Bibliothèque numérique de Paris",
                             "kind": ["public"],
-                            "country": "fr",
-                            "subdivisions": ["fr-idf"],
+                            "country": "FR",
+                            "subdivisions": ["FR-IDF"],
                             "coverage": "subdivisions",
                         },
                         "links": [{"href": href, "type": "text/html", "rel": "catalog"}],
@@ -461,8 +587,8 @@ async def test_a_libraries_shaped_document_imports_through_the_validating_path(
                         "metadata": {
                             "title": "Médiathèque Valais",
                             "kind": ["public"],
-                            "country": "ch",
-                            "subdivisions": ["ch-vs"],
+                            "country": "CH",
+                            "subdivisions": ["CH-VS"],
                         },
                         "links": [
                             {"href": "https://library.example/valais.opds2", "rel": "catalog"}
@@ -504,8 +630,8 @@ async def test_an_unseeded_subdivision_is_a_readable_message(db_session: AsyncSe
                 "metadata": {
                     "title": "Dutch Library",
                     "kind": ["public"],
-                    "country": "nl",
-                    "subdivisions": ["nl-zh", "nl-ut"],
+                    "country": "NL",
+                    "subdivisions": ["NL-ZH", "NL-UT"],
                 },
                 "links": [{"href": "https://library.example/nl.opds2", "rel": "catalog"}],
             }
@@ -527,8 +653,8 @@ async def test_a_seeded_subdivision_passes_the_check(db_session: AsyncSession) -
                 "metadata": {
                     "title": "Valais",
                     "kind": ["public"],
-                    "country": "ch",
-                    "subdivisions": ["ch-vs"],
+                    "country": "CH",
+                    "subdivisions": ["CH-VS"],
                 },
                 "links": [{"href": "https://library.example/valais.opds2", "rel": "catalog"}],
             }

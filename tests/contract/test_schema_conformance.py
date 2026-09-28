@@ -91,7 +91,7 @@ async def test_a_not_recommended_catalog_validates_against_catalog_schema(
     """
     href = "https://library.example/unlisted.opds2"
     document = {
-        "metadata": {"title": "Unlisted Library", "kind": ["public"], "country": "be"},
+        "metadata": {"title": "Unlisted Library", "kind": ["public"], "country": "BE"},
         "links": [{"href": href, "rel": "catalog"}],
     }
     await import_catalog_document(db_session, document, recommended=False)

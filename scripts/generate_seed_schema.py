@@ -7,30 +7,29 @@ authoring time. The service synthesises those at render time, and the contract t
 the output, which is where it matters.
 
 The relaxed variant is **derived, not hand-written**, so it cannot drift from the published
-schema when Hadrien edits it. Five relaxations, and nothing else:
+schema when Hadrien edits it. Four relaxations, and nothing else:
 
 1. feed-level `links` is not required
 2. the feed's "must contain a `self` link" constraint is dropped
 3. the same `self` constraint is dropped from every catalog
 4. `metadata.identifier` is not required
-5. `metadata.country` and `metadata.subdivisions` accept lowercase as well as uppercase
 
 The fourth: the field is not authored, it is answered by the registry. `catalogs.id` is derived
 from the identity href when the document omits an identifier, and rendered back out as
 `urn:uuid:{id}`, so requiring it on input would demand a value the author has no way to compute.
 Supplying one is still allowed, and still wins.
 
-The fifth: ISO 3166-1 and 3166-2 declare their codes case-insensitive and `data/libraries.json`
-writes `be`/`be-wal`, so rejecting them on *input* rejects valid data. `cli/seed.py` uppercases
-both on ingest and `ck_catalogs_country_uppercase` /
-`ck_catalog_subdivisions_subdivision_code_uppercase` enforce the stored form, which is the
-arrangement R2 already describes for `language_tag`.
+It is **input-only, and belongs here rather than in `schema/catalog.schema.json`**. That file is
+upstream's contract (`docs/schemas.md`: "Hadrien owns. Never edit here"), it is what validates
+*rendered output*, and every rendered catalog does carry an identifier. Relaxing it there would
+delete a working output tripwire and be undone by the next `git merge upstream/main`.
 
-Both relaxations are **input-only, and belong here rather than in `schema/catalog.schema.json`**.
-That file is upstream's contract (`docs/schemas.md`: "Hadrien owns. Never edit here"), it is what
-validates *rendered output*, and every rendered catalog does carry an identifier and does carry
-uppercase codes. Relaxing it there would delete a working output tripwire and be undone by the
-next `git merge upstream/main`.
+**Case is deliberately not relaxed.** `country` and `subdivisions` are uppercase on input as well
+as on output. Hadrien, 2026-09-29: ISO 3166-2 is officially uppercase, and "it is better to enforce
+this at import than convert". So a lowercase code is rejected here, by the published pattern, with
+a message naming the field; `cli/seed.py` does no case folding for either. `supportedLanguages` is
+the exception and stays lowercase-normalised, because BCP-47 writes languages lowercase and regions
+uppercase, and `Accept-Language` arrives lowercase (R2).
 
 Everything else the published schemas assert. Enums, the BCP-47 pattern, `minItems` on
 `kind`, `additionalProperties: false` on `metadata`, still applies.
@@ -51,37 +50,14 @@ BANNER = (
 )
 
 
-def accept_either_case(pattern: str) -> str:
-    """Widen the `A-Z` ranges in *pattern* so it accepts lowercase too.
-
-    A textual substitution, which is right for the two patterns it is applied to
-    (`^[A-Z]{2}$` and `^[A-Z]{2}-[A-Z0-9]{1,3}$`) and is **not** a general regex transform. It
-    would narrow a negated class (`[^A-Z]` → `[^A-Za-z]`), it is not idempotent
-    (`[A-Za-z]` → `[A-Za-za-z]`, harmless but redundant), and it would rewrite a literal `A-Z`
-    outside a character class. Preferred over hardcoding the relaxed patterns because a literal
-    would silently stop matching if upstream rewrote them, where this at least keeps applying;
-    `tests/unit/test_seed_identity.py` pins both current results.
-    """
-    return pattern.replace("A-Z", "A-Za-z")
-
-
 def relax_catalog(catalog_schema: dict[str, Any]) -> dict[str, Any]:
-    """Drop the `self` and `metadata.identifier` requirements, and the uppercase-only patterns."""
+    """Drop the `self` and `metadata.identifier` requirements. Patterns are left untouched."""
     relaxed = json.loads(json.dumps(catalog_schema))
     relaxed.pop("$id", None)
     relaxed["properties"]["links"].pop("contains", None)
 
     metadata = relaxed["properties"]["metadata"]
     metadata["required"] = [name for name in metadata["required"] if name != "identifier"]
-
-    # Defensively, like the `.pop(..., None)` relaxations above: if upstream ever replaces a
-    # pattern with an `enum` of ISO codes, `make seed-schema` should not die on a `KeyError`.
-    for schema in (
-        (properties := metadata["properties"])["country"],
-        properties["subdivisions"]["items"],
-    ):
-        if "pattern" in schema:
-            schema["pattern"] = accept_either_case(schema["pattern"])
     return relaxed
 
 

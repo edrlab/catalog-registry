@@ -78,7 +78,7 @@ async def test_a_not_recommended_catalog_is_readable_at_its_derived_id(
     """
     href = "https://www.lirtuel.be/v1/home.opds2"
     document = {
-        "metadata": {"title": "Lirtuel", "kind": ["public"], "country": "be"},
+        "metadata": {"title": "Lirtuel", "kind": ["public"], "country": "BE"},
         "links": [{"href": href, "rel": "catalog"}],
     }
     await import_catalog_document(db_session, document, recommended=False)
