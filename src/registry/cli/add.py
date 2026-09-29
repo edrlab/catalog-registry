@@ -24,7 +24,7 @@ from collections.abc import Sequence
 from typing import Any, override
 from urllib.parse import urlsplit
 
-from registry.cli.seed import import_feed_document
+from registry.cli.seed import assert_iso_codes_are_uppercase, import_feed_document
 from registry.core.config import Settings
 from registry.core.errors import ValidationError
 from registry.db.session import build_session_factory, create_database_engine
@@ -246,14 +246,14 @@ def main(argv: Sequence[str] = ()) -> int:
     parser.add_argument("--color", choices=[color.value for color in CatalogColor])
     parser.add_argument("--description")
     parser.add_argument("--city")
-    parser.add_argument("--country", help="ISO 3166-1 alpha-2")
+    parser.add_argument("--country", help="ISO 3166-1 alpha-2, uppercase: BE")
     parser.add_argument("--coverage", choices=[scope.value for scope in CoverageScope])
     parser.add_argument("--language", action="append", help="BCP-47; repeatable")
     parser.add_argument(
         "--subdivision",
         action="append",
-        help="ISO 3166-2, repeatable. Must already be in the `subdivisions` table, which "
-        "holds only the codes some catalog uses; a missing one is refused with the remedy",
+        help="ISO 3166-2, uppercase, repeatable: BE-WAL. Must already be in the `subdivisions` "
+        "table, which holds only the codes some catalog uses; a missing one is refused",
     )
     parser.add_argument(
         "--publication-type",
@@ -280,6 +280,9 @@ def main(argv: Sequence[str] = ()) -> int:
         subdivisions=arguments.subdivision,
         publicationTypes=arguments.publication_type,
     )
+    # Before --dry-run, so a lowercase code fails there too, and before the schema, so it reads as
+    # "country 'be' should be 'BE'" rather than a regex.
+    assert_iso_codes_are_uppercase(document)
 
     if arguments.dry_run:
         print(json.dumps(document, indent=2, ensure_ascii=False))

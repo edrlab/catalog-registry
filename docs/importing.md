@@ -33,8 +33,8 @@ kind of institution this is*, no OPDS document expresses that, so the rest is fl
 --kind              open | public | academic | school | specialized   (repeatable, required)
 --color             gray | red | yellow | blue | green | purple | orange | pink
 --description       free text
---language          BCP-47, repeatable        --country      ISO 3166-1 alpha-2
---subdivision       ISO 3166-2, repeatable*   --city         free text
+--language          BCP-47, repeatable        --country      ISO 3166-1 alpha-2, uppercase
+--subdivision       ISO 3166-2, upper, repeat* --city        free text
 --coverage          global | country | subdivisions | local
 --publication-type  ebook | audiobook | comic | newspaper | magazine | journal | article
 --dry-run           print the document, write nothing
