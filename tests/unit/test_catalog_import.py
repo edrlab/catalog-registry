@@ -58,6 +58,9 @@ def test_remote_rels_map_onto_the_registry_vocabulary(
     assert normalise_remote_rel(rel) is expected
 
 
+FEED_STUB = {"metadata": {"title": "Stub Library"}, "links": []}
+
+
 def test_the_operators_url_becomes_the_catalog_link() -> None:
     document = build_catalog_document(OPDS_FEED, FEED_URL, kind=["public"])
 
@@ -76,9 +79,9 @@ def test_templated_survives_and_empty_editorial_fields_are_dropped() -> None:
     search = next(link for link in document["links"] if link["rel"] == "search")
     assert search["templated"] is True
     # `additionalProperties: false` on metadata means a null is not merely useless, it is
-    # invalid, so absent flags must not become keys. `identifier` is always present: it's
-    # generated, not an editorial flag.
-    assert set(document["metadata"]) == {"title", "identifier", "kind"}
+    # invalid, so absent flags must not become keys. No `identifier` either: the import derives
+    # `catalogs.id` from the feed URL, so generating one here would only discard information.
+    assert set(document["metadata"]) == {"title", "kind"}
 
 
 def test_a_feed_without_a_title_is_refused() -> None:
@@ -96,6 +99,42 @@ def test_a_deliberate_error_is_printed_as_a_message(
 
     assert cli_main() == 1
     assert "not an http(s) URL" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("flags", "expected"),
+    [
+        pytest.param(["--country", "be"], "country 'be' should be 'BE'", id="country"),
+        pytest.param(
+            ["--country", "BE", "--subdivision", "be-wal"],
+            "subdivisions 'be-wal' should be 'BE-WAL'",
+            id="subdivision",
+        ),
+    ],
+)
+@pytest.mark.parametrize("dry_run", [True, False], ids=["dry-run", "real-run"])
+def test_add_refuses_lowercase_codes_with_a_readable_message(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    flags: list[str],
+    expected: str,
+    dry_run: bool,
+) -> None:
+    """`make add --country be` used to say `'be' does not match '^[A-Z]{2}$'`: a regex, not advice.
+
+    Checked before `--dry-run` prints anything, so a preview cannot show a document the real run
+    would then reject, and before the schema, so the message says what to type. The real run has to
+    fail before it reaches the database, which is why no database is set up here.
+    """
+    monkeypatch.setattr("registry.cli.add.download_feed_document", lambda _url: FEED_STUB)
+    argv = ["registry.cli", "add", "https://library.example/opds", "--kind", "public", *flags]
+    monkeypatch.setattr(sys, "argv", [*argv, *(["--dry-run"] if dry_run else [])])
+
+    assert cli_main() == 1
+
+    captured = capsys.readouterr()
+    assert expected in captured.err
+    assert captured.out == ""
 
 
 def test_an_unreachable_database_explains_itself(

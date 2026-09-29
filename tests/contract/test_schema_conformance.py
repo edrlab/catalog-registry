@@ -10,11 +10,14 @@ nothing else does:
 """
 
 import json
+import uuid
 from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from registry.cli.seed import import_catalog_document
 from registry.core.config import Settings
 from registry.core.constants import OPDS_CATALOG_MEDIA_TYPE
 from registry.core.schema_validation import build_schema_validator
@@ -30,7 +33,9 @@ async def test_the_top_level_feed_validates_against_feed_schema(
 ) -> None:
     response = await client.get("/")
 
-    errors = sorted(build_schema_validator("feed.schema.json").iter_errors(response.json()))
+    errors = sorted(
+        build_schema_validator("feed.schema.json").iter_errors(response.json()), key=str
+    )
     assert not errors, [error.message for error in errors]
 
 
@@ -41,7 +46,7 @@ async def test_every_catalog_validates_against_catalog_schema(
     validator = build_schema_validator("catalog.schema.json")
 
     for catalog in response.json()["catalogs"]:
-        errors = sorted(validator.iter_errors(catalog))
+        errors = sorted(validator.iter_errors(catalog), key=str)
         assert not errors, [catalog["metadata"]["title"], [e.message for e in errors]]
 
 
@@ -52,16 +57,53 @@ async def test_the_rendered_identifier_is_the_catalog_id(
 
     Asserted against the `self` link, which the renderer builds from the same id: if the two
     ever disagree, a client following `self` lands on a catalog whose identifier is not the
-    one it just read. The hand-assigned values in `data/recommended.json` are deliberately
-    *not* what comes back — the seed reads past them.
+    one it just read.
+
+    The hand-assigned values in `data/recommended.json` **are** what comes back, which is the
+    point of ADR-038 and is asserted here against the file itself. Under ADR-037 they were read
+    past and discarded, so an identifier Hadrien wrote down resolved to nothing.
     """
     response = await client.get("/")
 
     catalogs = response.json()["catalogs"]
     assert catalogs, "nothing was seeded, so this asserts nothing"
+    seeded = json.loads((REPO_ROOT / "data" / "recommended.json").read_text(encoding="utf-8"))
+    authored = {
+        entry["metadata"]["title"]: entry["metadata"]["identifier"] for entry in seeded["catalogs"]
+    }
+
     for catalog in catalogs:
         self_href = next(link["href"] for link in catalog["links"] if link["rel"] == "self")
-        assert catalog["metadata"]["identifier"] == f"urn:uuid:{self_href.rsplit('/', 1)[1]}"
+        identifier = catalog["metadata"]["identifier"]
+        assert identifier == f"urn:uuid:{self_href.rsplit('/', 1)[1]}"
+        assert identifier == authored[catalog["metadata"]["title"]]
+
+
+async def test_a_not_recommended_catalog_validates_against_catalog_schema(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """R7 for `GET /catalogs/{id}`, which no contract test reached before.
+
+    Only the catalogs *inside the feed* were validated. A not-recommended catalog appears in no
+    feed, so after ADR-038 an entire data set (`data/libraries.json`) is rendered exclusively by
+    a path nothing schema-checked, including the `self` link this endpoint synthesises, which
+    `catalog.schema.json` requires via its `contains` constraint.
+    """
+    href = "https://library.example/unlisted.opds2"
+    document = {
+        "metadata": {"title": "Unlisted Library", "kind": ["public"], "country": "BE"},
+        "links": [{"href": href, "rel": "catalog"}],
+    }
+    await import_catalog_document(db_session, document, recommended=False)
+    await db_session.commit()
+
+    response = await client.get(f"/catalogs/{uuid.uuid5(uuid.NAMESPACE_URL, href)}")
+
+    assert response.status_code == 200
+    errors = sorted(
+        build_schema_validator("catalog.schema.json").iter_errors(response.json()), key=str
+    )
+    assert not errors, [error.message for error in errors]
 
 
 async def test_an_empty_feed_still_validates(client: AsyncClient) -> None:
@@ -69,7 +111,9 @@ async def test_an_empty_feed_still_validates(client: AsyncClient) -> None:
     response = await client.get("/")
 
     assert response.json()["catalogs"] == []
-    errors = sorted(build_schema_validator("feed.schema.json").iter_errors(response.json()))
+    errors = sorted(
+        build_schema_validator("feed.schema.json").iter_errors(response.json()), key=str
+    )
     assert not errors, [error.message for error in errors]
 
 

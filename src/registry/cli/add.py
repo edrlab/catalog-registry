@@ -20,12 +20,11 @@ import json
 import socket
 import sys
 import urllib.request
-import uuid
 from collections.abc import Sequence
 from typing import Any, override
 from urllib.parse import urlsplit
 
-from registry.cli.seed import import_feed_document
+from registry.cli.seed import assert_iso_codes_are_uppercase, import_feed_document
 from registry.core.config import Settings
 from registry.core.errors import ValidationError
 from registry.db.session import build_session_factory, create_database_engine
@@ -206,9 +205,10 @@ def build_catalog_document(feed: dict[str, Any], url: str, **editorial: Any) -> 
             imported["templated"] = True
         links.append(imported)
 
-    # The seed input schema requires `metadata.identifier`, so one is generated to satisfy it.
-    # The import discards the value: the registry renders `identifier` from `catalogs.id`.
-    metadata: dict[str, Any] = {"title": title.strip(), "identifier": f"urn:uuid:{uuid.uuid4()}"}
+    # No `identifier` is generated. The seed input schema no longer requires one, and the
+    # import derives `catalogs.id` from this document's `catalog` href, which is *url*, so
+    # a re-`add` of the same feed lands on the same id instead of a fresh random one.
+    metadata: dict[str, Any] = {"title": title.strip()}
     metadata.update({key: value for key, value in editorial.items() if value})
     return {"metadata": metadata, "links": links}
 
@@ -246,10 +246,15 @@ def main(argv: Sequence[str] = ()) -> int:
     parser.add_argument("--color", choices=[color.value for color in CatalogColor])
     parser.add_argument("--description")
     parser.add_argument("--city")
-    parser.add_argument("--country", help="ISO 3166-1 alpha-2")
+    parser.add_argument("--country", help="ISO 3166-1 alpha-2, uppercase: BE")
     parser.add_argument("--coverage", choices=[scope.value for scope in CoverageScope])
     parser.add_argument("--language", action="append", help="BCP-47; repeatable")
-    parser.add_argument("--subdivision", action="append", help="ISO 3166-2; repeatable")
+    parser.add_argument(
+        "--subdivision",
+        action="append",
+        help="ISO 3166-2, uppercase, repeatable: BE-WAL. Must already be in the `subdivisions` "
+        "table, which holds only the codes some catalog uses; a missing one is refused",
+    )
     parser.add_argument(
         "--publication-type",
         action="append",
@@ -262,6 +267,19 @@ def main(argv: Sequence[str] = ()) -> int:
         help="print the document that would be imported and write nothing",
     )
     arguments = parser.parse_args(argv)
+    # Before the download: the flags are the only source of these codes, so a typo should not cost
+    # a network round trip. Before `--dry-run` prints anything, so a preview cannot show a document
+    # the real run would then reject, and before the schema, so it reads "country 'be' should be
+    # 'BE'" rather than as a regex.
+    assert_iso_codes_are_uppercase(
+        {
+            "metadata": {
+                "title": arguments.url,
+                "country": arguments.country,
+                "subdivisions": arguments.subdivision,
+            }
+        }
+    )
     document = build_catalog_document(
         download_feed_document(arguments.url),
         arguments.url,

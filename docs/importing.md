@@ -33,8 +33,8 @@ kind of institution this is*, no OPDS document expresses that, so the rest is fl
 --kind              open | public | academic | school | specialized   (repeatable, required)
 --color             gray | red | yellow | blue | green | purple | orange | pink
 --description       free text
---language          BCP-47, repeatable        --country      ISO 3166-1 alpha-2
---subdivision       ISO 3166-2, repeatable    --city         free text
+--language          BCP-47, repeatable        --country      ISO 3166-1 alpha-2, uppercase
+--subdivision       ISO 3166-2, upper, repeat* --city        free text
 --coverage          global | country | subdivisions | local
 --publication-type  ebook | audiobook | comic | newspaper | magazine | journal | article
 --dry-run           print the document, write nothing
@@ -64,14 +64,26 @@ not store. Those are skipped, and the rest are kept: `["catalog", "start"]` stor
 | `profile`, `icon`, `alternate`, `authenticate` | unchanged |
 | anything else, `self` and paging rels included | dropped |
 
+\* **`--subdivision` only accepts codes already in the `subdivisions` table.** That table is
+not a full copy of ISO 3166-2. It holds the codes some catalog already uses, five at the
+time of writing. A valid code that is missing is refused with a message telling you to add
+it in a migration; see `migrations/versions/b41f7c9ade52_…` for the shape.
+
 **Your URL becomes `catalog`, never the feed's own `self`.** A remote feed's `self` is not
 something this registry trusts for anything.
 
-**The identity later imports match on is that `catalog` link, not `metadata.identifier`.**
+**For a catalog `add` created, the identity later imports match on is that `catalog` link.**
 Re-running `add` on the same URL finds the row it created the first time and updates it.
-An `identifier` is still generated (`uuid.uuid4()`) because the seed input schema requires
-the field, but the import discards it: the registry renders `metadata.identifier` from
-`catalogs.id`. Change the URL and you get a second catalog, not an updated one.
+No `identifier` is generated: the input schema does not require one, and the import derives
+`catalogs.id` as `uuid5(NAMESPACE_URL, <that URL>)`. So the id is a function of the URL you
+typed, the same URL gives the same id on any machine, and `--dry-run` twice produces
+byte-identical documents. Change the URL and you get a second catalog, not an updated one.
+
+The href is the *fallback*, not the only rule. The import matches on **`metadata.identifier`
+first when a document supplies one**, and on the `catalog`/`shelf` href otherwise. `add` never
+supplies one, so it always takes the href branch. Every entry in `data/recommended.json` does, which
+is why a catalog in that file survives a feed-URL change as one updated row while an `add`-created
+one becomes a second row. Adding an `identifier` is how you opt into that.
 
 `http://opds-spec.org/shelf` is the single alias accepted. OPDS 1.2 §6.1 defines the
 relation that way and gives it no short form. There is no generic prefix rule, so a rel that

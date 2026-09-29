@@ -18,7 +18,7 @@ export DB_PORT
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup env enums seed-schema up down clean run seed add seed-sample migrate revision psql \
+.PHONY: help setup env enums seed-schema up down clean run seed seed-libraries seed-sample add migrate revision psql \
         test lint fmt bench check-db schema-check docker-build docker-run logs stop
 
 # Self-documenting: a target appears here when its line carries a `## ` description, and
@@ -94,6 +94,12 @@ run:  ## Run the API on the host instead of in Docker (needs make up)
 
 seed:  ## Import data/recommended.json into the database (needs make up)
 	uv run python -m registry.cli seed
+
+# Active but not recommended: real published catalogs, reachable at /catalogs/{id}, absent
+# from the top-level feed. The file is the only difference from `seed` above. Run `make seed`
+# too, they are separate data sets.
+seed-libraries:  ## Import data/libraries.json, not recommended (needs make up)
+	uv run python -m registry.cli seed data/libraries.json --no-recommended
 
 # The editorial fields are not in anyone's feed, so they are flags. --dry-run prints the
 # document and writes nothing.

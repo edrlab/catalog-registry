@@ -135,7 +135,6 @@
             },
             "required": [
               "title",
-              "identifier",
               "kind"
             ]
           },

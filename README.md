@@ -36,6 +36,7 @@ make            # list every target, grouped
 make setup      # uv sync, then .env from .env.example
 make up         # database, migrations, API on http://localhost:8000
 make seed       # the recommended catalogs for testing locally
+make seed-libraries  # the library data set, not recommended (needs data/libraries.json)
 make down       # stop, keep the data
 make clean      # stop, drop the volume
 ```
@@ -71,14 +72,14 @@ appears as soon as its line carries a `## description`.
 
 ## Where the data comes from
 
-Postgres, with eight tables, one migration and six native enums.
+Postgres, with eight tables, two migrations and six native enums.
 
 | | |
 |---|---|
 | `data/recommended.json` | The seed source. `make seed` upserts it, idempotently. Removing an entry does not unrecommend its row, see `docs/development.md` |
 | `demo/` | Example output, and the contract-test corpus. Hadrien's, like the seed file |
+| `data/libraries.json` | Library catalogs. `make seed-libraries` upserts them **not recommended**: active and readable at `/catalogs/{id}`, absent from the top-level feed |
 | `data/dev-sample.json` | Invented data for trying ranking out by hand, loaded by `make seed-sample`. No test reads it |
-| `archive/` | Pre-schema records. Out of scope currently |
 
 ## Language ranking
 

@@ -7,11 +7,29 @@ authoring time. The service synthesises those at render time, and the contract t
 the output, which is where it matters.
 
 The relaxed variant is **derived, not hand-written**, so it cannot drift from the published
-schema when Hadrien edits it. Three relaxations, and nothing else:
+schema when Hadrien edits it. Four relaxations, and nothing else:
 
 1. feed-level `links` is not required
 2. the feed's "must contain a `self` link" constraint is dropped
 3. the same `self` constraint is dropped from every catalog
+4. `metadata.identifier` is not required
+
+The fourth: the field is not authored, it is answered by the registry. `catalogs.id` is derived
+from the identity href when the document omits an identifier, and rendered back out as
+`urn:uuid:{id}`, so requiring it on input would demand a value the author has no way to compute.
+Supplying one is still allowed, and still wins.
+
+It is **input-only, and belongs here rather than in `schema/catalog.schema.json`**. That file is
+upstream's contract (`docs/schemas.md`: "Hadrien owns. Never edit here"), it is what validates
+*rendered output*, and every rendered catalog does carry an identifier. Relaxing it there would
+delete a working output tripwire and be undone by the next `git merge upstream/main`.
+
+**Case is deliberately not relaxed.** `country` and `subdivisions` are uppercase on input as well
+as on output. Hadrien, 2026-09-29: ISO 3166-2 is officially uppercase, and "it is better to enforce
+this at import than convert". So a lowercase code is rejected here, by the published pattern, with
+a message naming the field; `cli/seed.py` does no case folding for either. `supportedLanguages` is
+the exception and stays lowercase-normalised, because BCP-47 writes languages lowercase and regions
+uppercase, and `Accept-Language` arrives lowercase (R2).
 
 Everything else the published schemas assert. Enums, the BCP-47 pattern, `minItems` on
 `kind`, `additionalProperties: false` on `metadata`, still applies.
@@ -33,10 +51,13 @@ BANNER = (
 
 
 def relax_catalog(catalog_schema: dict[str, Any]) -> dict[str, Any]:
-    """Drop the `self` requirement from a catalog document."""
+    """Drop the `self` and `metadata.identifier` requirements. Patterns are left untouched."""
     relaxed = json.loads(json.dumps(catalog_schema))
     relaxed.pop("$id", None)
     relaxed["properties"]["links"].pop("contains", None)
+
+    metadata = relaxed["properties"]["metadata"]
+    metadata["required"] = [name for name in metadata["required"] if name != "identifier"]
     return relaxed
 
 

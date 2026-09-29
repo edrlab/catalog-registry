@@ -1,32 +1,41 @@
-"""Import `data/recommended.json` into the registry. Idempotent.
+"""Import a feed-shaped document into the registry. Idempotent.
 
-`data/recommended.json` is the seed source, and presence in the file *is* the
-recommended flag. `demo/` is example output and the contract-test corpus; `archive/` is out
-of scope for v0.
+`data/recommended.json` is the default source, and presence in *that* file is the recommended
+flag. `data/libraries.json` is the second data set and is imported `--no-recommended`: its
+catalogs are `active`, so they are real published catalogs reachable at `/catalogs/{id}`, but
+they stay out of the top-level feed. `demo/` is example output and the contract-test corpus.
 
-the input is validated against the *relaxed* schema derived by
+The input is validated against the *relaxed* schema derived by
 `scripts/generate_seed_schema.py`, not against `catalog.schema.json`. The file has no
 feed-level `links` and no `self` link on any catalog, so the published schema rejects every
 record. `self` is synthesised at render time from the registry's own base URL, and the
 contract tests validate the output.
 
-**A catalog is matched across re-seeds by its `catalog`/`shelf` link href.** `catalogs.id` is
-the registry's only UUID and is generated fresh per environment, so it never conflicts with
-anything in the source document; `metadata.identifier` is rendered *from* that id rather than
-stored, so the hand-assigned `urn:uuid:` values in `data/recommended.json` are read past and
-discarded here. The href is externally owned rather than stable, which is the known cost of
-this design — see `resolve_identity_href` below.
+**A catalog is matched across re-seeds by its id when the document names one, and by its
+`catalog`/`shelf` link href otherwise**; see `resolve_existing_catalog`. `catalogs.id` is the
+registry's only UUID; `metadata.identifier` is rendered *from* that id rather than stored beside
+it. The href is externally owned rather than stable, so a document relying on it carries that
+cost; one carrying an identifier does not.
+
+The id itself is **derived, not invented**; see `resolve_catalog_id`. A document that
+supplies `metadata.identifier` keeps that UUID; one that omits it gets a UUID computed from
+its identity href, which is the same value in every environment and across a wipe. Neither
+path lets Postgres pick, because a randomly picked id cannot be addressed by anyone who has
+only the source file.
 """
 
+import argparse
 import asyncio
 import json
+import re
 import sys
+import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.core.config import Settings
@@ -40,6 +49,7 @@ from registry.db.models.catalog import (
     CatalogSubdivisionRow,
 )
 from registry.db.models.link import Link
+from registry.db.models.reference import Subdivision
 from registry.db.session import build_session_factory, create_database_engine
 from registry.domain.enums import (
     CatalogColor,
@@ -50,7 +60,7 @@ from registry.domain.enums import (
     PublicationType,
 )
 from registry.domain.language import normalise_language_tag
-from registry.domain.links import IDENTITY_RELS, has_browsable_rel
+from registry.domain.links import IDENTITY_RELS
 from registry.repositories.catalog_repository import CatalogRepository
 
 #: Presence in `data/recommended.json` is the recommended flag.
@@ -73,14 +83,15 @@ def link_rels(link: dict[str, Any]) -> list[LinkRel]:
     return [LinkRel(value) for value in written if value in set(LinkRel)]
 
 
-# ponytail: href match - a catalog that changes its feed URL inserts a second row instead of
-# updating the first (Project Gutenberg's pre-prod to prod move is the case that bites). The
-# fix is a wipe and re-seed. Revisit if that stops being acceptable.
+# ponytail: href match, and only the fallback now - a catalog with no `metadata.identifier`
+# that changes its feed URL inserts a second row instead of updating the first. The fix is to
+# give it an identifier, which `resolve_existing_catalog` then matches on.
 def resolve_identity_href(document: dict[str, Any]) -> str:
     """The externally owned URL this catalog is matched on across seed runs.
 
-    `metadata.identifier` is deliberately *not* it: the registry renders that field from
-    `catalogs.id`, so the value in the source document is not the one clients ever see.
+    Used when the document supplies no `metadata.identifier`, and always as the value the id
+    is derived from. `resolve_existing_catalog` prefers the id when there is one, because the
+    href belongs to the library and can change under us.
     """
     for rel in IDENTITY_RELS:
         for link in document["links"]:
@@ -92,21 +103,84 @@ def resolve_identity_href(document: dict[str, Any]) -> str:
     )
 
 
-def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
+def resolve_catalog_id(document: dict[str, Any], identity_href: str) -> uuid.UUID:
+    """The UUID this catalog is stored under, derived rather than generated.
+
+    A supplied `metadata.identifier` wins: it is the author's own name for the catalog, so the
+    file can name the id a client will fetch it at. Note the limit: this decides the id a row is
+    *inserted* with. Adding an identifier to a catalog already stored does not move it onto that
+    id, because an upsert does not rewrite a primary key
+    (`test_an_identifier_added_later_does_not_move_an_existing_row`). When the field is absent
+    the id is `uuid5(NAMESPACE_URL, identity_href)`, a name-based UUID (RFC 9562 §5.5), so the
+    same catalog lands on the same UUID in local Docker, in CI and on Cloud Run, and keeps it
+    across a wipe and re-seed.
+
+    The alternative, letting `gen_random_uuid()` decide, produces an id that exists only in
+    whichever database happened to run the seed. A catalog that is not `recommended` appears
+    in no feed, so that id would be unreachable except by querying Postgres directly.
+    """
+    identifier = document["metadata"].get("identifier")
+    if identifier:
+        # RFC 9562 §4: the `urn:uuid:` prefix is case-insensitive, so `URN:UUID:` is the same
+        # URN. The published schema's pattern only admits the lowercase form, but this function
+        # is also reachable from code that has not been through it.
+        trimmed = identifier[9:] if identifier[:9].lower() == "urn:uuid:" else identifier
+        try:
+            return uuid.UUID(trimmed)
+        except ValueError as error:
+            raise ValidationError(
+                f"{document['metadata']['title']} has an identifier that is not a UUID: "
+                f"{identifier!r}"
+            ) from error
+    # ponytail: derived from the href, so it inherits the href's instability - a catalog that
+    # moves its feed URL gets a new id as well as a new row. Supplying `metadata.identifier`
+    # is the escape hatch, and is what to reach for if that becomes a problem.
+    return uuid.uuid5(uuid.NAMESPACE_URL, identity_href)
+
+
+async def resolve_existing_catalog(
+    session: AsyncSession, document: dict[str, Any], identity_href: str, catalog_id: uuid.UUID
+) -> Catalog | None:
+    """The row this document updates, or None to insert. Two lookups, id first.
+
+    **A document that names its own id is matched on that id before its href.** Without this,
+    a catalog whose feed URL changed would miss the href lookup, take the insert path, and
+    collide on `pk_catalogs`, because the id is derived from the unchanged
+    `metadata.identifier`. That is a hard failure that aborts the whole seed transaction, so
+    the other catalogs in the file are not updated either.
+
+    It is also the point of the field. Hadrien assigned those identifiers so that "a library
+    moving pre-prod to prod" stays one row (the Project Gutenberg case); matching on them is
+    what finally delivers that. See ADR-038.
+
+    The href lookup remains, and remains the fallback, for the two cases where it is the only
+    identity available: `data/libraries.json`, which supplies no identifiers, and a catalog
+    already stored under a different id than the one the file now names, which keeps the id it
+    has, since an upsert does not rewrite a primary key.
+    """
+    repository = CatalogRepository(session)
+    if document["metadata"].get("identifier"):
+        by_id = await repository.fetch_catalog_by_identity_id(catalog_id)
+        if by_id is not None:
+            return by_id
+    return await repository.fetch_catalog_by_identity_href(identity_href)
+
+
+def build_catalog(document: dict[str, Any], catalog_id: uuid.UUID, *, recommended: bool) -> Catalog:
+    """*catalog_id* comes from `resolve_catalog_id`. The caller resolves it, because it is also
+    what `resolve_existing_catalog` looks the row up by."""
     metadata = document["metadata"]
-    # `self` is not required on input; it is synthesised at render time. What the
-    # registry cannot synthesise is somewhere to actually browse or borrow.
-    rels = [rel for link in document["links"] for rel in link_rels(link)]
-    if not has_browsable_rel(rels):
-        raise ValidationError(f"{metadata['title']} needs a `catalog` or `shelf` link")
 
     return Catalog(
+        id=catalog_id,
         status=CatalogStatus.ACTIVE,
         recommended=recommended,
         title=metadata["title"],
         description=metadata.get("description"),
         color=CatalogColor(metadata.get("color", CatalogColor.GRAY.value)),
-        country_code=(metadata["country"].upper() if metadata.get("country") else None),
+        # No case folding. ISO 3166-1 is officially uppercase and the input schema enforces it,
+        # so a lowercase code is rejected in validation rather than quietly corrected here.
+        country_code=metadata.get("country"),
         city=metadata.get("city"),
         # Absent means NULL, not `global`. Storing an undeclared coverage as
         # `global` would assert worldwide reach on the catalog's behalf.
@@ -118,15 +192,17 @@ def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
             CatalogPublicationTypeRow(publication_type=PublicationType(value))
             for value in metadata.get("publicationTypes", ())
         ],
-        # Lowercase on ingest. The repository's own fixtures are already lowercase, so
-        # this is not defensive: BCP-47 declares tags case-insensitive and real producers do
-        # send `EN`. The check constraint rejects anything else, so a regression fails loudly.
+        # Languages are the one field still folded, and deliberately: BCP-47 writes a language
+        # subtag lowercase and a region subtag uppercase, `Accept-Language` arrives lowercase, and
+        # the published pattern accepts either case because the spec does (R2). Country and
+        # subdivision codes are *not* folded; their patterns admit uppercase only.
         languages=[
             CatalogLanguageRow(language_tag=normalise_language_tag(value))
             for value in metadata.get("supportedLanguages", ())
         ],
+        # Uppercase already, for the same reason as `country_code` above.
         subdivisions=[
-            CatalogSubdivisionRow(subdivision_code=value.upper())
+            CatalogSubdivisionRow(subdivision_code=value)
             for value in metadata.get("subdivisions", ())
         ],
         # One row per rel: a link declaring `["catalog", "start"]` is two relations to the
@@ -143,6 +219,61 @@ def build_catalog(document: dict[str, Any], *, recommended: bool) -> Catalog:
             for rel in link_rels(link)
         ],
     )
+
+
+#: ISO 3166-1 alpha-2, and ISO 3166-2 as `CC-` plus one to three characters. The same shapes as
+#: `schema/catalog.schema.json`, matched with `fullmatch` because the schema's `^...$` is applied
+#: with `re.search`, and Python's `$` also matches before a trailing newline: `"BE\n"` passes it.
+ISO_CODE_SHAPES = {
+    "country": re.compile(r"[A-Z]{2}"),
+    "subdivisions": re.compile(r"[A-Z]{2}-[A-Z0-9]{1,3}"),
+}
+
+
+def assert_iso_codes_are_uppercase(document: dict[str, Any]) -> None:
+    """Refuse a `country` or `subdivisions` entry that is not a well-formed uppercase code.
+
+    Raises `ValidationError`. ISO 3166-1 and 3166-2 codes are uppercase, and the registry enforces
+    that rather than folding it: a lowercase code in a data file is an authoring mistake its author
+    should see, not something the importer silently rewrites.
+
+    The generated input schema already rejects most of these, so for `seed` and `add` this rarely
+    fires. It exists because the schema is only one of the ways into the write path.
+    `build_catalog` and `import_catalog_document` are public, called directly by tests today and by
+    whatever drives the back office later, and without this a bad code would reach Postgres and
+    fail on `ck_catalogs_country_uppercase` or `ck_catalog_subdivisions_subdivision_code_uppercase`
+    as an `IntegrityError` naming a constraint instead of the value.
+
+    It checks the whole shape, not just the case. `value != value.upper()` would be the obvious
+    test and it lets `"BE\n"` through, because a trailing newline has no case. Anything that is not
+    a string, an empty string and free text such as `"Belgium"` are refused as malformed rather than
+    "corrected", since there is no sensible uppercase form to suggest.
+
+    `supportedLanguages` is deliberately not checked here. BCP-47 declares case insignificant and
+    writes a region subtag uppercase, so `normalise_language_tag` folds those on ingest instead.
+    """
+    metadata = document["metadata"]
+    candidates: list[tuple[str, Any]] = []
+    if (country := metadata.get("country")) is not None:
+        candidates.append(("country", country))
+    candidates.extend(("subdivisions", code) for code in metadata.get("subdivisions") or ())
+
+    problems = []
+    for field, value in candidates:
+        shape = ISO_CODE_SHAPES[field]
+        if isinstance(value, str) and shape.fullmatch(value):
+            continue
+        if isinstance(value, str) and shape.fullmatch(value.upper()):
+            problems.append(f"{field} {value!r} should be {value.upper()!r}")
+        else:
+            problems.append(f"{field} {value!r} is not a well-formed ISO code")
+
+    if problems:
+        raise ValidationError(
+            f"{metadata['title']} has invalid ISO codes: {'; '.join(problems)}. These are "
+            "uppercase by specification and are enforced rather than converted, so fix them at "
+            "the source."
+        )
 
 
 async def import_catalog_document(
@@ -173,9 +304,11 @@ async def import_catalog_document(
     # needs an order the seed file cannot express.
     if ordered_at is None:
         ordered_at = datetime.now(UTC)
+    assert_iso_codes_are_uppercase(document)
     identity_href = resolve_identity_href(document)
-    existing = await CatalogRepository(session).fetch_catalog_by_identity_href(identity_href)
-    built = build_catalog(document, recommended=recommended)
+    catalog_id = resolve_catalog_id(document, identity_href)
+    existing = await resolve_existing_catalog(session, document, identity_href, catalog_id)
+    built = build_catalog(document, catalog_id, recommended=recommended)
 
     if existing is None:
         built.published_at = func.now()
@@ -215,6 +348,88 @@ async def import_catalog_document(
     return existing, False
 
 
+def assert_identities_are_unique(feed: dict[str, Any], *, source: str) -> None:
+    """Refuse a document where two catalogs resolve to the same id. Raises `ValidationError`.
+
+    Two entries sharing a `metadata.identifier` used to be two rows, because ids were random.
+    Now the second one's id lookup finds the row the first one just inserted (pending inserts
+    are visible to the next query through autoflush) and *overwrites it in place*: one row,
+    the first catalog's title and links gone, `created 1, updated 1` printed, no error. A typo
+    in a hand-edited file silently deletes a catalog.
+
+    JSON Schema cannot express "unique within this document", so it is checked here, before
+    anything is written.
+
+    **Both keys the upsert can match on are checked, not just the id.** `resolve_existing_catalog`
+    falls back to the href, so two entries with *different* explicit identifiers and the same
+    `catalog`/`shelf` href collide by the other route: the second one misses the id lookup, finds
+    the first by href, and overwrites it. Checking ids alone left that open. Href is checked
+    first, because a document with no identifier derives its id *from* the href and would
+    otherwise be reported as an identifier clash it does not have.
+
+    This pre-empts `uq_links_identity_href`, which would have caught the href case in the
+    database, but only once the write was attempted and without naming either catalog.
+    """
+    by_href: dict[str, str] = {}
+    by_id: dict[uuid.UUID, str] = {}
+
+    for document in feed["catalogs"]:
+        title = document["metadata"]["title"]
+        identity_href = resolve_identity_href(document)
+        catalog_id = resolve_catalog_id(document, identity_href)
+
+        if (owner := by_href.get(identity_href)) is not None:
+            raise ValidationError(
+                f"{source} gives {owner!r} and {title!r} the same `catalog`/`shelf` href "
+                f"({identity_href}), so the second would replace the first. Two catalogs cannot "
+                "share the href they are matched on."
+            )
+        if (owner := by_id.get(catalog_id)) is not None:
+            raise ValidationError(
+                f"{source} gives {owner!r} and {title!r} the same id ({catalog_id}), so the "
+                "second would replace the first. Two catalogs cannot share an id, whether it is "
+                "written as `metadata.identifier` or derived from the `catalog`/`shelf` href."
+            )
+
+        by_href[identity_href] = title
+        by_id[catalog_id] = title
+
+
+async def assert_subdivisions_are_known(
+    session: AsyncSession, feed: dict[str, Any], *, source: str
+) -> None:
+    """Refuse codes absent from `subdivisions` with a message. Raises `ValidationError`.
+
+    `subdivisions` is **not** a full copy of ISO 3166-2. It holds only the codes some catalog
+    references, added per data migration. So a valid code the table has never heard of fails on
+    `fk_catalog_subdivisions_subdivision_code_subdivisions` at flush time, as a raw
+    `IntegrityError` that names a constraint rather than the code, the catalog or the remedy.
+    `make add --subdivision NL-ZH` is the easiest way to hit it; the flag's own help says
+    "ISO 3166-2", which is a promise five rows cannot keep.
+
+    One query for the whole document, before anything is written, listing every unknown code at
+    once, so an operator fixes one migration rather than rediscovering this per catalog.
+    """
+    requested = {
+        code
+        for document in feed["catalogs"]
+        for code in document["metadata"].get("subdivisions") or ()
+    }
+    if not requested:
+        return
+
+    known = set(
+        await session.scalars(select(Subdivision.code).where(Subdivision.code.in_(requested)))
+    )
+    if unknown := sorted(requested - known):
+        raise ValidationError(
+            f"{source} references {', '.join(unknown)}, absent from the `subdivisions` table. "
+            "That table holds only the ISO 3166-2 codes some catalog already uses, so a valid "
+            "code can still be missing; add it in a migration, as `b41f7c9ade52` did for "
+            "FR-IDF and CH-VS."
+        )
+
+
 async def import_feed_document(
     session: AsyncSession,
     feed: dict[str, Any],
@@ -232,6 +447,9 @@ async def import_feed_document(
     if errors:
         detail = "; ".join(f"{list(error.absolute_path)}: {error.message}" for error in errors)
         raise ValidationError(f"{source} is not valid seed input. {detail}")
+
+    assert_identities_are_unique(feed, source=source)
+    await assert_subdivisions_are_known(session, feed, source=source)
 
     # One clock reading for the run: each catalog is written a millisecond earlier than the
     # one before it, so position in the file survives as `created_at` order. Re-read per
@@ -269,32 +487,83 @@ async def seed_catalogs(
     to infer here. Until then, unrecommending is a manual step. There is a test asserting the
     current behaviour so the gap is executable rather than a comment.
     """
-    return await import_feed_document(
-        session,
-        json.loads(seed_file.read_text(encoding="utf-8")),
-        source=str(seed_file),
-        recommended=recommended,
-    )
+    try:
+        feed = json.loads(seed_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        # Otherwise a hand-edit with a trailing comma is a traceback rather than a message.
+        raise ValidationError(f"{seed_file} is not valid JSON. {error}") from error
+
+    return await import_feed_document(session, feed, source=str(seed_file), recommended=recommended)
 
 
-async def seed_from_file(seed_file: Path, settings: Settings) -> tuple[int, int]:
+async def seed_from_file(
+    seed_file: Path, settings: Settings, *, recommended: bool = RECOMMENDED_AT_LAUNCH
+) -> tuple[int, int]:
     engine = create_database_engine(settings)
     try:
         async with build_session_factory(engine)() as session:
-            created, updated = await seed_catalogs(session, seed_file)
+            created, updated = await seed_catalogs(session, seed_file, recommended=recommended)
             await session.commit()
     finally:
         await engine.dispose()
     return created, updated
 
 
+def build_seed_parser() -> argparse.ArgumentParser:
+    """Separate from `main` so the flags are testable without a database.
+
+    `--no-recommended` is the one that matters: getting it wrong seeds Hadrien's library data
+    straight into the top-level feed, which is silent and wrong rather than loud and wrong.
+    """
+    parser = argparse.ArgumentParser(
+        prog="python -m registry.cli seed",
+        description="Import a feed-shaped document into the registry. Idempotent.",
+    )
+    parser.add_argument(
+        "file",
+        nargs="?",
+        type=Path,
+        help="feed-shaped JSON to import. Defaults to REGISTRY_SEED_FILE",
+    )
+    parser.add_argument(
+        "--no-recommended",
+        dest="recommended",
+        action="store_false",
+        help="import the catalogs active but not recommended, so they stay out of the feed "
+        "and are reachable only at /catalogs/{id}",
+    )
+    return parser
+
+
 def main(argv: Sequence[str] = ()) -> int:
-    if argv:
-        print(f"seed takes no arguments, got {' '.join(argv)}")
-        return 2
+    """`REGISTRY_SEED_FILE` remains the default so `make seed` needs no argument.
+
+    A named file is the second data set's route in: `data/libraries.json` is imported
+    `--no-recommended`, which is the only difference between it and `data/recommended.json`
+    as far as this command is concerned. Both go through `seed_catalogs`.
+    """
+    parser = build_seed_parser()
+    arguments = parser.parse_args(argv)
+    # `--no-recommended` against the default file would flip every catalog in
+    # `data/recommended.json` out of the top-level feed in one command, which contradicts
+    # `seed_catalogs`' promise that unrecommending is a deliberate manual step. The flag
+    # describes a *file*, so it has to name one.
+    if not arguments.recommended and arguments.file is None:
+        parser.error("--no-recommended needs a file; it must not be used on REGISTRY_SEED_FILE")
+
     settings = Settings()
-    created, updated = asyncio.run(seed_from_file(settings.seed_file, settings))
-    print(f"seeded: {created} created, {updated} updated")
+    seed_file = arguments.file or settings.seed_file
+    # Checked here rather than left to `read_text`: `FileNotFoundError` is an `OSError`, and
+    # `cli/__main__.py` reports every `OSError` as an unreachable database, so a typo in the
+    # path prints "Is it running? make up" and never mentions the file.
+    if not seed_file.is_file():
+        raise ValidationError(f"{seed_file} is not a file. Nothing to seed.")
+
+    created, updated = asyncio.run(
+        seed_from_file(seed_file, settings, recommended=arguments.recommended)
+    )
+    flag = "" if arguments.recommended else ", not recommended"
+    print(f"seeded {seed_file}: {created} created, {updated} updated{flag}")
     return 0
 
 
