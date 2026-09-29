@@ -96,8 +96,8 @@ seed:  ## Import data/recommended.json into the database (needs make up)
 	uv run python -m registry.cli seed
 
 # Active but not recommended: real published catalogs, reachable at /catalogs/{id}, absent
-# from the top-level feed. Arrives with edrlab/catalog-registry#13; the file is the only
-# difference from `seed` above. Run `make seed` too, they are separate data sets.
+# from the top-level feed. The file is the only difference from `seed` above. Run `make seed`
+# too, they are separate data sets.
 seed-libraries:  ## Import data/libraries.json, not recommended (needs make up)
 	uv run python -m registry.cli seed data/libraries.json --no-recommended
 

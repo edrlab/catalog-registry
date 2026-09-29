@@ -267,7 +267,7 @@ one of them was wrong within a single branch.
 | | `test_seed.py` → `test_the_seed_input_is_rejected_by_the_published_schema` | Asserts the seed file **fails** it, the tripwire |
 | | `validate_fixtures.py` → `FIXTURE_SCHEMAS` | `demo/index.json` and `demo/search.json` validate |
 | `generated/seed-input.schema.json` | `cli/seed.py` → `SEED_INPUT_SCHEMA`, used by `import_feed_document` | **Runtime.** Every seed run validates its input first |
-| | `validate_fixtures.py` → `SEED_INPUTS` | Every seed file present in the checkout validates, as a CI job. A file that is absent is reported as skipped; `data/libraries.json` arrives with upstream PR #13 |
+| | `validate_fixtures.py` → `SEED_INPUTS` | Every seed file (`data/recommended.json`, `data/libraries.json`) validates, as a CI job. A missing one fails |
 | `vendor/*` | Never referenced by name | Resolved automatically through `$ref` by `build_schema_registry()` |
 | all of them | `validate_schemas.py` → `main` | Every file is valid JSON and a valid draft-07 schema |
 

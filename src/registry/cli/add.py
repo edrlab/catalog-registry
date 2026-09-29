@@ -267,6 +267,19 @@ def main(argv: Sequence[str] = ()) -> int:
         help="print the document that would be imported and write nothing",
     )
     arguments = parser.parse_args(argv)
+    # Before the download: the flags are the only source of these codes, so a typo should not cost
+    # a network round trip. Before `--dry-run` prints anything, so a preview cannot show a document
+    # the real run would then reject, and before the schema, so it reads "country 'be' should be
+    # 'BE'" rather than as a regex.
+    assert_iso_codes_are_uppercase(
+        {
+            "metadata": {
+                "title": arguments.url,
+                "country": arguments.country,
+                "subdivisions": arguments.subdivision,
+            }
+        }
+    )
     document = build_catalog_document(
         download_feed_document(arguments.url),
         arguments.url,
@@ -280,9 +293,6 @@ def main(argv: Sequence[str] = ()) -> int:
         subdivisions=arguments.subdivision,
         publicationTypes=arguments.publication_type,
     )
-    # Before --dry-run, so a lowercase code fails there too, and before the schema, so it reads as
-    # "country 'be' should be 'BE'" rather than a regex.
-    assert_iso_codes_are_uppercase(document)
 
     if arguments.dry_run:
         print(json.dumps(document, indent=2, ensure_ascii=False))

@@ -78,7 +78,7 @@ Postgres, with eight tables, two migrations and six native enums.
 |---|---|
 | `data/recommended.json` | The seed source. `make seed` upserts it, idempotently. Removing an entry does not unrecommend its row, see `docs/development.md` |
 | `demo/` | Example output, and the contract-test corpus. Hadrien's, like the seed file |
-| `data/libraries.json` | Library catalogs. `make seed-libraries` upserts them **not recommended**: active and readable at `/catalogs/{id}`, absent from the top-level feed. **Arrives with upstream PR #13**; until that merges the target reports the file is missing |
+| `data/libraries.json` | Library catalogs. `make seed-libraries` upserts them **not recommended**: active and readable at `/catalogs/{id}`, absent from the top-level feed |
 | `data/dev-sample.json` | Invented data for trying ranking out by hand, loaded by `make seed-sample`. No test reads it |
 
 ## Language ranking

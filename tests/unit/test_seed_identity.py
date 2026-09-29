@@ -103,12 +103,11 @@ def test_a_supplied_identifier_wins_over_the_derived_one() -> None:
 
 
 def test_lowercase_codes_are_rejected_on_input() -> None:
-    """The generated input schema does not relax the case, because Hadrien asked it not to.
+    """The generated input schema keeps the published patterns, so lowercase is rejected.
 
-    An earlier version of this branch widened both patterns to `[A-Za-z]` and folded the case in
-    `build_catalog`. That is reverted: one canonical form, enforced at import. The rejection has to
-    be asserted here as well as in the integration test, because this is the layer that produces
-    the message the author reads.
+    One canonical form, enforced at import rather than folded. The rejection is asserted here as
+    well as in the integration test, because this is the layer that produces the message the
+    author reads.
     """
     feed = {
         "metadata": {"title": "Libraries"},

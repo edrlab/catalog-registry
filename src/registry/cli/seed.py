@@ -5,7 +5,7 @@ flag. `data/libraries.json` is the second data set and is imported `--no-recomme
 catalogs are `active`, so they are real published catalogs reachable at `/catalogs/{id}`, but
 they stay out of the top-level feed. `demo/` is example output and the contract-test corpus.
 
-the input is validated against the *relaxed* schema derived by
+The input is validated against the *relaxed* schema derived by
 `scripts/generate_seed_schema.py`, not against `catalog.schema.json`. The file has no
 feed-level `links` and no `self` link on any catalog, so the published schema rejects every
 record. `self` is synthesised at render time from the registry's own base URL, and the
@@ -27,6 +27,7 @@ only the source file.
 import argparse
 import asyncio
 import json
+import re
 import sys
 import uuid
 from collections.abc import Sequence
@@ -220,38 +221,58 @@ def build_catalog(document: dict[str, Any], catalog_id: uuid.UUID, *, recommende
     )
 
 
+#: ISO 3166-1 alpha-2, and ISO 3166-2 as `CC-` plus one to three characters. The same shapes as
+#: `schema/catalog.schema.json`, matched with `fullmatch` because the schema's `^...$` is applied
+#: with `re.search`, and Python's `$` also matches before a trailing newline: `"BE\n"` passes it.
+ISO_CODE_SHAPES = {
+    "country": re.compile(r"[A-Z]{2}"),
+    "subdivisions": re.compile(r"[A-Z]{2}-[A-Z0-9]{1,3}"),
+}
+
+
 def assert_iso_codes_are_uppercase(document: dict[str, Any]) -> None:
-    """Refuse a lowercase `country` or `subdivisions` entry. Raises `ValidationError`.
+    """Refuse a `country` or `subdivisions` entry that is not a well-formed uppercase code.
 
-    ISO 3166-1 and 3166-2 codes are uppercase, and the registry enforces that rather than folding
-    it: a lowercase code in a data file is an authoring mistake its author should see, not
-    something the importer silently rewrites.
+    Raises `ValidationError`. ISO 3166-1 and 3166-2 codes are uppercase, and the registry enforces
+    that rather than folding it: a lowercase code in a data file is an authoring mistake its author
+    should see, not something the importer silently rewrites.
 
-    The generated input schema already rejects it, so for `seed` and `add` this check never fires.
-    It exists because the schema is only one of the ways into the write path. `build_catalog` and
-    `import_catalog_document` are public, called directly by tests today and by whatever drives
-    the back office later, and without this a lowercase code would reach Postgres and fail on
-    `ck_catalogs_country_uppercase` or `ck_catalog_subdivisions_subdivision_code_uppercase`, as an
-    `IntegrityError` naming a constraint instead of the value. Three layers, same answer at each:
-    the schema at the boundary, this in the core, the constraints in the database.
+    The generated input schema already rejects most of these, so for `seed` and `add` this rarely
+    fires. It exists because the schema is only one of the ways into the write path.
+    `build_catalog` and `import_catalog_document` are public, called directly by tests today and by
+    whatever drives the back office later, and without this a bad code would reach Postgres and
+    fail on `ck_catalogs_country_uppercase` or `ck_catalog_subdivisions_subdivision_code_uppercase`
+    as an `IntegrityError` naming a constraint instead of the value.
+
+    It checks the whole shape, not just the case. `value != value.upper()` would be the obvious
+    test and it lets `"BE\n"` through, because a trailing newline has no case. Anything that is not
+    a string, an empty string and free text such as `"Belgium"` are refused as malformed rather than
+    "corrected", since there is no sensible uppercase form to suggest.
 
     `supportedLanguages` is deliberately not checked here. BCP-47 declares case insignificant and
     writes a region subtag uppercase, so `normalise_language_tag` folds those on ingest instead.
     """
     metadata = document["metadata"]
-    candidates: list[tuple[str, str]] = []
+    candidates: list[tuple[str, Any]] = []
     if (country := metadata.get("country")) is not None:
         candidates.append(("country", country))
     candidates.extend(("subdivisions", code) for code in metadata.get("subdivisions") or ())
 
-    offenders = [(field, value) for field, value in candidates if value != value.upper()]
-    if offenders:
-        detail = ", ".join(
-            f"{field} {value!r} should be {value.upper()!r}" for field, value in offenders
-        )
+    problems = []
+    for field, value in candidates:
+        shape = ISO_CODE_SHAPES[field]
+        if isinstance(value, str) and shape.fullmatch(value):
+            continue
+        if isinstance(value, str) and shape.fullmatch(value.upper()):
+            problems.append(f"{field} {value!r} should be {value.upper()!r}")
+        else:
+            problems.append(f"{field} {value!r} is not a well-formed ISO code")
+
+    if problems:
         raise ValidationError(
-            f"{metadata['title']} has lowercase ISO codes: {detail}. These are uppercase by "
-            "specification and are enforced rather than converted, so fix them at the source."
+            f"{metadata['title']} has invalid ISO codes: {'; '.join(problems)}. These are "
+            "uppercase by specification and are enforced rather than converted, so fix them at "
+            "the source."
         )
 
 
@@ -366,8 +387,8 @@ def assert_identities_are_unique(feed: dict[str, Any], *, source: str) -> None:
         if (owner := by_id.get(catalog_id)) is not None:
             raise ValidationError(
                 f"{source} gives {owner!r} and {title!r} the same id ({catalog_id}), so the "
-                "second would replace the first. Two catalogs cannot share a "
-                "`metadata.identifier`."
+                "second would replace the first. Two catalogs cannot share an id, whether it is "
+                "written as `metadata.identifier` or derived from the `catalog`/`shelf` href."
             )
 
         by_href[identity_href] = title
@@ -392,7 +413,7 @@ async def assert_subdivisions_are_known(
     requested = {
         code
         for document in feed["catalogs"]
-        for code in document["metadata"].get("subdivisions", ())
+        for code in document["metadata"].get("subdivisions") or ()
     }
     if not requested:
         return

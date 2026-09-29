@@ -13,15 +13,13 @@ from registry.core.schema_validation import build_schema_validator, load_json_do
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-#: Seed inputs, validated against the relaxed schema and never the published one.
-#: `(path, schema, required)`. An optional file that is absent is reported as skipped rather than
-#: failing. `data/libraries.json` arrives with edrlab/catalog-registry#13, and this list is what
-#: picks it up when it does. `required` exists so a **typo** in a path cannot skip quietly for
-#: ever: `demo/` always contributes fixtures, so the `checked == 0` backstop below would never
-#: notice one.
+#: Seed inputs, validated against the relaxed schema and never the published one. Every entry is
+#: required: a missing file fails rather than being skipped, so a rename or a typo in a path cannot
+#: quietly stop a data file being checked. (`demo/` always contributes fixtures, so the
+#: `checked == 0` backstop below would never notice one.)
 SEED_INPUTS = [
-    (Path("data") / "recommended.json", "generated/seed-input.schema.json", True),
-    (Path("data") / "libraries.json", "generated/seed-input.schema.json", False),
+    (Path("data") / "recommended.json", "generated/seed-input.schema.json"),
+    (Path("data") / "libraries.json", "generated/seed-input.schema.json"),
 ]
 
 #: Fixture glob → the schema that governs it.
@@ -46,13 +44,10 @@ def report(errors: list[Any], label: str) -> bool:
 def check_seed_inputs() -> tuple[int, int]:
     """Validate every entry in `SEED_INPUTS`. Returns (checked, failures)."""
     checked = failures = 0
-    for seed_path, seed_schema, required in SEED_INPUTS:
+    for seed_path, seed_schema in SEED_INPUTS:
         if not (REPO_ROOT / seed_path).exists():
-            if required:
-                failures += 1
-                print(f"FAIL {seed_path} is missing, and is not optional")
-            else:
-                print(f"skip {seed_path}, not in this checkout")
+            failures += 1
+            print(f"FAIL {seed_path} is missing")
             continue
         checked += 1
         errors = sorted(

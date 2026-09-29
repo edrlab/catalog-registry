@@ -258,24 +258,47 @@ async def test_uppercase_country_and_subdivisions_are_stored_verbatim(
             "subdivisions 'be-wal' should be 'BE-WAL'",
             id="one-bad-among-good",
         ),
+        # Not lowercase at all, so there is no uppercase form to suggest. A trailing newline is the
+        # important one: it has no case, `value != value.upper()` passes it, and the schema's
+        # `^[A-Z]{2}$` is applied with `re.search`, where `$` also matches before a final newline.
+        pytest.param(
+            {"country": "BE\n"}, "country 'BE\\n' is not a well-formed", id="country-newline"
+        ),
+        pytest.param(
+            {"country": "BE", "subdivisions": ["FR-IDF\n"]},
+            "subdivisions 'FR-IDF\\n' is not a well-formed",
+            id="subdivision-newline",
+        ),
+        pytest.param({"country": ""}, "country '' is not a well-formed", id="country-empty"),
+        pytest.param(
+            {"country": "Belgium"}, "country 'Belgium' is not a well-formed", id="free-text"
+        ),
+        pytest.param({"country": " BE"}, "country ' BE' is not a well-formed", id="leading-space"),
+        pytest.param({"country": "B\u0130"}, "is not a well-formed", id="non-ascii-capital"),
+        pytest.param({"country": 7}, "country 7 is not a well-formed", id="not-a-string"),
+        pytest.param(
+            {"country": "BE", "subdivisions": [None]},
+            "subdivisions None is not a well-formed",
+            id="null-subdivision",
+        ),
     ],
 )
-async def test_the_core_refuses_lowercase_codes_even_without_schema_validation(
+async def test_the_core_refuses_malformed_codes_even_without_schema_validation(
     db_session: AsyncSession, metadata: dict[str, object], expected: str
 ) -> None:
     """Layer two. `import_catalog_document` does not validate against the schema, so it needs its
     own check, or a caller that skips validation reaches Postgres and fails on a check constraint
     naming the constraint instead of the value.
 
-    Every case here would be caught by the schema on the `seed` and `add` paths. The point is that
-    it is caught anyway, with the same message, by the only function every write goes through.
+    Most cases here are also caught by the schema on the `seed` and `add` paths. The newline ones
+    are not: they get through the schema, so this is the layer that actually stops them.
     """
     document = {
         "metadata": {"title": "Lowercase Codes", "kind": ["public"], **metadata},
         "links": [{"href": "https://library.example/home.opds2", "rel": "catalog"}],
     }
 
-    with pytest.raises(ValidationError, match="lowercase ISO codes") as failure:
+    with pytest.raises(ValidationError, match="invalid ISO codes") as failure:
         await import_catalog_document(db_session, document, recommended=False)
 
     assert expected in str(failure.value)
@@ -308,35 +331,59 @@ async def test_lowercase_codes_are_rejected_by_input_validation(db_session: Asyn
     assert await count(db_session, Catalog) == 0
 
 
-@pytest.mark.parametrize(
-    ("table", "columns", "values"),
-    [
-        pytest.param(
-            "catalogs",
-            "id, status, recommended, title, country_code, published_at",
-            "'0b6e5f2a-1111-4111-8111-111111111111', 'active', false, 'Lower', 'be', now()",
-            id="catalogs-country",
-        ),
-        pytest.param(
-            "catalog_subdivisions",
-            "catalog_id, subdivision_code",
-            "'0b6e5f2a-2222-4222-8222-222222222222', 'be-wal'",
-            id="catalog-subdivisions",
-        ),
-    ],
-)
-async def test_the_database_is_the_last_line_of_defence(
-    db_session: AsyncSession, table: str, columns: str, values: str
+async def test_the_country_check_constraint_is_what_refuses_a_lowercase_country(
+    db_session: AsyncSession,
 ) -> None:
-    """Layer three. Asserted with raw SQL, because that is the only way to get past layers one and
-    two, and a constraint nothing exercises is a constraint that can be dropped by accident.
+    """Layer three, for `catalogs.country_code`. Raw SQL, since that is the only way past layers one
+    and two, and a constraint nothing exercises is one somebody drops by accident.
 
-    `catalog_subdivisions` also has a foreign key to `subdivisions`, and either constraint failing
-    is the correct outcome, so this asserts an `IntegrityError` rather than naming one of them.
+    The row is otherwise valid: `zz` is added to `countries` first, so the foreign key is satisfied
+    and the check constraint is the only thing that can object. Asserting on its *name* is what
+    makes this fail if the constraint is removed, instead of passing on some unrelated error.
     """
-    with pytest.raises(IntegrityError):
-        await db_session.execute(text(f"INSERT INTO {table} ({columns}) VALUES ({values})"))
-    await db_session.rollback()
+    await db_session.execute(
+        text("INSERT INTO countries (alpha2, alpha3, numeric3) VALUES ('zz', 'zzz', '999')")
+    )
+
+    with pytest.raises(IntegrityError, match="ck_catalogs_country_uppercase"):
+        async with db_session.begin_nested():
+            await db_session.execute(
+                text(
+                    "INSERT INTO catalogs"
+                    " (id, status, recommended, title, country_code, published_at)"
+                    " VALUES (gen_random_uuid(), 'active', false, 'Lower', 'zz', now())"
+                )
+            )
+
+
+async def test_the_subdivision_check_constraint_is_what_refuses_a_lowercase_code(
+    db_session: AsyncSession,
+) -> None:
+    """Layer three, for `catalog_subdivisions.subdivision_code`. Same construction as above.
+
+    A real catalog and a `subdivisions` row with a lowercase code both exist, so both foreign keys
+    are satisfied and only `ck_catalog_subdivisions_subdivision_code_uppercase` can object.
+    `subdivisions.code` has no case check of its own, which is what makes the row insertable.
+    """
+    document = {
+        "metadata": {"title": "Parent", "kind": ["public"], "country": "BE"},
+        "links": [{"href": "https://library.example/home.opds2", "rel": "catalog"}],
+    }
+    catalog, _ = await import_catalog_document(db_session, document, recommended=False)
+    await db_session.flush()
+    await db_session.execute(
+        text("INSERT INTO subdivisions (code, country_alpha2) VALUES ('be-xyz', 'BE')")
+    )
+
+    with pytest.raises(IntegrityError, match="ck_catalog_subdivisions_subdivision_code_uppercase"):
+        async with db_session.begin_nested():
+            await db_session.execute(
+                text(
+                    "INSERT INTO catalog_subdivisions (catalog_id, subdivision_code)"
+                    " VALUES (:id, 'be-xyz')"
+                ),
+                {"id": catalog.id},
+            )
 
 
 async def test_an_uppercase_language_tag_is_still_lowercased(db_session: AsyncSession) -> None:
@@ -507,7 +554,7 @@ async def test_two_catalogs_sharing_an_identifier_are_refused(db_session: AsyncS
         ],
     }
 
-    blames_identifier = re.escape("cannot share a `metadata.identifier`")
+    blames_identifier = re.escape("cannot share an id")
     with pytest.raises(ValidationError, match=blames_identifier) as failure:
         await import_feed_document(db_session, feed, source="test")
 
@@ -561,10 +608,9 @@ async def test_a_libraries_shaped_document_imports_through_the_validating_path(
 ) -> None:
     """Everything `data/libraries.json` relies on, in one test through `seed_catalogs`.
 
-    That file is not committed here (it arrives with edrlab/catalog-registry#13) and
-    `scripts/validate_fixtures.py` only checks `data/recommended.json`, so nothing else in CI
-    exercises: no `metadata.identifier`, lowercase `country`/`subdivisions`, the `FR-IDF` and
-    `CH-VS` rows added by `b41f7c9ade52`, and `recommended=False`.
+    A self-contained fixture rather than the real file, so it keeps asserting the same thing if that
+    file changes: no `metadata.identifier`, the `FR-IDF` and `CH-VS` rows added by `b41f7c9ade52`,
+    and `recommended=False`. `test_the_real_libraries_file_imports` covers the file itself.
     """
     href = "https://bibliotheques.paris.fr/numerique/"
     seed_file = tmp_path / "libraries.json"
@@ -612,6 +658,35 @@ async def test_a_libraries_shaped_document_imports_through_the_validating_path(
     assert paris.recommended is False
     assert paris.status is CatalogStatus.ACTIVE
     assert await CatalogRepository(db_session).fetch_recommended_catalogs() == []
+
+
+async def test_the_real_libraries_file_imports(db_session: AsyncSession) -> None:
+    """`data/libraries.json` itself, end to end, as `make seed-libraries` runs it.
+
+    The self-contained test above pins what the file *relies on*; this one pins that the file in
+    the repository still imports, so an edit to it that the schema accepts but the database
+    rejects (an unseeded subdivision, say) fails here rather than on somebody's machine. Each
+    catalog must also be reachable at the id its `catalog` href derives, which is the whole point:
+    these are in no feed, so that computed id is the only way to find them.
+    """
+    libraries = SEED_FILE.parent / "libraries.json"
+    document = json.loads(libraries.read_text(encoding="utf-8"))
+
+    created, updated = await seed_catalogs(db_session, libraries, recommended=False)
+    await db_session.commit()
+
+    assert (created, updated) == (len(document["catalogs"]), 0)
+    repository = CatalogRepository(db_session)
+    assert await repository.fetch_recommended_catalogs() == []
+    for entry in document["catalogs"]:
+        href = next(link["href"] for link in entry["links"] if link["rel"] == "catalog")
+        stored = await repository.fetch_catalog_by_id(uuid.uuid5(uuid.NAMESPACE_URL, href))
+        assert stored is not None, entry["metadata"]["title"]
+        assert stored.recommended is False
+        assert stored.status is CatalogStatus.ACTIVE
+
+    again = await seed_catalogs(db_session, libraries, recommended=False)
+    assert again == (0, len(document["catalogs"]))
 
 
 async def test_an_unseeded_subdivision_is_a_readable_message(db_session: AsyncSession) -> None:
