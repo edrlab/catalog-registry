@@ -22,3 +22,10 @@ class NotFoundError(RegistryError):
 class ValidationError(RegistryError):
     status_code = 422
     title = "Unprocessable Entity"
+
+
+class SearchTimeoutError(RegistryError):
+    """A search outran its statement timeout (ADR-058). The caller can simply try again."""
+
+    status_code = 503
+    title = "Service Unavailable"

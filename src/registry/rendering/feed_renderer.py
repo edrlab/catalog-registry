@@ -6,6 +6,7 @@ from typing import Any
 from registry.core.constants import OPDS_CATALOG_MEDIA_TYPE
 from registry.db.models.catalog import Catalog
 from registry.rendering.catalog_renderer import render_catalog
+from registry.rendering.search_renderer import build_search_template_link
 
 #: What the feed calls itself, matching `demo/index.json` and the `metadata.title` of
 #: `data/recommended.json`, both of which name this exact document. It describes the
@@ -24,6 +25,6 @@ def render_feed(catalogs: Sequence[Catalog], *, base_url: str) -> dict[str, Any]
     """the top-level feed does not paginate, so there is no `itemsPerPage`."""
     return {
         "metadata": {"title": FEED_TITLE, "numberOfItems": len(catalogs)},
-        "links": [build_self_link(base_url)],
+        "links": [build_self_link(base_url), build_search_template_link(base_url)],
         "catalogs": [render_catalog(catalog, base_url=base_url) for catalog in catalogs],
     }

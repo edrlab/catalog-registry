@@ -18,14 +18,20 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from registry.api.exception_handlers import register_exception_handlers
 from registry.api.middleware import ResponseHeadersMiddleware
-from registry.api.routes import catalogs, feed, health
+from registry.api.routes import catalogs, feed, health, search
 from registry.core.config import Settings
 from registry.db.session import (
     build_read_session_factory,
+    build_session_factory,
     check_database_connection,
     create_database_engine,
+    read_only_transaction,
 )
 from registry.repositories.catalog_repository import CatalogRepository
+from registry.repositories.search_repository import CatalogSearchRepository
+
+#: ADR-046, ADR-058: a search that outruns this is cancelled and answered with a 503.
+SEARCH_STATEMENT_TIMEOUT_MS = 1000
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -46,6 +52,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 yield CatalogRepository(session)
 
         app.state.open_catalog_reader = open_catalog_reader
+
+        # A transactional factory, not the read one: the timeout needs a transaction (ADR-058).
+        app.state.search_session_factory = build_session_factory(engine)
+
+        @asynccontextmanager
+        async def open_catalog_searcher() -> AsyncIterator[CatalogSearchRepository]:
+            async with read_only_transaction(
+                app.state.search_session_factory, statement_timeout_ms=SEARCH_STATEMENT_TIMEOUT_MS
+            ) as session:
+                yield CatalogSearchRepository(session)
+
+        app.state.open_catalog_searcher = open_catalog_searcher
         yield
         await engine.dispose()
 
@@ -67,5 +85,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
     app.include_router(feed.router)
     app.include_router(catalogs.router)
+    app.include_router(search.router)
     app.include_router(health.router)
     return app

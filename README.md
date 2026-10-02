@@ -24,7 +24,7 @@ This Catalog Registry will be pre-loaded in Thorium Reader (all platforms) and d
 This project will serve a registry using both OPDS 2.0 and HTML with the following feature-set:
 
 - List of recommended catalogs (language specific)
-- Full-text search
+- Full-text search (`GET /search`, see [`docs/search.md`](docs/search.md))
 - Geo-based search
 
 ## Running it
@@ -55,6 +55,7 @@ tells you when this happens.
 | Endpoint | |
 |---|---|
 | `GET /` | The top-level feed, `application/opds-catalog+json`, ranked by `Accept-Language` |
+| `GET /search?query=&page=` | Search, 50 per page, same media type. An empty query returns an empty feed. See [`docs/search.md`](docs/search.md) |
 | `GET /catalogs/{id}` | One catalog. 404 problem+json if unknown, 422 if the uuid is malformed |
 | `GET /health/live` | Liveness. Does not touch the database |
 | `GET /health/ready` | Readiness. 503 when the database is unreachable |
@@ -64,6 +65,7 @@ tells you when this happens.
 | | |
 |---|---|
 | [`docs/development.md`](docs/development.md) | Setup, the daily loop, configuration, migrations, the seed, testing, benchmarks, the Cloud SQL sandbox, and troubleshooting |
+| [`docs/search.md`](docs/search.md) | What search does, the query syntax, ordering, paging, the analyzer, reloading reference data, grants and operating notes |
 | [`docs/importing.md`](docs/importing.md) | `make add`, which imports a catalog from its live OPDS feed. The flags, how links are mapped, when it refuses |
 | [`docs/schemas.md`](docs/schemas.md) | The `schema/` directory. What is contract, what is vendored, what is generated, and why Python cannot use these schemas as published |
 
@@ -72,7 +74,7 @@ appears as soon as its line carries a `## description`.
 
 ## Where the data comes from
 
-Postgres, with eight tables, two migrations and six native enums.
+Postgres, with thirteen tables (eight for the catalogs, five for search), four migrations and six native enums.
 
 | | |
 |---|---|

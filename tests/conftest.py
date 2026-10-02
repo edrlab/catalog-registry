@@ -39,6 +39,7 @@ from registry.main import create_app
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_FILE = REPO_ROOT / "data" / "recommended.json"
+LIBRARIES_FILE = REPO_ROOT / "data" / "libraries.json"
 
 #: Derived, never hardcoded. Hadrien extends `data/recommended.json`; a test that spells the
 #: count out fails on his commit rather than on a defect.
@@ -169,6 +170,15 @@ async def seeded_catalogs(db_session: AsyncSession) -> int:
 
 
 @pytest.fixture
+async def searchable_catalogs(db_session: AsyncSession) -> None:
+    """Both data sets (recommended.json and libraries.json), imported through the real seed
+    path. The triggers build the `catalog_search` rows; nothing here touches that table."""
+    await seed_catalogs(db_session, SEED_FILE)
+    await seed_catalogs(db_session, LIBRARIES_FILE, recommended=False)
+    await db_session.commit()
+
+
+@pytest.fixture
 async def app(
     settings: Settings, session_factory: async_sessionmaker[AsyncSession]
 ) -> AsyncIterator[FastAPI]:
@@ -176,6 +186,7 @@ async def app(
     built = create_app(settings)
     async with built.router.lifespan_context(built):
         built.state.session_factory = session_factory
+        built.state.search_session_factory = session_factory
         yield built
 
 

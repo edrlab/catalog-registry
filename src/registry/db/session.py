@@ -1,5 +1,8 @@
 """Async engine and session factories, one for reads, one for writes."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -37,3 +40,22 @@ async def check_database_connection(engine: AsyncEngine) -> None:
     """Raise if the database is unreachable. Used by the readiness probe."""
     async with engine.connect() as connection:
         await connection.execute(text("SELECT 1"))
+
+
+@asynccontextmanager
+async def read_only_transaction(
+    factory: async_sessionmaker[AsyncSession], *, statement_timeout_ms: int
+) -> AsyncIterator[AsyncSession]:
+    """A read-only transaction with a statement timeout (ADR-058).
+
+    Not the read factory: under its AUTOCOMMIT, `SET LOCAL statement_timeout` is silently
+    ignored and a slow query runs to completion (tested). Inside a transaction the setting is
+    enforced, and being transaction-local it never leaks to the pooled connection.
+    """
+    async with factory() as session, session.begin():
+        await session.execute(text("SET TRANSACTION READ ONLY"))
+        await session.execute(
+            text("SELECT set_config('statement_timeout', :ms, true)"),
+            {"ms": str(statement_timeout_ms)},
+        )
+        yield session
