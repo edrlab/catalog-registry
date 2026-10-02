@@ -12,6 +12,7 @@
         "publicationTypes": ["ebook", "comic", "audiobook"],
         "country": "FR",
         "subdivisions": ["FR-IDF"],
+        "city": "Paris",
         "coverage": "subdivisions"
       },
       "links": [

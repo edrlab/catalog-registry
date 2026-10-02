@@ -19,7 +19,7 @@ export DB_PORT
 .DEFAULT_GOAL := help
 
 .PHONY: help setup env enums seed-schema up down clean run seed seed-libraries seed-sample add migrate revision psql \
-        test lint fmt bench check-db schema-check docker-build docker-run logs stop
+        test lint fmt bench check-db schema-check reference-data docker-build docker-run logs stop
 
 # Self-documenting: a target appears here when its line carries a `## ` description, and
 # `##@ ` starts a section. Nothing to keep in step, add a target with `## what it does`
@@ -138,6 +138,11 @@ fmt:  ## Apply ruff fixes and formatting
 schema-check:  ## Validate schema/ and every fixture under demo/ and data/
 	uv run python scripts/validate_schemas.py
 	uv run python scripts/validate_fixtures.py demo
+
+# Not run by `migrate`: the migration carries the rows as literals. Run this to review a CLDR or
+# pycountry bump; CSVs land in .cache/reference-data/out, and `PY=1` also prints the literals.
+reference-data:  ## Regenerate search reference data from pinned CLDR/ISO sources (offline-cached)
+	uv run --with pycountry==26.2.16 python scripts/generate_reference_data.py $(if $(PY),--python)
 
 # Confirm a database is usable before anything depends on it, point REGISTRY_DATABASE_URL
 # at Cloud SQL through the Auth Proxy and run this. See README, "The Cloud SQL sandbox".
