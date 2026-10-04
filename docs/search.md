@@ -121,6 +121,24 @@ warm from Europe (150 ms acceptable). Measured 4 October 2026 on PostgreSQL 18, 
 The cost follows the number of matches, not the size of the table. It is run only on a throwaway
 database: the script writes `ZZ Bench` rows and deletes them afterwards.
 
+## How far typo tolerance reaches
+
+Measured, not assumed (`tests/integration/test_search_fuzzy.py`): every word the seed is findable by,
+damaged in each of the four ways a person mistypes, on the 12-catalog seed.
+
+| One mistake | Found (default threshold 0.6) | At 0.5 | At 0.4 |
+|---|---|---|---|
+| a letter dropped | 79% | 96% | 99% |
+| a letter added | 75% | 96% | 100% |
+| a letter replaced | 61% | 90% | 97% |
+| two neighbours swapped | 24% | 66% | 83% |
+| unrelated words returning something (of 40) | 0 | 1 | 3 |
+
+Long words (9 letters or more) survive one added letter every time; short words are not forgiven.
+The threshold is `pg_trgm.word_similarity_threshold`, the PostgreSQL default of 0.6; a test fails if the
+server overrides it. Loosening it trades missed typos for noise, and the right value depends on how many
+catalogs there are, so decide it against the real data (and re-run `make bench` and the fuzzy tests).
+
 ## Known behaviour
 
 - "Belgio" and "Vallonia" (Italian, not loaded for Belgium) still find the Belgian catalogs as
