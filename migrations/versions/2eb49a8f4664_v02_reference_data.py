@@ -908,12 +908,11 @@ SUBDIVISION_TYPES = [
     ("CA", "territory"),
     ("FR", "metropolitan region"),
     ("FR", "metropolitan department"),
-    ("FR", "overseas collectivity"),
+    ("FR", "metropolitan collectivity with special status"),
     ("FR", "overseas departmental collectivity"),
-    ("FR", "overseas unique territorial collectivity"),
+    ("FR", "overseas collectivity"),
     ("FR", "overseas collectivity with special status"),
-    ("FR", "overseas territory"),
-    ("FR", "dependency"),
+    ("FR", "overseas unique territorial collectivity"),
 ]
 
 #: (table, columns, rows). Parents first on the way up; the same order, reversed, on the way down.

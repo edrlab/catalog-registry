@@ -17,16 +17,17 @@ from registry.db.models import *  # noqa: F403 - registers every model on Base.m
 
 pytestmark = pytest.mark.integration
 
-#: ADR-055, France after Hadrien's answers on 1 October.
+#: ADR-055, France as Hadrien listed it on 2 October, plus the type he asked to add for
+#: Martinique and Guyane. Left out on purpose: overseas territory, dependency, European
+#: collectivity.
 FRANCE_TYPES = {
     "metropolitan region",
     "metropolitan department",
-    "overseas collectivity",
+    "metropolitan collectivity with special status",
     "overseas departmental collectivity",
-    "overseas unique territorial collectivity",
+    "overseas collectivity",
     "overseas collectivity with special status",
-    "overseas territory",
-    "dependency",
+    "overseas unique territorial collectivity",
 }
 
 #: Countries CLDR gives no language to; they get English only (ADR-053).
@@ -194,7 +195,7 @@ async def test_subdivision_names_follow_the_countrys_languages_or_english(
     assert stray == []
 
 
-async def test_france_has_exactly_the_eight_types_of_adr_055(db_session: AsyncSession) -> None:
+async def test_france_has_exactly_the_seven_types_of_adr_055(db_session: AsyncSession) -> None:
     found = {
         r[0]
         for r in await rows(
