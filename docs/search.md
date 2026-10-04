@@ -104,6 +104,23 @@ only holds rows for subdivisions present in `subdivisions`).
 - **Concurrency.** `refresh_catalog_search` locks the catalog row (`FOR NO KEY UPDATE`) so two
   transactions changing one catalog's subdivisions both end up in its search row.
 
+## Measured
+
+`make bench N="1000 10000"` times `/search` over synthetic catalogs with a country and varied titles,
+against a local server, so these are server times without network. Hadrien's target is under 100 ms
+warm from Europe (150 ms acceptable). Measured 4 October 2026 on PostgreSQL 18, 120 requests per query:
+
+| Catalogs | Query | p50 | p95 | Matches |
+|---|---|---|---|---|
+| 10,000 | title word | 18 ms | 20 ms | 830 |
+| 10,000 | place name in another language | 23 ms | 27 ms | 1,429 |
+| 10,000 | typo of a place name | 30 ms | 38 ms | 1,429 |
+| 10,000 | phrase | 14 ms | 16 ms | 38 |
+| 10,000 | no match | 5 ms | 5 ms | 0 |
+
+The cost follows the number of matches, not the size of the table. It is run only on a throwaway
+database: the script writes `ZZ Bench` rows and deletes them afterwards.
+
 ## Known behaviour
 
 - "Belgio" and "Vallonia" (Italian, not loaded for Belgium) still find the Belgian catalogs as

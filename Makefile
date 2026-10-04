@@ -148,7 +148,7 @@ reference-data:  ## Regenerate search reference data from pinned CLDR/ISO source
 # at Cloud SQL through the Auth Proxy and run this. See README, "The Cloud SQL sandbox".
 # No latency target has ever been agreed, so this asserts nothing. It answers "what
 # happens at n" on demand, and gives any future optimisation a measured before.
-bench:  ## Measure GET / as the recommended set grows: make bench N="10 1000"
+bench:  ## Measure GET / and GET /search as the catalog set grows: make bench N="10 1000"
 	uv run python scripts/benchmark_feed.py $(N)
 
 check-db:  ## Report a database's version and extension availability
