@@ -27,10 +27,11 @@ async def test_a_search_finds_a_catalog_by_a_place_name_in_another_language(
     assert response.status_code == 200
     assert response.headers["content-type"].startswith(OPDS_CATALOG_MEDIA_TYPE)
     body = response.json()
-    assert [c["metadata"]["title"] for c in body["catalogs"]] == ["Médiathèque Valais"]
+    # The exact match first; Lirtuel (Wallonia) follows as a trigram match at threshold 0.5.
+    assert [c["metadata"]["title"] for c in body["catalogs"]] == ["Médiathèque Valais", "Lirtuel"]
     assert body["metadata"] == {
         "title": "Search results",
-        "numberOfItems": 1,
+        "numberOfItems": 2,
         "itemsPerPage": 50,
         "currentPage": 1,
     }
@@ -72,7 +73,7 @@ async def test_a_page_past_the_end_is_empty_but_still_reports_the_total(
     body = (await client.get("/search", params={"query": "wallis", "page": 2})).json()
 
     assert body["catalogs"] == []
-    assert body["metadata"]["numberOfItems"] == 1
+    assert body["metadata"]["numberOfItems"] == 2
     assert body["metadata"]["currentPage"] == 2
     rels = {link["rel"]: link["href"] for link in body["links"]}
     assert rels["self"].endswith("&page=2")

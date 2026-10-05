@@ -28,7 +28,10 @@ from registry.db.session import (
     read_only_transaction,
 )
 from registry.repositories.catalog_repository import CatalogRepository
-from registry.repositories.search_repository import CatalogSearchRepository
+from registry.repositories.search_repository import (
+    WORD_SIMILARITY_THRESHOLD,
+    CatalogSearchRepository,
+)
 
 #: ADR-046, ADR-058: a search that outruns this is cancelled and answered with a 503.
 SEARCH_STATEMENT_TIMEOUT_MS = 1000
@@ -59,7 +62,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         @asynccontextmanager
         async def open_catalog_searcher() -> AsyncIterator[CatalogSearchRepository]:
             async with read_only_transaction(
-                app.state.search_session_factory, statement_timeout_ms=SEARCH_STATEMENT_TIMEOUT_MS
+                app.state.search_session_factory,
+                statement_timeout_ms=SEARCH_STATEMENT_TIMEOUT_MS,
+                local_settings={
+                    "pg_trgm.word_similarity_threshold": str(WORD_SIMILARITY_THRESHOLD)
+                },
             ) as session:
                 yield CatalogSearchRepository(session)
 

@@ -51,7 +51,8 @@ PLACE_NAMES = [
     ("Flandre", words(OPENBARE)),
     ("Flanders", words(OPENBARE)),
     ("Valais", words(VALAIS)),
-    ("Wallis", words(VALAIS)),
+    # Threshold 0.5 (6 Oct): Wallonia is close enough to Wallis to follow the exact match.
+    ("Wallis", words(VALAIS) + trigrams(LIRTUEL)),
     ("Vallese", words(VALAIS)),
     ("Suisse", words(VALAIS)),
     ("Schweiz", words(VALAIS)),
@@ -76,7 +77,8 @@ TITLES = [
     ("MÉDIATHÈQUE", words(VALAIS)),
     ("ebooks", words(STANDARD, LIBRES)),
     ("standard ebooks", words(STANDARD, LIBRES)),
-    ("Liber", words(LIBER)),
+    # Threshold 0.5: Librivox and "libres" are near enough to follow Liber Liber.
+    ("Liber", words(LIBER) + trigrams(LIBRIVOX, LIBRES)),
     ("Librivox", words(LIBRIVOX)),
     ("TV5", words(TV5)),
     ("Bibliothèque Nationale", words(PARIS, ROMANDE, RUSSE)),
@@ -89,14 +91,15 @@ TYPOS = [
     ("belgiqe", trigrams(LIRTUEL, OPENBARE)),
     ("bibliothèques", trigrams(PARIS, ROMANDE, RUSSE, OPENBARE)),
     ("guten", trigrams(GUTENBERG)),
-    # Known trigram limit: swapped letters in a short word share too few trigrams.
-    ("parsi", []),
+    # Swapped neighbours in a short word: not found at the default 0.6, found at 0.5 (6 Oct).
+    ("parsi", trigrams(PARIS)),
     # ß is folded by the database's unaccent, not by Python (ADR-059).
     ("Suiße", words(VALAIS)),
 ]
 
 SYNTAX = [
-    ('"numérique de paris"', words(PARIS)),
+    # Threshold 0.5: the fuzzy half ignores the quotes, so Romande ("numérique") follows the phrase.
+    ('"numérique de paris"', words(PARIS) + trigrams(ROMANDE)),
     # Negation removes from both halves: BnParis used to come back through the trigram half.
     ("bibliothèque -paris", words(ROMANDE, RUSSE) + trigrams(OPENBARE)),
     ("Belgique -lirtuel", words(OPENBARE)),

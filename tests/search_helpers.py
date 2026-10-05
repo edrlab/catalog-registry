@@ -11,7 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from registry.core.schema_validation import build_schema_validator
 from registry.domain.search_query import parse_search_query
-from registry.repositories.search_repository import _SEARCH, RANK_WEIGHTS
+from registry.repositories.search_repository import (
+    _SEARCH,
+    RANK_WEIGHTS,
+    WORD_SIMILARITY_THRESHOLD,
+)
 from tests.conftest import LIBRARIES_FILE, SEED_FILE
 
 PAGE = 50
@@ -45,7 +49,12 @@ def assert_valid_catalog(catalog: dict[str, Any]) -> None:
 
 
 async def search_rows(
-    session: AsyncSession, query: str, *, page: int = 1, limit: int = PAGE
+    session: AsyncSession,
+    query: str,
+    *,
+    page: int = 1,
+    limit: int = PAGE,
+    threshold: float = WORD_SIMILARITY_THRESHOLD,
 ) -> list[tuple[str, int, float]]:
     """(title, tier, score) in rank order, from the repository's own statement.
 
@@ -55,6 +64,8 @@ async def search_rows(
     parsed = parse_search_query(query)
     if parsed.is_empty:
         return []
+    # The setting `read_only_transaction` applies in production; SET LOCAL ends with the test.
+    await session.execute(text(f"SET LOCAL pg_trgm.word_similarity_threshold = {threshold}"))
     result = await session.execute(
         _SEARCH,
         {

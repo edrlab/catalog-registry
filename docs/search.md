@@ -126,22 +126,29 @@ database: the script writes `ZZ Bench` rows and deletes them afterwards.
 Measured, not assumed (`tests/integration/test_search_fuzzy.py`): every word the seed is findable by,
 damaged in each of the four ways a person mistypes, on the 12-catalog seed.
 
-| One mistake | Found (default threshold 0.6) | At 0.5 | At 0.4 |
+| One mistake | At 0.6 (PostgreSQL default) | **At 0.5 (what the app uses)** | At 0.4 |
 |---|---|---|---|
-| a letter dropped | 79% | 96% | 99% |
-| a letter added | 75% | 96% | 100% |
-| a letter replaced | 61% | 90% | 97% |
-| two neighbours swapped | 24% | 66% | 83% |
-| unrelated words returning something (of 40) | 0 | 1 | 3 |
+| a letter dropped | 79% | **96%** | 99% |
+| a letter added | 75% | **96%** | 100% |
+| a letter replaced | 61% | **90%** | 97% |
+| two neighbours swapped | 24% | **66%** | 83% |
+| unrelated words returning something (of 40) | 0 | **1** (`library`) | 3 |
 
-Long words (9 letters or more) survive one added letter every time; short words are not forgiven.
-The threshold is `pg_trgm.word_similarity_threshold`, the PostgreSQL default of 0.6; a test fails if the
-server overrides it. Loosening it trades missed typos for noise, and the right value depends on how many
-catalogs there are, so decide it against the real data (and re-run `make bench` and the fuzzy tests).
+The app applies 0.5 (`WORD_SIMILARITY_THRESHOLD` in `search_repository.py`) inside each search
+transaction, so the server's own setting stays at 0.6 and nothing leaks to other connections. Chosen on
+6 October 2026. What it changed in the plan's table (four rows, all in the trigram tier, all after the
+exact matches): `parsi` now finds the Paris library; `Liber` also lists Librivox and Ebooks libres; `Wallis`
+also lists Lirtuel (Wallonia); and a quoted phrase such as `"numérique de paris"` also lists Bibliothèque
+numérique Romande, because the fuzzy half ignores the quotes.
+
+Long words (9 letters or more) survive one added letter every time; short words are forgiven less.
+Loosening the threshold trades missed typos for noise, and the right value depends on how many catalogs
+there are: re-measure against the real data (`make bench`, and the fuzzy tests) before moving it.
 
 ## Known behaviour
 
 - "Belgio" and "Vallonia" (Italian, not loaded for Belgium) still find the Belgian catalogs as
   trigram matches.
-- Swapped letters in short words ("parsi") share too few trigrams to be found.
+- Swapped letters in a short word are found about two times in three ("parsi" now finds Paris); a
+  quoted phrase still gets fuzzy extras after the exact match.
 - BM25 ranking arrives with `pg_textsearch` once it is generally available on Cloud SQL (ADR-047).

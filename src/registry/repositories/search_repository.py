@@ -26,6 +26,13 @@ from registry.repositories.protocols import SearchPage
 #: Open question Q3.
 RANK_WEIGHTS: Final = (0.1, 0.2, 0.4, 1.0)
 
+#: How alike a typed word and a stored one must be for the trigram half to match (pg_trgm
+#: `word_similarity`, used by `<%`). PostgreSQL's default is 0.6. Measured on 4 and 6 October 2026
+#: (`tests/integration/test_search_fuzzy.py`): 0.6 finds 24% of swapped-neighbour typos and 61%
+#: of replaced letters; 0.5 finds 66% and 90% and lets one extra unrelated word through. Applied
+#: per transaction by `read_only_transaction`, so the server's own setting stays untouched.
+WORD_SIMILARITY_THRESHOLD: Final = 0.5
+
 #: SQLSTATE `query_canceled`, what `statement_timeout` raises.
 _QUERY_CANCELED: Final = "57014"
 
