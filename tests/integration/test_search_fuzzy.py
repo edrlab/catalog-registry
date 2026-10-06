@@ -32,7 +32,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.core.config import Settings
-from registry.db.session import build_search_engine, create_database_engine
+from registry.db.session import build_read_engine, create_database_engine
 from registry.repositories.search_repository import (
     SEARCH_CONNECTION_SETTINGS,
     WORD_SIMILARITY_THRESHOLD,
@@ -236,7 +236,7 @@ async def test_the_search_pool_carries_its_threshold_and_nothing_else_does(
     from the start and for their whole life (a startup setting, not a per-transaction one). The
     main engine is unaffected. A role or database level override would change every result
     silently, so the server default is pinned as well."""
-    search_engine = build_search_engine(settings, SEARCH_CONNECTION_SETTINGS)
+    search_engine = build_read_engine(settings, SEARCH_CONNECTION_SETTINGS)
     main_engine = create_database_engine(settings)
     show = text("SHOW pg_trgm.word_similarity_threshold")
     # The setting only exists once the extension's library is loaded in the session, which its

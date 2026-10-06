@@ -59,7 +59,11 @@ async def search(
 
 
 async def orm_catalog(session: AsyncSession, catalog_id: uuid.UUID) -> Catalog:
-    return await CatalogRepository(session).load_catalog_by_id(catalog_id)
+    """The ORM load (`selectinload`), the importers' lookup. Not `load_catalog_by_id`: that is
+    itself one statement now, and comparing two of the same would prove nothing."""
+    found = await CatalogRepository(session).fetch_catalog_by_identity_id(catalog_id)
+    assert found is not None
+    return found
 
 
 def document(title: str, **metadata: Any) -> dict[str, Any]:

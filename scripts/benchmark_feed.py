@@ -12,9 +12,9 @@ realistic share of them rather than all.
 Postgres costs about nothing, and the client is on the same machine too. What is left is the
 application's own work. In production add the distance: one search sends **1** message to the
 database (docs/performance.md), at about 2 to 4 ms each across regions, plus the client's trip.
-The `app` column is the time the application itself reported (`Server-Timing`); the rest of the
-client's time is the connection and the network. For a deployed instance run
-`make search-score ARGS="--url https://..."` and read `Server-Timing` the same way.
+For a deployed instance read the Cloud Run metrics tab: `request_latencies` is the time inside the
+container, `e2e_latencies` adds Google's network in front; the difference from what a client sees is
+its own distance. `make search-score ARGS="--url https://..."` runs the search cases against it.
 
 Hadrien's target for search is under 100 ms warm from Europe, 150 ms acceptable; the script prints
 it beside the numbers and still asserts nothing: an invented threshold produces flaky builds.
@@ -27,7 +27,6 @@ import asyncio
 import gzip
 import itertools
 import json
-import re
 import statistics
 import sys
 import time
@@ -35,7 +34,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -175,18 +173,8 @@ async def remove(connection: AsyncConnection) -> None:
     )
 
 
-_SERVER_TIMING = re.compile(r"app;dur=([0-9.]+)")
-
-
-def app_milliseconds(headers: Any) -> float:
-    """What the application says it took (`Server-Timing: app;dur=...`), or 0 if it says nothing."""
-    match = _SERVER_TIMING.search(headers.get("Server-Timing") or "")
-    return float(match.group(1)) if match else 0.0
-
-
-def measure(base_url: str, header: str | None) -> tuple[float, int, int, float]:
-    """One request, over real HTTP. Returns (milliseconds, bytes on the wire, bytes decoded, the
-    application's own milliseconds).
+def measure(base_url: str, header: str | None) -> tuple[float, int, int]:
+    """One request, over real HTTP. Returns (milliseconds, bytes on the wire, bytes decoded).
 
     `Accept-Encoding: gzip` because every real client sends it, and measuring without it
     reports a payload nobody receives. `urllib` does not add it on its own.
@@ -198,43 +186,36 @@ def measure(base_url: str, header: str | None) -> tuple[float, int, int, float]:
     with urllib.request.urlopen(request) as response:
         body = response.read()
         compressed = response.headers.get("Content-Encoding") == "gzip"
-        app_ms = app_milliseconds(response.headers)
     elapsed = (time.perf_counter() - started) * 1000
     decoded = len(gzip.decompress(body)) if compressed else len(body)
-    return elapsed, len(body), decoded, app_ms
+    return elapsed, len(body), decoded
 
 
-def measure_search(base_url: str, query: str) -> tuple[float, int, float]:
-    """One search over real HTTP. Returns (milliseconds, `numberOfItems`, the application's own
-    milliseconds)."""
+def measure_search(base_url: str, query: str) -> tuple[float, int]:
+    """One search over real HTTP. Returns (milliseconds, `numberOfItems`)."""
     url = f"{base_url}search?{urllib.parse.urlencode({'query': query})}"
     request = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
     started = time.perf_counter()
     with urllib.request.urlopen(request) as response:
         body = response.read()
-        app_ms = app_milliseconds(response.headers)
         if response.headers.get("Content-Encoding") == "gzip":
             body = gzip.decompress(body)
     elapsed = (time.perf_counter() - started) * 1000
-    return elapsed, json.loads(body)["metadata"]["numberOfItems"], app_ms
+    return elapsed, json.loads(body)["metadata"]["numberOfItems"]
 
 
 def report_search(base_url: str, count: int) -> None:
     print(f"\n  /search at {count} synthetic catalogs (target p95 under {TARGET_MS} ms, locally)")
-    print(f"  {'query':<24} {'p50':>9} {'p95':>9} {'app p50':>9} {'matches':>9}")
+    print(f"  {'query':<24} {'p50':>9} {'p95':>9} {'matches':>9}")
     for label, query in SEARCH_QUERIES:
         for _ in range(WARMUP):
             measure_search(base_url, query)
-        samples, app_times, matches = [], [], 0
+        samples, matches = [], 0
         for _ in range(RUNS):
-            elapsed, matches, app_ms = measure_search(base_url, query)
+            elapsed, matches = measure_search(base_url, query)
             samples.append(elapsed)
-            app_times.append(app_ms)
         cuts = statistics.quantiles(samples, n=100, method="inclusive")
-        print(
-            f"  {label:<24} {statistics.median(samples):8.1f}ms {cuts[94]:8.1f}ms "
-            f"{statistics.median(app_times):8.1f}ms {matches:>9}"
-        )
+        print(f"  {label:<24} {statistics.median(samples):8.1f}ms {cuts[94]:8.1f}ms {matches:>9}")
 
 
 async def main(argv: list[str]) -> int:
@@ -251,8 +232,7 @@ async def main(argv: list[str]) -> int:
     engine = create_database_engine(settings)
     print(f"{RUNS} requests per size, headers rotating, {base_url}\n")
     print(
-        f"{'catalogs':>9} {'p50':>9} {'p95':>9} {'p99':>9} {'app p50':>9} "
-        f"{'returned':>9} {'wire':>8} {'raw':>8}"
+        f"{'catalogs':>9} {'p50':>9} {'p95':>9} {'p99':>9} {'returned':>9} {'wire':>8} {'raw':>8}"
     )
     try:
         for count in sizes:
@@ -262,13 +242,12 @@ async def main(argv: list[str]) -> int:
             for _ in range(WARMUP):
                 measure(base_url, next(headers))
 
-            samples, wire, raw, app_times = [], [], [], []
+            samples, wire, raw = [], [], []
             for _ in range(RUNS):
-                elapsed, on_wire, decoded, app_ms = measure(base_url, next(headers))
+                elapsed, on_wire, decoded = measure(base_url, next(headers))
                 samples.append(elapsed)
                 wire.append(on_wire)
                 raw.append(decoded)
-                app_times.append(app_ms)
             cuts = statistics.quantiles(samples, n=100, method="inclusive")
 
             with urllib.request.urlopen(base_url) as response:
@@ -276,7 +255,7 @@ async def main(argv: list[str]) -> int:
 
             print(
                 f"{count:>9} {statistics.median(samples):8.1f}ms "
-                f"{cuts[94]:8.1f}ms {cuts[98]:8.1f}ms {statistics.median(app_times):8.1f}ms "
+                f"{cuts[94]:8.1f}ms {cuts[98]:8.1f}ms"
                 f"{returned:>9} {statistics.median(wire) / 1024:7.1f}K "
                 f"{statistics.median(raw) / 1024:7.1f}K"
             )

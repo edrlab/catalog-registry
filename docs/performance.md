@@ -3,37 +3,40 @@
 Hadrien's target for search: **under 100 ms warm from Europe, 150 ms acceptable.** This page is
 what makes that true, and how to check it.
 
-## One search, one database message
+## One read, one database message
 
-The time a search takes is mostly *how many times the app waits for the database*, not how much
-work the database does (about 3 ms). A search used to send 14 messages: a connection ping, BEGIN,
-`SET TRANSACTION READ ONLY`, the settings, the search, a load, five relationship loads, COMMIT.
-It now sends **one**: a single statement returns the page and everything under it (kinds,
-languages, subdivisions as arrays, links as one JSON array). The rows become the same `Catalog`
-objects the renderer already uses, so the output is identical.
+The time a read takes is mostly *how many times the app waits for the database*, not how much work
+the database does (about 3 ms). Search used to send 14 messages and the feed and a single catalog 9
+each: a connection ping, BEGIN, the settings, the query, a load, five relationship loads, COMMIT.
+Every public read now sends **one**: a single statement returns the page and everything under it
+(kinds, languages and subdivisions as arrays, links as one JSON array). The rows become the same
+`Catalog` objects the renderer already uses, so the output is identical.
 
-| Round trip to the database | Before: 14 messages | Now: 1 message |
-|---|---|---|
-| 0 ms (same machine) | 22 ms | **15 ms** |
-| 2 ms (same region) | 77 ms | **18 ms** |
-| 10 ms (a region away) | 227 ms | **36 ms** |
-| 12 ms | 254 ms | **45 ms** |
+Median, real app, warm, through a proxy that adds the delay to the database
+(it adds a little of its own, so read the ratios):
 
-Median of 100 warm searches on 1,012 catalogs, the real app, through a proxy that adds the delay
-(the proxy adds a little of its own, so read the ratios). Page of 50, p95 about 10 ms above these.
+| Round trip to the database | Search before | Search now | Feed before | Feed now | One catalog before | One catalog now |
+|---|---|---|---|---|---|---|
+| 0 ms (same machine) | 22 ms | **15 ms** | 17 ms | **5 ms** | 15 ms | **4 ms** |
+| 10 ms (a region away) | 227 ms | **36 ms** | 143 ms | **20 ms** | 134 ms | **19 ms** |
 
-A test counts the messages on the wire (it would have caught the 14). It is still no N+1 (R4):
-there is no per-row query at all. Decisions: ADR-060, ADR-058 (amended).
+Search: 1,012 catalogs, a page of 50. Feed and catalog: 12 catalogs, the size of production. A
+feed of 1,000 catalogs goes from 19 messages to 1 (487 ms to 191 ms at 10 ms) but stays near
+120 ms on one machine: that part is Python rendering the page.
+
+Tests count the messages on the wire (they would have caught the 14). Still no N+1 (R4): there is
+no per-row query at all. Decisions: ADR-060, ADR-062, ADR-058 (amended).
 
 ## Where it runs, and what it costs
 
 Cloud Run `thorium-catalog-registry` is in **europe-west1** (Belgium); Cloud SQL
 `development-sandbox-db` is in **europe-west9** (Paris). Measured on the live service, the app to
 database trip is about **2 to 4 ms per message**, so one message is cheap and fourteen were not.
-Moving Cloud Run to europe-west9 would cut it further; it is not needed for search any more.
+Moving Cloud Run to europe-west9 would cut it further; it is not needed for the reads any more.
 
-**Min instances.** With none kept warm, the first request after a quiet period waits for a new
-instance: seconds. Set `--min-instances=1` for anything promised as "warm".
+**Min instances.** The service keeps 1 instance warm (service-level scaling, min 1, max 5; request-based
+billing, so the CPU is limited between requests). Without it the first request after a quiet period waits
+for a new instance: seconds.
 
 **Distance from the client is not ours to fix.** From a far country even `/health/live`, which
 touches no database, takes several hundred milliseconds. Caching at the edge would help; it is
@@ -41,9 +44,9 @@ deferred (ADR-009).
 
 ## Measure it
 
-- **`Server-Timing: app;dur=<ms>`** is on every response: the time the application took. The
-  client's own total minus this is the network. Try `curl -s -D - -o /dev/null URL | grep -i
-  server-timing`.
+- **The Cloud Run metrics tab** (Observability) already splits it: `request_latencies` is the time
+  inside the container, `e2e_latencies` adds Google's network in front. A client's own total minus
+  `e2e_latencies` is its distance. Nothing extra is sent with each response for this.
 - **`make bench`** times `/` and `/search` on a local server. Local means no network between app and
   database, so it shows the application's own work; read it with the table above.
 - **`make search-score ARGS="--url https://…"`** runs the search cases against a deployed instance.

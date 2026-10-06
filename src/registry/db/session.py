@@ -24,17 +24,6 @@ def build_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessio
     return async_sessionmaker(engine, expire_on_commit=False)
 
 
-def build_read_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
-    """Sessions for the read path, which opens no transaction.
-
-    A feed request only reads, but a default session wraps it in `BEGIN` … `ROLLBACK`. **Reads
-    only**. Writes build their own factory, and v1.0's write routes must not use this.
-    """
-    return async_sessionmaker(
-        engine.execution_options(isolation_level="AUTOCOMMIT"), expire_on_commit=False
-    )
-
-
 async def check_database_connection(engine: AsyncEngine) -> None:
     """Raise if the database is unreachable. Used by the readiness probe."""
     async with engine.connect() as connection:
@@ -42,24 +31,25 @@ async def check_database_connection(engine: AsyncEngine) -> None:
 
 
 #: Short enough that an idle connection is replaced before an intermediary can drop it. A drop that
-#: still happens is retried once by the repository (one statement per search makes that safe).
-SEARCH_POOL_RECYCLE_SECONDS = 300
+#: still happens is retried once by `fetch_rows` (one statement per read makes that safe).
+READ_POOL_RECYCLE_SECONDS = 300
 
 
-def build_search_engine(settings: Settings, server_settings: Mapping[str, str]) -> AsyncEngine:
-    """The connection pool search runs on (ADR-058, amended).
+def build_read_engine(settings: Settings, server_settings: Mapping[str, str]) -> AsyncEngine:
+    """A connection pool for the public reads: search, the feed, one catalog (ADR-060, ADR-062).
 
-    Search is one read statement, so it needs no transaction: AUTOCOMMIT saves BEGIN and COMMIT, and
-    its limits ride on the connection itself instead of being set again for every request:
-    *server_settings* are sent once, in the startup packet, as `statement_timeout`,
-    `default_transaction_read_only` and the typo threshold. A dedicated pool, so none of this can
-    reach the feed or the importers. No pre-ping (3 extra round trips per request): connections are
-    recycled and one retry covers a dropped one.
+    Each of these is one read statement, so it needs no transaction: AUTOCOMMIT saves BEGIN and
+    COMMIT, and the limits ride on the connection itself instead of being set again for every
+    request: *server_settings* are sent once, in the startup packet (`statement_timeout`,
+    `default_transaction_read_only`, and for search the typo threshold). A pool per kind of read, so
+    one kind's limits cannot reach another's. No pre-ping (3 extra round trips per request):
+    connections are recycled and one retry covers a dropped one. Writes (the importers) and the
+    readiness probe stay on the main engine, `create_database_engine`.
     """
     return create_async_engine(
         str(settings.database_url),
         pool_pre_ping=False,
-        pool_recycle=SEARCH_POOL_RECYCLE_SECONDS,
+        pool_recycle=READ_POOL_RECYCLE_SECONDS,
         isolation_level="AUTOCOMMIT",
         connect_args={"server_settings": dict(server_settings)},
     )

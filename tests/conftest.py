@@ -25,7 +25,7 @@ from urllib.parse import urlsplit
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import event, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncSession,
@@ -185,17 +185,19 @@ async def app(
     session_factory: async_sessionmaker[AsyncSession],
     db_connection: AsyncConnection,
 ) -> AsyncIterator[FastAPI]:
-    """The real app, with the feed and search session factories rebound to the test's transaction.
+    """The real app, with the feed/catalog and search session factories rebound to the test's
+    transaction.
 
-    The search pool's own settings (timeout, read-only) are NOT exercised here; the tests that
-    prove them build a real app and engine instead (`test_search_timeout*`, `test_search_engine`).
+    The read pools' own settings (timeouts, read-only mode, the typo threshold) are NOT exercised
+    here; the tests that prove them build a real app and engine instead (`test_read_pool*`,
+    `test_search_timeout*`, `test_search_engine`).
     """
     built = create_app(settings)
     async with built.router.lifespan_context(built):
         built.state.session_factory = session_factory
         built.state.search_session_factory = session_factory
         # The production search pool carries the typo threshold as a connection setting
-        # (`build_search_engine`). The test connection is not that pool, so it gets the same
+        # (`build_read_engine`). The test connection is not that pool, so it gets the same
         # value for the length of the test's transaction (`SET LOCAL` ends with it).
         await db_connection.execute(
             text(f"SET LOCAL pg_trgm.word_similarity_threshold = {WORD_SIMILARITY_THRESHOLD}")
@@ -210,22 +212,3 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as async_client:
         yield async_client
-
-
-class QueryCounter:
-    """Counts ORM statements (`do_orm_execute`). Used for the feed and catalog paths; the search
-    path is counted at the driver and on the wire (`test_search_query_count`)."""
-
-    def __init__(self) -> None:
-        self.count = 0
-
-    def __call__(self, *_args: object, **_kwargs: object) -> None:
-        self.count += 1
-
-
-@pytest.fixture
-def query_counter(db_session: AsyncSession) -> Iterator[QueryCounter]:
-    counter = QueryCounter()
-    event.listen(db_session.sync_session, "do_orm_execute", counter)
-    yield counter
-    event.remove(db_session.sync_session, "do_orm_execute", counter)

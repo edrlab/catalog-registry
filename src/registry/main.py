@@ -20,15 +20,16 @@ from registry.api.exception_handlers import register_exception_handlers
 from registry.api.middleware import ResponseHeadersMiddleware
 from registry.api.routes import catalogs, feed, health, search
 from registry.core.config import Settings
-from registry.core.constants import HEADER_REQUEST_ID
 from registry.db.session import (
-    build_read_session_factory,
-    build_search_engine,
+    build_read_engine,
     build_session_factory,
     check_database_connection,
     create_database_engine,
 )
-from registry.repositories.catalog_repository import CatalogRepository
+from registry.repositories.catalog_repository import (
+    READ_CONNECTION_SETTINGS,
+    CatalogRepository,
+)
 from registry.repositories.search_repository import (
     SEARCH_CONNECTION_SETTINGS,
     CatalogSearchRepository,
@@ -43,7 +44,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine = create_database_engine(resolved)
         app.state.settings = resolved
         app.state.engine = engine
-        app.state.session_factory = build_read_session_factory(engine)
+        # The feed and one catalog are reads: their own pool, read-only, with a timeout (ADR-062).
+        read_engine = build_read_engine(resolved, READ_CONNECTION_SETTINGS)
+        app.state.read_engine = read_engine
+        app.state.session_factory = build_session_factory(read_engine)
         app.state.check_database_connection = partial(check_database_connection, engine)
 
         @asynccontextmanager
@@ -56,7 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         # Search has its own pool: the timeout, read-only mode and typo threshold ride on its
         # connections, and nothing of that reaches the feed or the importers (ADR-058, ADR-060).
-        search_engine = build_search_engine(resolved, SEARCH_CONNECTION_SETTINGS)
+        search_engine = build_read_engine(resolved, SEARCH_CONNECTION_SETTINGS)
         app.state.search_engine = search_engine
         app.state.search_session_factory = build_session_factory(search_engine)
 
@@ -68,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.open_catalog_searcher = open_catalog_searcher
         yield
         await search_engine.dispose()
+        await read_engine.dispose()
         await engine.dispose()
 
     app = FastAPI(title="OPDS Catalog Registry", version="0.1.0", lifespan=lifespan)
@@ -83,7 +88,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=["*"],
         allow_methods=["GET", "HEAD", "OPTIONS"],
         allow_credentials=False,
-        expose_headers=["Server-Timing", HEADER_REQUEST_ID],
     )
     app.add_middleware(ResponseHeadersMiddleware)
     register_exception_handlers(app)

@@ -1,4 +1,4 @@
-"""`build_search_engine`: the pool search runs on (ADR-058 amended, ADR-060). No connection made."""
+"""`build_read_engine`: the pool search runs on (ADR-058 amended, ADR-060). No connection made."""
 
 from typing import Any
 
@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from registry.core.config import Settings
 from registry.db import session as session_module
-from registry.db.session import SEARCH_POOL_RECYCLE_SECONDS, build_search_engine
+from registry.db.session import READ_POOL_RECYCLE_SECONDS, build_read_engine
 from registry.repositories import search_repository
 from registry.repositories.search_repository import (
     SEARCH_CONNECTION_SETTINGS,
@@ -25,7 +25,7 @@ def settings() -> Settings:
 
 
 def spy_on_engine_arguments(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    """The keyword arguments `build_search_engine` hands to SQLAlchemy, while still building the
+    """The keyword arguments `build_read_engine` hands to SQLAlchemy, while still building the
     real engine. The wire-level effect of `server_settings` is proven against Postgres in
     `test_search_timeout`, where `SHOW` reads them back from a real connection."""
     captured: dict[str, Any] = {}
@@ -39,13 +39,13 @@ def spy_on_engine_arguments(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
 
 def test_the_engine_is_autocommit_with_no_pre_ping_and_a_five_minute_recycle() -> None:
-    engine = build_search_engine(settings(), {"statement_timeout": "123"})
+    engine = build_read_engine(settings(), {"statement_timeout": "123"})
     pool = engine.sync_engine.pool
 
     assert engine.sync_engine.dialect._on_connect_isolation_level == "AUTOCOMMIT"
     assert pool._pre_ping is False
     assert pool._recycle == 300
-    assert SEARCH_POOL_RECYCLE_SECONDS == 300
+    assert READ_POOL_RECYCLE_SECONDS == 300
 
 
 def test_the_arguments_given_to_sqlalchemy_are_the_documented_ones(
@@ -53,7 +53,7 @@ def test_the_arguments_given_to_sqlalchemy_are_the_documented_ones(
 ) -> None:
     captured = spy_on_engine_arguments(monkeypatch)
 
-    build_search_engine(settings(), {"statement_timeout": "150"})
+    build_read_engine(settings(), {"statement_timeout": "150"})
 
     assert captured["isolation_level"] == "AUTOCOMMIT"
     assert captured["pool_pre_ping"] is False
@@ -68,7 +68,7 @@ def test_the_given_server_settings_are_passed_through_unchanged(
     captured = spy_on_engine_arguments(monkeypatch)
     given = {"statement_timeout": "150", "default_transaction_read_only": "on"}
 
-    build_search_engine(settings(), given)
+    build_read_engine(settings(), given)
 
     assert captured["connect_args"]["server_settings"] == given
 
@@ -77,7 +77,7 @@ def test_the_settings_are_copied_not_shared(monkeypatch: pytest.MonkeyPatch) -> 
     captured = spy_on_engine_arguments(monkeypatch)
     given = {"statement_timeout": "150"}
 
-    build_search_engine(settings(), given)
+    build_read_engine(settings(), given)
     given["statement_timeout"] = "9999"
 
     assert captured["connect_args"]["server_settings"] == {"statement_timeout": "150"}

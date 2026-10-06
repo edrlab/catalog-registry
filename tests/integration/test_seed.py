@@ -680,8 +680,13 @@ async def test_the_real_libraries_file_imports(db_session: AsyncSession) -> None
     assert await repository.fetch_recommended_catalogs() == []
     for entry in document["catalogs"]:
         href = next(link["href"] for link in entry["links"] if link["rel"] == "catalog")
-        stored = await repository.fetch_catalog_by_id(uuid.uuid5(uuid.NAMESPACE_URL, href))
-        assert stored is not None, entry["metadata"]["title"]
+        catalog_id = uuid.uuid5(uuid.NAMESPACE_URL, href)
+        # The public read is a snapshot of what is rendered; it does not carry `recommended` or
+        # `status` (R3). Those are the importer's business, so the importer's lookup shows them.
+        public = await repository.fetch_catalog_by_id(catalog_id)
+        assert public is not None, entry["metadata"]["title"]
+        stored = await repository.fetch_catalog_by_identity_id(catalog_id)
+        assert stored is not None
         assert stored.recommended is False
         assert stored.status is CatalogStatus.ACTIVE
 

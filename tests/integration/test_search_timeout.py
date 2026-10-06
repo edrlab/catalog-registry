@@ -1,6 +1,6 @@
 """The search pool's limits, enforced by the connection itself (ADR-058 amended, ADR-060).
 
-Search runs on `build_search_engine`: AUTOCOMMIT, with `statement_timeout`, read-only mode and the
+Search runs on `build_read_engine`: AUTOCOMMIT, with `statement_timeout`, read-only mode and the
 typo threshold sent once per connection in the startup packet. These tests build that engine for
 real, against the migrated database, and read the settings back with `SHOW` on live connections.
 
@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from registry.core.config import Settings
 from registry.core.errors import SearchTimeoutError
-from registry.db.session import build_search_engine, build_session_factory, create_database_engine
+from registry.db.session import build_read_engine, build_session_factory, create_database_engine
 from registry.domain.search_query import parse_search_query
 from registry.repositories.protocols import SearchPage
 from registry.repositories.search_repository import (
@@ -111,7 +111,7 @@ async def test_a_statement_inside_the_timeout_completes(settings: Settings) -> N
 
 
 async def test_every_search_connection_carries_the_production_settings(settings: Settings) -> None:
-    engine = build_search_engine(settings, SEARCH_CONNECTION_SETTINGS)
+    engine = build_read_engine(settings, SEARCH_CONNECTION_SETTINGS)
     try:
         async with engine.connect() as connection:
             await connection.execute(text("SELECT public.word_similarity('a', 'a')"))

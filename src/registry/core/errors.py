@@ -24,8 +24,12 @@ class ValidationError(RegistryError):
     title = "Unprocessable Entity"
 
 
-class SearchTimeoutError(RegistryError):
-    """A search outran its statement timeout (ADR-058). The caller can simply try again."""
+class ReadTimeoutError(RegistryError):
+    """A read outran its statement timeout (ADR-058, ADR-062). The caller can simply try again."""
 
     status_code = 503
     title = "Service Unavailable"
+
+
+class SearchTimeoutError(ReadTimeoutError):
+    """A search outran its statement timeout."""

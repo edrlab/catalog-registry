@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 
 from registry.core.config import Settings
 from registry.core.schema_validation import build_schema_validator
-from registry.db.session import build_search_engine
+from registry.db.session import build_read_engine
 from registry.domain.search_query import parse_search_query
 from registry.repositories.search_repository import (
     _SEARCH,
@@ -145,12 +145,12 @@ async def table_locked(url: str) -> AsyncIterator[None]:
 
 @asynccontextmanager
 async def search_engine_with(settings: Settings, **overrides: str) -> AsyncIterator[AsyncEngine]:
-    """The production search pool (`build_search_engine`), with some server settings replaced.
+    """The production search pool (`build_read_engine`), with some server settings replaced.
 
     A short `statement_timeout` makes a lock-blocked search fail in 150 ms instead of 1 s; an
     `application_name` lets a test find (and terminate) exactly this engine's backends.
     """
-    engine = build_search_engine(settings, {**SEARCH_CONNECTION_SETTINGS, **overrides})
+    engine = build_read_engine(settings, {**SEARCH_CONNECTION_SETTINGS, **overrides})
     try:
         yield engine
     finally:

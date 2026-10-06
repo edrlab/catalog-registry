@@ -1,12 +1,14 @@
-"""`build_catalog_from_row`: a search row becomes the `Catalog` the renderer reads (ADR-060).
+"""`build_catalog_from_row`: a row of `CATALOG_COLUMNS` becomes the `Catalog` the renderer reads
+(ADR-060, ADR-062). Search, the feed and one catalog all map their rows with it.
 
 No database: a row is any mapping, and asyncpg hands `jsonb` back as text, so both forms of the
-`links` column are exercised. The integration twin of this file (`test_search_one_statement`)
-proves the mapped object renders exactly like the ORM-loaded one.
+`links` column are exercised. The integration twins of this file (`test_search_one_statement`,
+`test_catalog_reads_equal_orm`) prove the mapped object renders exactly like the ORM-loaded one.
 """
 
 import json
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -22,12 +24,14 @@ from registry.domain.enums import (
 )
 from registry.domain.links import order_links
 from registry.rendering.catalog_renderer import render_catalog
-from registry.repositories.search_repository import build_catalog_from_row
+from registry.repositories import catalog_rows, search_repository
+from registry.repositories.catalog_rows import build_catalog_from_row
 
 pytestmark = pytest.mark.unit
 
 BASE = "https://registry.example"
 ID = uuid.UUID("11111111-2222-3333-4444-555555555555")
+CREATED_AT = datetime(2026, 9, 1, 12, 30, tzinfo=UTC)
 
 
 def link(
@@ -46,6 +50,7 @@ def make_row(**overrides: Any) -> dict[str, Any]:
         "tier": 1,
         "score": 0.5,
         "catalog_id": ID,
+        "created_at": CREATED_AT,
         "title": "Library",
         "description": None,
         "color": "gray",
@@ -253,11 +258,49 @@ def test_the_mapped_object_is_transient_and_attached_to_no_session() -> None:
     assert all(inspect(child).session is None for child in (*catalog.links, *catalog.languages))
 
 
+def test_created_at_is_set_because_the_feed_sorts_on_it_but_is_never_rendered() -> None:
+    catalog = build_catalog_from_row(make_row())
+
+    assert catalog.created_at == CREATED_AT
+    document = render_catalog(catalog, base_url=BASE)
+    assert "created_at" not in document["metadata"]
+    assert str(CREATED_AT.year) not in json.dumps(document)
+
+
 def test_internal_columns_are_not_set_on_the_mapped_object() -> None:
-    """R3: only what the renderer projects is copied; nothing internal rides along."""
+    """R3: only what the renderer projects, and `created_at` for the feed's order, is copied;
+    nothing else internal rides along."""
     catalog = build_catalog_from_row(make_row())
 
     assert catalog.submitter_email is None
     assert catalog.submitter_name is None
     assert catalog.recommended is None
     assert catalog.status is None
+    assert catalog.updated_at is None
+    assert catalog.published_at is None
+
+
+def test_an_extra_column_in_the_row_does_not_reach_the_object() -> None:
+    """A new column added to the SELECT list cannot leak by accident: the mapper copies named
+    fields, not the row's keys (R3)."""
+    catalog = build_catalog_from_row(
+        make_row(status="suggested", recommended=True, submitter_email="a@b.example")
+    )
+
+    assert catalog.status is None
+    assert catalog.recommended is None
+    assert catalog.submitter_email is None
+
+
+def test_the_mapper_is_importable_from_the_search_repository_too() -> None:
+    """Compatibility: search used to own the mapper."""
+    exported = vars(search_repository)
+    assert exported["build_catalog_from_row"] is catalog_rows.build_catalog_from_row
+    assert exported["fetch_rows"] is catalog_rows.fetch_rows
+
+
+def test_the_select_list_names_created_at_and_no_internal_column() -> None:
+    columns = catalog_rows.CATALOG_COLUMNS
+    assert "c.created_at" in columns
+    for internal in ("status", "recommended", "submitter", "updated_at", "published_at"):
+        assert internal not in columns
