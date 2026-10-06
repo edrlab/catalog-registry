@@ -100,11 +100,17 @@ make search-score ARGS="--url https://… --min-score 0.9"   # a deployed instan
 ```
 
 A search scores 1.0 when it returns the expected catalogs, in the expected order, and nothing else
-(`ndcg x precision`, definitions on the page). Read it as a regression signal, not as a verdict: the
-number depends on which searches are in the list. For example the typo threshold looks slightly worse
-at 0.5 than at 0.6 on today's 61 searches (0.902 against 0.913) because only one of them is a swapped-letter
-typo, while a broader measurement of typos (`tests/integration/test_search_fuzzy.py`) favours 0.5. Add
-searches that look like what readers type before tuning against the score.
+(`ndcg x precision`, definitions on the page). Read it as a regression signal: the number depends on which
+searches are in the list, so the list includes 29 realistic typos (a letter dropped, doubled, replaced by the
+neighbouring key, two neighbours swapped) next to the hand-picked searches of the plan.
+
+Measured on 4 October 2026 over those 90 scored searches, which is how the typo threshold was chosen:
+
+| `pg_trgm.word_similarity_threshold` | Score | Exactly right | Recall | Precision |
+|---|---|---|---|---|
+| 0.6 (PostgreSQL's default) | 0.815 | 70 | 0.84 | 0.81 |
+| 0.5 (what the app uses) | **0.877** | 73 | 0.95 | 0.88 |
+| 0.4 | 0.863 | 69 | 0.99 | 0.88 |
 
 ## Operating it
 

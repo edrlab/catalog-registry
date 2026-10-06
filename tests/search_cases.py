@@ -335,5 +335,195 @@ QUALITY_CASES += [
     c(NO_COUNTRY, "United States", "Same, for Project Gutenberg and Standard Ebooks", (), []),
 ]
 
+REALISTIC = "Realistic typos, one slip per word"
+NOT_FOUND = "Not found: swapped or replaced letters in a short word share too few trigrams."
+
+#: What readers actually mistype: a letter dropped, doubled, replaced by the neighbouring key, or
+#: two neighbours swapped. Measured at the 0.5 threshold; the 0.6 results are in docs/search.md.
+REALISTIC_TYPOS: list[Case] = [
+    c(
+        REALISTIC,
+        "belgque",
+        "One letter dropped in a country name",
+        (LIRTUEL, OPENBARE),
+        trigrams(LIRTUEL, OPENBARE),
+    ),
+    c(
+        REALISTIC,
+        "bruxeles",
+        "One letter dropped in a place name",
+        (LIRTUEL, OPENBARE),
+        trigrams(LIRTUEL, OPENBARE),
+    ),
+    c(
+        REALISTIC,
+        "libriox",
+        "One letter dropped in a title",
+        (LIBRIVOX,),
+        trigrams(LIBRIVOX, LIBRES),
+    ),
+    c(REALISTIC, "valas", "One letter dropped in a canton", (VALAIS,), trigrams(VALAIS)),
+    c(REALISTIC, "walonie", "One letter dropped in a region", (LIRTUEL,), trigrams(LIRTUEL)),
+    c(REALISTIC, "flandrs", "One letter dropped in a region", (OPENBARE,), trigrams(OPENBARE)),
+    c(REALISTIC, "suise", "One letter dropped in a country name", (VALAIS,), trigrams(VALAIS)),
+    c(REALISTIC, "standrd", "One letter dropped in a title word", (STANDARD,), trigrams(STANDARD)),
+    c(
+        REALISTIC,
+        "pairs",
+        "Two neighbouring letters swapped in a title word",
+        (PARIS,),
+        [],
+        note=NOT_FOUND,
+    ),
+    c(
+        REALISTIC,
+        "valias",
+        "Two neighbouring letters swapped in a canton",
+        (VALAIS,),
+        [],
+        note=NOT_FOUND,
+    ),
+    c(
+        REALISTIC,
+        "brussles",
+        "Two neighbouring letters swapped in a place name",
+        (LIRTUEL, OPENBARE),
+        trigrams(LIRTUEL, OPENBARE),
+    ),
+    c(
+        REALISTIC,
+        "gutneberg",
+        "Two neighbouring letters swapped in a title",
+        (GUTENBERG,),
+        [],
+        note=NOT_FOUND,
+    ),
+    c(
+        REALISTIC,
+        "belguim",
+        "Two neighbouring letters swapped in a country name",
+        (LIRTUEL, OPENBARE),
+        trigrams(LIRTUEL, OPENBARE),
+    ),
+    c(
+        REALISTIC,
+        "wallonei",
+        "Two neighbouring letters swapped in a region",
+        (LIRTUEL,),
+        trigrams(LIRTUEL),
+    ),
+    c(
+        REALISTIC,
+        "schwiez",
+        "Two neighbouring letters swapped in a country name",
+        (VALAIS,),
+        trigrams(VALAIS),
+    ),
+    c(
+        REALISTIC,
+        "bibliotehque",
+        "Two neighbouring letters swapped in a title word",
+        (PARIS, ROMANDE, RUSSE),
+        trigrams(PARIS, OPENBARE, ROMANDE, RUSSE),
+    ),
+    c(
+        REALISTIC,
+        "parus",
+        "One letter replaced by a neighbouring key in a title word",
+        (PARIS,),
+        trigrams(PARIS),
+    ),
+    c(
+        REALISTIC,
+        "belgiqie",
+        "One letter replaced by a neighbouring key in a country name",
+        (LIRTUEL, OPENBARE),
+        trigrams(LIRTUEL, OPENBARE),
+    ),
+    c(
+        REALISTIC,
+        "vqlais",
+        "One letter replaced by a neighbouring key in a canton",
+        (VALAIS,),
+        [],
+        note=NOT_FOUND,
+    ),
+    c(
+        REALISTIC,
+        "frabce",
+        "One letter replaced by a neighbouring key in a country name",
+        (PARIS,),
+        trigrams(PARIS),
+    ),
+    c(
+        REALISTIC,
+        "lirtuek",
+        "One letter replaced by a neighbouring key in a title",
+        (LIRTUEL,),
+        trigrams(LIRTUEL),
+    ),
+    c(
+        REALISTIC,
+        "bibliotheuqe",
+        "One letter replaced by a neighbouring key in a title word",
+        (PARIS, ROMANDE, RUSSE),
+        trigrams(PARIS, OPENBARE, ROMANDE, RUSSE),
+    ),
+    c(
+        REALISTIC,
+        "guttenberg",
+        "One letter doubled or added in a title",
+        (GUTENBERG,),
+        trigrams(GUTENBERG),
+    ),
+    c(
+        REALISTIC,
+        "belgiumm",
+        "One letter doubled or added in a country name",
+        (LIRTUEL, OPENBARE),
+        trigrams(LIRTUEL, OPENBARE),
+    ),
+    c(
+        REALISTIC,
+        "bruxellles",
+        "One letter doubled or added in a place name",
+        (LIRTUEL, OPENBARE),
+        trigrams(LIRTUEL, OPENBARE),
+    ),
+    c(
+        REALISTIC,
+        "pariss",
+        "One letter doubled or added in a title word",
+        (PARIS,),
+        trigrams(PARIS),
+    ),
+    c(
+        REALISTIC,
+        "librivoxx",
+        "One letter doubled or added in a title",
+        (LIBRIVOX,),
+        trigrams(LIBRIVOX),
+    ),
+    c(
+        REALISTIC,
+        "standrad ebooks",
+        "Two words, a swap in one of them",
+        (STANDARD, LIBRES),
+        words(STANDARD, LIBRES),
+        first=STANDARD,
+    ),
+    c(
+        REALISTIC,
+        "belgqiue",
+        "Two slips in one word in a country name",
+        (LIRTUEL, OPENBARE),
+        trigrams(LIRTUEL, OPENBARE),
+    ),
+]
+
+#: The realistic typos sit right after the hand-picked ones, before the query syntax.
+_AT = next(i for i, case in enumerate(QUALITY_CASES) if case.section == SYNTAX_SECTION)
+QUALITY_CASES[_AT:_AT] = REALISTIC_TYPOS
+
 #: The exact-result regression tests read these. (query, [(title, tier)])
 CASES = [(case.query, case.today) for case in QUALITY_CASES]

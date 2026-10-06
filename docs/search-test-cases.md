@@ -23,7 +23,7 @@ make test                                  # the same searches as exact-result t
 
 ## Score
 
-With today's results the score is **0.902** over 61 scored searches; 51 are exactly the ideal answer. Mean recall 1.00, mean precision 0.92 (searches whose ideal is nothing are not in those two).
+With today's results the score is **0.877** over 90 scored searches; 73 are exactly the ideal answer. Mean recall 0.95, mean precision 0.88 (searches whose ideal is nothing are not in those two).
 
 A search scores **1.0** when it returns the expected catalogs, in the expected order, and nothing else. It is `ndcg x precision`: *recall* is how many expected catalogs came back, *precision* is how many of the catalogs returned were expected (noise lowers it), and *ndcg* rewards the right order (expected catalogs counting more the earlier they appear). A search whose ideal is *nothing* scores 1.0 for nothing and 0.0 for anything. The headline number is the mean over all scored searches, so a tweak to ranking, weights or the typo threshold becomes one number to compare.
 
@@ -91,6 +91,40 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 | `guten` | Start of a word | Project Gutenberg | Project Gutenberg (trigram only) | 1.00 |  |
 | `parsi` | Two letters swapped in a short word | BnParis | BnParis (trigram only) | 1.00 | Found through trigrams since the typo threshold moved to 0.5 (nothing at 0.6). Swapped letters stay the weakest typo: about two in three are found. |
 | `Suiße` | ß is folded by the database's unaccent, not by Python (ADR-059) | Médiathèque Valais | Médiathèque Valais | 1.00 |  |
+
+## Realistic typos, one slip per word
+
+| Search | What it checks | Expected | Today | Score | Note |
+| --- | --- | --- | --- | --- | --- |
+| `belgque` | One letter dropped in a country name | Lirtuel, De Openbare | Lirtuel (trigram only), De Openbare (trigram only) | 1.00 |  |
+| `bruxeles` | One letter dropped in a place name | Lirtuel, De Openbare | Lirtuel (trigram only), De Openbare (trigram only) | 1.00 |  |
+| `libriox` | One letter dropped in a title | Librivox | Librivox (trigram only), Ebooks libres et gratuits (trigram only) | 0.50 |  |
+| `valas` | One letter dropped in a canton | Médiathèque Valais | Médiathèque Valais (trigram only) | 1.00 |  |
+| `walonie` | One letter dropped in a region | Lirtuel | Lirtuel (trigram only) | 1.00 |  |
+| `flandrs` | One letter dropped in a region | De Openbare | De Openbare (trigram only) | 1.00 |  |
+| `suise` | One letter dropped in a country name | Médiathèque Valais | Médiathèque Valais (trigram only) | 1.00 |  |
+| `standrd` | One letter dropped in a title word | Standard Ebooks | Standard Ebooks (trigram only) | 1.00 |  |
+| `pairs` | Two neighbouring letters swapped in a title word | BnParis | nothing | 0.00 | Not found: swapped or replaced letters in a short word share too few trigrams. |
+| `valias` | Two neighbouring letters swapped in a canton | Médiathèque Valais | nothing | 0.00 | Not found: swapped or replaced letters in a short word share too few trigrams. |
+| `brussles` | Two neighbouring letters swapped in a place name | Lirtuel, De Openbare | Lirtuel (trigram only), De Openbare (trigram only) | 1.00 |  |
+| `gutneberg` | Two neighbouring letters swapped in a title | Project Gutenberg | nothing | 0.00 | Not found: swapped or replaced letters in a short word share too few trigrams. |
+| `belguim` | Two neighbouring letters swapped in a country name | Lirtuel, De Openbare | Lirtuel (trigram only), De Openbare (trigram only) | 1.00 |  |
+| `wallonei` | Two neighbouring letters swapped in a region | Lirtuel | Lirtuel (trigram only) | 1.00 |  |
+| `schwiez` | Two neighbouring letters swapped in a country name | Médiathèque Valais | Médiathèque Valais (trigram only) | 1.00 |  |
+| `bibliotehque` | Two neighbouring letters swapped in a title word | BnParis, BN Romande, Bibliothèque russe et slave | BnParis (trigram only), De Openbare (trigram only), BN Romande (trigram only), Bibliothèque russe et slave (trigram only) | 0.68 |  |
+| `parus` | One letter replaced by a neighbouring key in a title word | BnParis | BnParis (trigram only) | 1.00 |  |
+| `belgiqie` | One letter replaced by a neighbouring key in a country name | Lirtuel, De Openbare | Lirtuel (trigram only), De Openbare (trigram only) | 1.00 |  |
+| `vqlais` | One letter replaced by a neighbouring key in a canton | Médiathèque Valais | nothing | 0.00 | Not found: swapped or replaced letters in a short word share too few trigrams. |
+| `frabce` | One letter replaced by a neighbouring key in a country name | BnParis | BnParis (trigram only) | 1.00 |  |
+| `lirtuek` | One letter replaced by a neighbouring key in a title | Lirtuel | Lirtuel (trigram only) | 1.00 |  |
+| `bibliotheuqe` | One letter replaced by a neighbouring key in a title word | BnParis, BN Romande, Bibliothèque russe et slave | BnParis (trigram only), De Openbare (trigram only), BN Romande (trigram only), Bibliothèque russe et slave (trigram only) | 0.68 |  |
+| `guttenberg` | One letter doubled or added in a title | Project Gutenberg | Project Gutenberg (trigram only) | 1.00 |  |
+| `belgiumm` | One letter doubled or added in a country name | Lirtuel, De Openbare | Lirtuel (trigram only), De Openbare (trigram only) | 1.00 |  |
+| `bruxellles` | One letter doubled or added in a place name | Lirtuel, De Openbare | Lirtuel (trigram only), De Openbare (trigram only) | 1.00 |  |
+| `pariss` | One letter doubled or added in a title word | BnParis | BnParis (trigram only) | 1.00 |  |
+| `librivoxx` | One letter doubled or added in a title | Librivox | Librivox (trigram only) | 1.00 |  |
+| `standrad ebooks` | Two words, a swap in one of them | Standard Ebooks, Ebooks libres et gratuits (Standard Ebooks first) | Standard Ebooks, Ebooks libres et gratuits | 1.00 |  |
+| `belgqiue` | Two slips in one word in a country name | Lirtuel, De Openbare | Lirtuel (trigram only), De Openbare (trigram only) | 1.00 |  |
 
 ## Query syntax
 
