@@ -35,5 +35,22 @@ def test_two_links_with_the_same_rel_keep_their_input_order() -> None:
     assert [link.tag for link in order_links(links, rel_of=rel_of)] == ["first", "second"]
 
 
+def test_links_sharing_a_rel_are_ordered_by_then_by_whatever_order_they_arrive_in() -> None:
+    """The database returns them in no promised order, and two paths return them differently."""
+    links = [Stub(LinkRel.ALTERNATE, tag) for tag in ("c", "a", "b")]
+
+    for arrival in (links, links[::-1], [links[1], links[2], links[0]]):
+        ordered = order_links(arrival, rel_of=rel_of, then_by=lambda link: link.tag)
+        assert [link.tag for link in ordered] == ["a", "b", "c"]
+
+
+def test_the_rel_priority_outranks_then_by() -> None:
+    links = [Stub(LinkRel.ALTERNATE, "a"), Stub(LinkRel.CATALOG, "z"), Stub(LinkRel.SELF, "m")]
+
+    ordered = order_links(links, rel_of=rel_of, then_by=lambda link: link.tag)
+
+    assert [link.tag for link in ordered] == ["m", "z", "a"]
+
+
 def test_find_self_link_returns_none_when_absent() -> None:
     assert find_self_link([Stub(LinkRel.CATALOG, "c")], rel_of=rel_of) is None

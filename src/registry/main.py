@@ -14,27 +14,25 @@ from functools import partial
 
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
-from starlette.middleware.gzip import GZipMiddleware
 
+from registry.api.compression import CompressionMiddleware, configure_client_log
 from registry.api.exception_handlers import register_exception_handlers
 from registry.api.middleware import ResponseHeadersMiddleware
 from registry.api.routes import catalogs, feed, health, search
 from registry.core.config import Settings
+from registry.core.constants import HEADER_REQUEST_ID
 from registry.db.session import (
     build_read_session_factory,
+    build_search_engine,
     build_session_factory,
     check_database_connection,
     create_database_engine,
-    read_only_transaction,
 )
 from registry.repositories.catalog_repository import CatalogRepository
 from registry.repositories.search_repository import (
-    WORD_SIMILARITY_THRESHOLD,
+    SEARCH_CONNECTION_SETTINGS,
     CatalogSearchRepository,
 )
-
-#: ADR-046, ADR-058: a search that outruns this is cancelled and answered with a 503.
-SEARCH_STATEMENT_TIMEOUT_MS = 1000
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -56,29 +54,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         app.state.open_catalog_reader = open_catalog_reader
 
-        # A transactional factory, not the read one: the timeout needs a transaction (ADR-058).
-        app.state.search_session_factory = build_session_factory(engine)
+        # Search has its own pool: the timeout, read-only mode and typo threshold ride on its
+        # connections, and nothing of that reaches the feed or the importers (ADR-058, ADR-060).
+        search_engine = build_search_engine(resolved, SEARCH_CONNECTION_SETTINGS)
+        app.state.search_engine = search_engine
+        app.state.search_session_factory = build_session_factory(search_engine)
 
         @asynccontextmanager
         async def open_catalog_searcher() -> AsyncIterator[CatalogSearchRepository]:
-            async with read_only_transaction(
-                app.state.search_session_factory,
-                statement_timeout_ms=SEARCH_STATEMENT_TIMEOUT_MS,
-                local_settings={
-                    "pg_trgm.word_similarity_threshold": str(WORD_SIMILARITY_THRESHOLD)
-                },
-            ) as session:
+            async with app.state.search_session_factory() as session:
                 yield CatalogSearchRepository(session)
 
         app.state.open_catalog_searcher = open_catalog_searcher
         yield
+        await search_engine.dispose()
         await engine.dispose()
 
     app = FastAPI(title="OPDS Catalog Registry", version="0.1.0", lifespan=lifespan)
-    # Outermost, so it compresses the finished body: 258 KB of repetitive JSON at a thousand
-    # catalogs becomes 23 KB. Below 1 KB the header costs more than the compression saves.
-    # Starlette adds `Vary: Accept-Encoding` itself, which a cache will need in v1.0.
-    app.add_middleware(GZipMiddleware, minimum_size=1024)
+    # Innermost, so it compresses the finished body and the others see the final headers. Chooses
+    # `br`, `gzip` or nothing from the client's `Accept-Encoding` and logs who asked (ADR-061).
+    configure_client_log()
+    app.add_middleware(CompressionMiddleware)
     # Public data, and browser-based readers are a legitimate
     # consumer. Read methods only, no credentials: `*` with credentials is what turns a public
     # read into a session-riding write. The back office (v1.0) is same-origin.
@@ -87,6 +83,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=["*"],
         allow_methods=["GET", "HEAD", "OPTIONS"],
         allow_credentials=False,
+        expose_headers=["Server-Timing", HEADER_REQUEST_ID],
     )
     app.add_middleware(ResponseHeadersMiddleware)
     register_exception_handlers(app)

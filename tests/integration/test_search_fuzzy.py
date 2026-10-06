@@ -29,10 +29,14 @@ import unicodedata
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from registry.db.session import build_session_factory, read_only_transaction
-from registry.repositories.search_repository import WORD_SIMILARITY_THRESHOLD
+from registry.core.config import Settings
+from registry.db.session import build_search_engine, create_database_engine
+from registry.repositories.search_repository import (
+    SEARCH_CONNECTION_SETTINGS,
+    WORD_SIMILARITY_THRESHOLD,
+)
 from tests.search_helpers import search_rows
 
 pytestmark = pytest.mark.integration
@@ -225,34 +229,38 @@ async def test_the_one_unrelated_word_that_gets_through_is_a_known_and_accepted_
     assert {tier for _title, tier, _score in rows} == {2}
 
 
-async def test_the_application_applies_its_threshold_per_transaction_and_does_not_leak_it(
-    migrated_database: str,
+async def test_the_search_pool_carries_its_threshold_and_nothing_else_does(
+    settings: Settings,
 ) -> None:
-    """The server keeps pg_trgm's default of 0.6; only the search transaction runs at 0.5.
-    A role or database level override would change every result silently, so the default is
-    pinned as well, and the setting must be gone once the transaction ends."""
-    engine = create_async_engine(migrated_database, pool_size=1, max_overflow=0)
-    factory = build_session_factory(engine)
+    """The server keeps pg_trgm's default of 0.6; only the search pool's connections run at 0.5,
+    from the start and for their whole life (a startup setting, not a per-transaction one). The
+    main engine is unaffected. A role or database level override would change every result
+    silently, so the server default is pinned as well."""
+    search_engine = build_search_engine(settings, SEARCH_CONNECTION_SETTINGS)
+    main_engine = create_database_engine(settings)
     show = text("SHOW pg_trgm.word_similarity_threshold")
-    settings = {"pg_trgm.word_similarity_threshold": str(WORD_SIMILARITY_THRESHOLD)}
+    # The setting only exists once the extension's library is loaded in the session, which its
+    # first function call does.
+    load = text("SELECT public.word_similarity('a', 'a')")
     try:
-        async with engine.connect() as connection:
-            # The setting only exists once the extension's library is loaded in the session,
-            # which its first function call does.
-            await connection.execute(text("SELECT public.word_similarity('a', 'a')"))
-            default = (await connection.execute(show)).scalar_one()
-        async with read_only_transaction(
-            factory, statement_timeout_ms=1000, local_settings=settings
-        ) as session:
-            inside = (await session.execute(show)).scalar_one()
-        async with engine.connect() as connection:
-            await connection.execute(text("SELECT public.word_similarity('a', 'a')"))
-            after = (await connection.execute(show)).scalar_one()
+        async with search_engine.connect() as connection:
+            await connection.execute(load)
+            on_search = (await connection.execute(show)).scalar_one()
+            await connection.execute(text("SELECT 1"))  # still there after more statements
+            still = (await connection.execute(show)).scalar_one()
+        async with main_engine.connect() as connection:
+            await connection.execute(load)
+            on_main = (await connection.execute(show)).scalar_one()
+        async with search_engine.connect() as connection:  # a recycled checkout: same value
+            await connection.execute(load)
+            again = (await connection.execute(show)).scalar_one()
     finally:
-        await engine.dispose()
+        await search_engine.dispose()
+        await main_engine.dispose()
 
     assert WORD_SIMILARITY_THRESHOLD == 0.5
-    assert (default, inside, after) == ("0.6", "0.5", "0.6")
+    assert (on_search, still, again) == ("0.5", "0.5", "0.5")
+    assert on_main == "0.6"  # the server default, which nothing here overrides
 
 
 # --- invariants of the result ------------------------------------------------------------------

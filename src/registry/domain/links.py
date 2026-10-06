@@ -32,9 +32,25 @@ LINK_REL_PRIORITY = MappingProxyType(
 IDENTITY_RELS = (LinkRel.CATALOG, LinkRel.SHELF)
 
 
-def order_links[T](links: Sequence[T], *, rel_of: Callable[[T], LinkRel]) -> tuple[T, ...]:
-    """Stable sort on `LINK_REL_PRIORITY`. Two links sharing a rel keep their input order."""
-    return tuple(sorted(links, key=lambda link: LINK_REL_PRIORITY[rel_of(link)]))
+def order_links[T](
+    links: Sequence[T],
+    *,
+    rel_of: Callable[[T], LinkRel],
+    then_by: Callable[[T], str] | None = None,
+) -> tuple[T, ...]:
+    """Sort on `LINK_REL_PRIORITY`, then on `then_by` when given.
+
+    Two links sharing a rel would otherwise keep their input order, which is whatever order the
+    database returned them in: undefined, and different between the feed's `selectinload` and
+    search's single statement. A caller that renders passes `then_by` (the href) so the same
+    catalog gives the same document by every path and on every run.
+    """
+    return tuple(
+        sorted(
+            links,
+            key=lambda link: (LINK_REL_PRIORITY[rel_of(link)], then_by(link) if then_by else ""),
+        )
+    )
 
 
 def find_self_link[T](links: Sequence[T], *, rel_of: Callable[[T], LinkRel]) -> T | None:

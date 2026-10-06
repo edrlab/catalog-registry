@@ -12,6 +12,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.52,<2.1",
     "asyncpg>=0.31.0,<0.32",
     "alembic>=1.19.1,<2",
+    "brotli>=1.1,<2",
 ]
 
 [dependency-groups]
@@ -104,4 +105,9 @@ namespace_packages = true
 # (`uv run --with pycountry`), so it is not a dependency and has no stubs here.
 [[tool.mypy.overrides]]
 module = "pycountry"
+ignore_missing_imports = true
+
+# No stubs published; the one call is typed at its use.
+[[tool.mypy.overrides]]
+module = "brotli"
 ignore_missing_imports = true

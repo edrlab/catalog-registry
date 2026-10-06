@@ -55,7 +55,7 @@ tells you when this happens.
 | Endpoint | |
 |---|---|
 | `GET /` | The top-level feed, `application/opds-catalog+json`, ranked by `Accept-Language` |
-| `GET /search?query=&page=` | Search, 50 per page, same media type. An empty query returns an empty feed. See [`docs/search.md`](docs/search.md) |
+| `GET /search?query=&page=` | Search, 50 per page, same media type. An empty query returns an empty feed. See [`docs/search.md`](docs/search.md) and [`docs/performance.md`](docs/performance.md) |
 | `GET /catalogs/{id}` | One catalog. 404 problem+json if unknown, 422 if the uuid is malformed |
 | `GET /health/live` | Liveness. Does not touch the database |
 | `GET /health/ready` | Readiness. 503 when the database is unreachable |
@@ -66,6 +66,7 @@ tells you when this happens.
 |---|---|
 | [`docs/development.md`](docs/development.md) | Setup, the daily loop, configuration, migrations, the seed, testing, benchmarks, the Cloud SQL sandbox, and troubleshooting |
 | [`docs/search.md`](docs/search.md) | What search does, the query syntax, ordering, paging, the analyzer, reloading reference data, grants and operating notes |
+| [`docs/performance.md`](docs/performance.md) | Why one search is one database message, where it runs, how to measure it, what compression each client gets, and what old devices can connect to |
 | [`docs/search-test-cases.md`](docs/search-test-cases.md) | The searches used to check search: what each should return, what it returns today, a score, and how to run them (`make search-score`) |
 | [`docs/importing.md`](docs/importing.md) | `make add`, which imports a catalog from its live OPDS feed. The flags, how links are mapped, when it refuses |
 | [`docs/schemas.md`](docs/schemas.md) | The `schema/` directory. What is contract, what is vendored, what is generated, and why Python cannot use these schemas as published |

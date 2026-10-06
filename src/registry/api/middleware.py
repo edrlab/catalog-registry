@@ -1,9 +1,10 @@
-"""Response headers: the request id, and the static security set.
+"""Response headers: the request id, the timing, and the static security set.
 
 One middleware rather than two. Both wrap `send` to add headers to the response, and a second
 ASGI wrapper per request buys nothing but another frame.
 """
 
+import time
 import uuid
 
 from starlette.datastructures import Headers, MutableHeaders
@@ -26,7 +27,14 @@ SECURITY_HEADERS = {
 
 
 class ResponseHeadersMiddleware:
-    """Echoes a caller-supplied request id or mints one, and sets the security headers."""
+    """Echoes a caller-supplied request id or mints one, sets the security headers, and says how
+    long the application took.
+
+    `Server-Timing: app;dur=<ms>` is the time from receiving the request to the first byte of the
+    response. A client's own total minus this is the network: it is how latency is told apart from
+    work without tools on the server. `Timing-Allow-Origin: *` lets a browser reader see it too; the
+    data is public.
+    """
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -37,6 +45,7 @@ class ResponseHeadersMiddleware:
             return
 
         request_id = Headers(scope=scope).get(HEADER_REQUEST_ID) or str(uuid.uuid4())
+        started = time.perf_counter()
 
         async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
@@ -45,6 +54,8 @@ class ResponseHeadersMiddleware:
                 for name, value in SECURITY_HEADERS.items():
                     headers.setdefault(name, value)
                 headers[HEADER_REQUEST_ID] = request_id
+                headers["server-timing"] = f"app;dur={(time.perf_counter() - started) * 1000:.1f}"
+                headers.setdefault("timing-allow-origin", "*")
             await send(message)
 
         await self.app(scope, receive, send_with_headers)

@@ -7,13 +7,16 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
+from registry.core.config import Settings
 from registry.core.schema_validation import build_schema_validator
+from registry.db.session import build_search_engine
 from registry.domain.search_query import parse_search_query
 from registry.repositories.search_repository import (
     _SEARCH,
     RANK_WEIGHTS,
+    SEARCH_CONNECTION_SETTINGS,
     WORD_SIMILARITY_THRESHOLD,
 )
 from tests.conftest import LIBRARIES_FILE, SEED_FILE
@@ -64,7 +67,8 @@ async def search_rows(
     parsed = parse_search_query(query)
     if parsed.is_empty:
         return []
-    # The setting `read_only_transaction` applies in production; SET LOCAL ends with the test.
+    # Production's search pool has this as a connection setting; the test transaction gets it
+    # with SET LOCAL, which ends with the test.
     await session.execute(text(f"SET LOCAL pg_trgm.word_similarity_threshold = {threshold}"))
     result = await session.execute(
         _SEARCH,
@@ -136,4 +140,46 @@ async def table_locked(url: str) -> AsyncIterator[None]:
             finally:
                 await locker.rollback()
     finally:
+        await engine.dispose()
+
+
+@asynccontextmanager
+async def search_engine_with(settings: Settings, **overrides: str) -> AsyncIterator[AsyncEngine]:
+    """The production search pool (`build_search_engine`), with some server settings replaced.
+
+    A short `statement_timeout` makes a lock-blocked search fail in 150 ms instead of 1 s; an
+    `application_name` lets a test find (and terminate) exactly this engine's backends.
+    """
+    engine = build_search_engine(settings, {**SEARCH_CONNECTION_SETTINGS, **overrides})
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
+
+
+@asynccontextmanager
+async def committed_catalogs(
+    url: str, documents: list[dict[str, Any]], *, recommended: bool = False
+) -> AsyncIterator[list[uuid.UUID]]:
+    """Really commit catalogs, for tests whose app has its own pools (a rollback fixture's
+    transaction is invisible to them). Deleted by id in a `finally`; the children and the search
+    row go with them (foreign keys cascade)."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker  # noqa: PLC0415
+
+    from registry.cli.seed import import_catalog_document  # noqa: PLC0415
+
+    engine = create_async_engine(url)
+    ids: list[uuid.UUID] = []
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            for document in documents:
+                catalog, _ = await import_catalog_document(
+                    session, document, recommended=recommended
+                )
+                ids.append(catalog.id)
+            await session.commit()
+        yield ids
+    finally:
+        async with engine.begin() as cleanup:
+            await cleanup.execute(text("DELETE FROM catalogs WHERE id = ANY(:ids)"), {"ids": ids})
         await engine.dispose()

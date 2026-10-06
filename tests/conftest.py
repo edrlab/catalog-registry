@@ -25,7 +25,7 @@ from urllib.parse import urlsplit
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncSession,
@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import (
 from registry.cli.seed import seed_catalogs
 from registry.core.config import Settings
 from registry.main import create_app
+from registry.repositories.search_repository import WORD_SIMILARITY_THRESHOLD
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_FILE = REPO_ROOT / "data" / "recommended.json"
@@ -180,13 +181,25 @@ async def searchable_catalogs(db_session: AsyncSession) -> None:
 
 @pytest.fixture
 async def app(
-    settings: Settings, session_factory: async_sessionmaker[AsyncSession]
+    settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    db_connection: AsyncConnection,
 ) -> AsyncIterator[FastAPI]:
-    """The real app, with its session factory rebound to the test's transaction."""
+    """The real app, with the feed and search session factories rebound to the test's transaction.
+
+    The search pool's own settings (timeout, read-only) are NOT exercised here; the tests that
+    prove them build a real app and engine instead (`test_search_timeout*`, `test_search_engine`).
+    """
     built = create_app(settings)
     async with built.router.lifespan_context(built):
         built.state.session_factory = session_factory
         built.state.search_session_factory = session_factory
+        # The production search pool carries the typo threshold as a connection setting
+        # (`build_search_engine`). The test connection is not that pool, so it gets the same
+        # value for the length of the test's transaction (`SET LOCAL` ends with it).
+        await db_connection.execute(
+            text(f"SET LOCAL pg_trgm.word_similarity_threshold = {WORD_SIMILARITY_THRESHOLD}")
+        )
         yield built
 
 
@@ -200,7 +213,8 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 
 class QueryCounter:
-    """Counts ORM statements. That is a rule; this is what makes it a failing test."""
+    """Counts ORM statements (`do_orm_execute`). Used for the feed and catalog paths; the search
+    path is counted at the driver and on the wire (`test_search_query_count`)."""
 
     def __init__(self) -> None:
         self.count = 0

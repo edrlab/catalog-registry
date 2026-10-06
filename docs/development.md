@@ -335,10 +335,11 @@ It inserts synthetic catalogs titled `ZZ Bench …`, issues 120 real HTTP reques
 a different `Accept-Language` each time, and deletes its rows in a `finally` block. **Point it
 at a throwaway database**, it writes.
 
-It asserts nothing and cannot fail the build. No latency target has ever been
-stated, and an invented threshold produces flaky builds and no information
- It exists to answer "what happens at n" and to give a change a
-measured before.
+It asserts nothing and cannot fail the build: an invented threshold produces flaky builds and no
+information. It exists to answer "what happens at n" and to give a change a measured before. It is
+**local**: no network between the app and the database, so it shows the application's own work.
+Hadrien's target for search (under 100 ms warm from Europe) is judged with the numbers in
+[`performance.md`](performance.md) and `Server-Timing`, not with this script alone.
 
 Latency is linear in the number of recommended catalogs, roughly 0.1 ms each, with no knee.
 The query count stays flat at 6 until ~500 and then steps as `selectinload` chunks its `IN`

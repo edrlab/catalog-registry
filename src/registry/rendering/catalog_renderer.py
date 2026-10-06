@@ -75,7 +75,10 @@ def render_catalog(catalog: Catalog, *, base_url: str) -> dict[str, Any]:
         metadata["coverage"] = catalog.coverage.value
 
     stored = [
-        render_link(link) for link in order_links(catalog.links, rel_of=lambda link: link.rel)
+        render_link(link)
+        for link in order_links(
+            catalog.links, rel_of=lambda link: link.rel, then_by=lambda link: link.href
+        )
     ]
     return {
         "metadata": metadata,
