@@ -29,6 +29,7 @@ import urllib.request
 import uuid
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from registry.core.config import Settings
 from registry.db.session import create_database_engine
@@ -106,7 +107,7 @@ SEARCH_QUERIES = [
 TARGET_MS = 100
 
 
-async def populate(engine, count: int) -> None:
+async def populate(engine: AsyncEngine, count: int) -> None:
     """Replace the synthetic rows with *count* fresh ones. Real rows are untouched."""
     async with engine.begin() as connection:
         await remove(connection)
@@ -153,13 +154,13 @@ async def populate(engine, count: int) -> None:
                 )
 
 
-async def analyse(engine) -> None:
+async def analyse(engine: AsyncEngine) -> None:
     """What `VACUUM ANALYZE catalog_search` is for after a bulk import (docs/search.md)."""
     async with engine.begin() as connection:
         await connection.execute(text("ANALYZE catalog_search"))
 
 
-async def remove(connection) -> None:
+async def remove(connection: AsyncConnection) -> None:
     await connection.execute(
         text("DELETE FROM catalogs WHERE title LIKE :marker"), {"marker": f"{MARKER}%"}
     )

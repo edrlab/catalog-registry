@@ -1,5 +1,6 @@
 """Search feed links and paging, with no database: a `SearchPage` is a plain value."""
 
+from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -16,14 +17,14 @@ from registry.repositories.protocols import SearchPage
 BASE = "https://example.org/"
 
 
-def render(total: int, page: int, query: str = "paris") -> dict[str, object]:
+def render(total: int, page: int, query: str = "paris") -> dict[str, Any]:
     return render_search_results(
         SearchPage(total=total, catalogs=()), query=query, page=page, page_size=50, base_url=BASE
     )
 
 
-def rels(feed: dict[str, object]) -> dict[str, str]:
-    return {link["rel"]: link["href"] for link in feed["links"]}  # type: ignore[index, attr-defined]
+def rels(feed: dict[str, Any]) -> dict[str, str]:
+    return {link["rel"]: link["href"] for link in feed["links"]}
 
 
 def test_a_middle_page_links_both_ways() -> None:
@@ -197,12 +198,12 @@ def test_the_template_link_is_a_templated_search_link() -> None:
 
 
 def test_every_link_carries_the_opds_media_type() -> None:
-    for link in render(total=500, page=2)["links"]:  # type: ignore[attr-defined]
+    for link in render(total=500, page=2)["links"]:
         assert link["type"] == OPDS_JSON_MEDIA_TYPE
 
 
 def test_the_feed_title_is_search_results() -> None:
-    assert render(0, 1)["metadata"]["title"] == SEARCH_TITLE == "Search results"  # type: ignore[index]
+    assert render(0, 1)["metadata"]["title"] == SEARCH_TITLE == "Search results"
 
 
 def test_the_empty_query_renders_a_feed_with_an_empty_query_in_every_link() -> None:

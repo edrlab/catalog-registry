@@ -7,6 +7,7 @@ cleans up explicitly rather than relying on the outer rollback `db_session` gets
 """
 
 import uuid
+from typing import Any
 
 import pytest
 from sqlalchemy import delete, select
@@ -19,7 +20,8 @@ from registry.db.session import build_session_factory, create_database_engine
 pytestmark = pytest.mark.integration
 
 URL = "https://library.example/repeat-add-opds"
-FEED = {"metadata": {"title": "Repeat Add Library"}, "links": []}
+TITLE = "Repeat Add Library"
+FEED: dict[str, Any] = {"metadata": {"title": TITLE}, "links": []}
 
 
 async def test_re_adding_the_same_url_updates_instead_of_duplicating(
@@ -42,11 +44,7 @@ async def test_re_adding_the_same_url_updates_instead_of_duplicating(
         created_second = await add_catalog_from_url(URL, second_document, settings)
 
         async with build_session_factory(engine)() as session:
-            rows = (
-                await session.scalars(
-                    select(Catalog).where(Catalog.title == FEED["metadata"]["title"])
-                )
-            ).all()
+            rows = (await session.scalars(select(Catalog).where(Catalog.title == TITLE))).all()
 
         assert created_first is True
         assert created_second is False
@@ -54,7 +52,5 @@ async def test_re_adding_the_same_url_updates_instead_of_duplicating(
         assert rows[0].id == uuid.uuid5(uuid.NAMESPACE_URL, URL)
     finally:
         async with engine.begin() as connection:
-            await connection.execute(
-                delete(Catalog).where(Catalog.title == FEED["metadata"]["title"])
-            )
+            await connection.execute(delete(Catalog).where(Catalog.title == TITLE))
         await engine.dispose()

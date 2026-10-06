@@ -69,6 +69,7 @@ class NoticeRecorder:
 async def record_notices(connection: AsyncConnection, run: Callable[[], Any]) -> list[str]:
     raw = await connection.get_raw_connection()
     driver = raw.driver_connection
+    assert driver is not None
     recorder = NoticeRecorder()
     driver.add_log_listener(recorder)
     try:

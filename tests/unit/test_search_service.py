@@ -6,7 +6,7 @@ renderer. Everything here is observable through what the fake was asked.
 """
 
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 import pytest
 
@@ -39,7 +39,7 @@ class FakeOpener:
         self.opened = 0
         self.closed = 0
 
-    def __call__(self):
+    def __call__(self) -> AbstractAsyncContextManager[FakeSearcher]:
         @asynccontextmanager
         async def open_searcher() -> AsyncIterator[FakeSearcher]:
             self.opened += 1

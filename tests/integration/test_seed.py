@@ -108,7 +108,7 @@ async def test_undeclared_coverage_is_stored_as_null(db_session: AsyncSession) -
     await db_session.commit()
 
     rows = (await db_session.execute(select(Catalog.title, Catalog.coverage))).all()
-    by_title = dict(rows)
+    by_title = {row[0]: row[1] for row in rows}
     assert by_title["Declares Coverage"] == CoverageScope.COUNTRY
     assert by_title["Project Gutenberg"] is None
     assert sum(value is None for value in by_title.values()) == SEED_CATALOG_COUNT
@@ -804,7 +804,8 @@ async def test_a_catalog_removed_from_the_file_stays_recommended(
     await seed_catalogs(db_session, shortened)
     await db_session.commit()
 
-    rows = dict((await db_session.execute(select(Catalog.title, Catalog.recommended))).all())
+    result = await db_session.execute(select(Catalog.title, Catalog.recommended))
+    rows = {row[0]: row[1] for row in result.all()}
     assert rows[dropped] is True, "unrecommending needs provenance; see seed_catalogs"
 
 

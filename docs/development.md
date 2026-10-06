@@ -83,7 +83,7 @@ The containers talk to each other over the compose network and ignore it.
 ```
 make run        # local uvicorn, hot reload, against the compose database
 make test       # full suite
-make lint       # ruff check, ruff format --check, mypy --strict
+make lint       # ruff check, ruff format --check, mypy --strict on src, tests and scripts
 make fmt        # apply ruff fixes and formatting
 ```
 

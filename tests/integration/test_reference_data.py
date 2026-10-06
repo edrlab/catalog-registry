@@ -5,6 +5,8 @@ starting subdivision types). They are properties of the pinned data, so a regene
 that changes them is a decision to make, not a typo to fix.
 """
 
+from typing import Any
+
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
@@ -38,7 +40,7 @@ async def scalar(session: AsyncSession, statement: str) -> int:
     return int((await session.scalar(text(statement))) or 0)
 
 
-async def rows(session: AsyncSession, statement: str) -> list[tuple[str, ...]]:
+async def rows(session: AsyncSession, statement: str) -> list[tuple[Any, ...]]:
     return [tuple(row) for row in await session.execute(text(statement))]
 
 

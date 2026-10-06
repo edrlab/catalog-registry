@@ -7,6 +7,7 @@ Offline: `urlopen` is replaced, nothing is fetched.
 
 import io
 import urllib.error
+import urllib.request
 from pathlib import Path
 
 import generate_reference_data as generator
@@ -32,16 +33,17 @@ class Response(io.BytesIO):
 def test_a_download_is_cached_and_the_second_read_needs_no_network(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls = []
-    monkeypatch.setattr(
-        generator.urllib.request,
-        "urlopen",
-        lambda url, timeout: calls.append(url) or Response(b'{"ok": true}'),
-    )
+    calls: list[str] = []
+
+    def fetch(url: str, timeout: float) -> Response:
+        calls.append(url)
+        return Response(b'{"ok": true}')
+
+    monkeypatch.setattr(urllib.request, "urlopen", fetch)
 
     assert generator.download_cached(URL, tmp_path) == '{"ok": true}'
     monkeypatch.setattr(
-        generator.urllib.request, "urlopen", lambda *a, **k: pytest.fail("went to the network")
+        urllib.request, "urlopen", lambda *a, **k: pytest.fail("went to the network")
     )
 
     assert generator.download_cached(URL, tmp_path) == '{"ok": true}'
@@ -54,13 +56,13 @@ def test_a_404_is_reported_as_a_missing_file_and_remembered(
     def refuse(*_: object, **__: object) -> None:
         raise http_error(404)
 
-    monkeypatch.setattr(generator.urllib.request, "urlopen", refuse)
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
     with pytest.raises(FileNotFoundError):
         generator.download_cached(URL, tmp_path)
 
     # Remembered, so a rerun of the generator is offline even for the languages CLDR lacks.
     monkeypatch.setattr(
-        generator.urllib.request, "urlopen", lambda *a, **k: pytest.fail("went to the network")
+        urllib.request, "urlopen", lambda *a, **k: pytest.fail("went to the network")
     )
     with pytest.raises(FileNotFoundError):
         generator.download_cached(URL, tmp_path)
@@ -73,7 +75,7 @@ def test_any_other_http_error_stops_the_run(
     def fail(*_: object, **__: object) -> None:
         raise http_error(code)
 
-    monkeypatch.setattr(generator.urllib.request, "urlopen", fail)
+    monkeypatch.setattr(urllib.request, "urlopen", fail)
 
     with pytest.raises(urllib.error.HTTPError) as raised:
         generator.download_cached(URL, tmp_path)
@@ -86,7 +88,7 @@ def test_a_network_failure_stops_the_run(tmp_path: Path, monkeypatch: pytest.Mon
     def down(*_: object, **__: object) -> None:
         raise urllib.error.URLError("no route to host")
 
-    monkeypatch.setattr(generator.urllib.request, "urlopen", down)
+    monkeypatch.setattr(urllib.request, "urlopen", down)
 
     with pytest.raises(urllib.error.URLError):
         generator.download_cached(URL, tmp_path)

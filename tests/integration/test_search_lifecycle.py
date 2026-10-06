@@ -50,7 +50,7 @@ async def search_row_count(session: AsyncSession) -> int:
 def has_label(document: str, word: str, label: str) -> bool:
     """Is *word* in the tsvector text with a position carrying *label*, e.g. `'paris':4A`?"""
     match = re.search(rf"'{re.escape(word)}':([0-9A-D,]+)", document)
-    return bool(match) and any(part.endswith(label) for part in match.group(1).split(","))
+    return match is not None and any(part.endswith(label) for part in match.group(1).split(","))
 
 
 async def test_every_seeded_catalog_has_exactly_one_row(

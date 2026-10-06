@@ -155,9 +155,9 @@ def generate_country_names(
 
 def download_territory_names(lang: str, cache: Path) -> dict[str, str]:
     url = f"{JSON_BASE}/cldr-localenames-full/main/{lang}/territories.json"
-    return json.loads(download_cached(url, cache))["main"][lang]["localeDisplayNames"][
-        "territories"
-    ]
+    document = json.loads(download_cached(url, cache))
+    territories: dict[str, str] = document["main"][lang]["localeDisplayNames"]["territories"]
+    return territories
 
 
 def generate_subdivision_names(

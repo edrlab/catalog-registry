@@ -10,7 +10,7 @@ term of `tier, score DESC, created_at DESC, id`:
 """
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from httpx import AsyncClient
@@ -18,6 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.cli.seed import import_catalog_document
 from tests.search_helpers import assert_valid_feed
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 pytestmark = pytest.mark.e2e
 
@@ -44,23 +47,23 @@ async def zeppelin_ids(db_session: AsyncSession) -> list[str]:
     """The ids the search must return, in the order it must return them."""
     epoch = datetime(2030, 1, 1, tzinfo=UTC)
     groups: list[list[tuple[datetime, str]]] = [[], [], []]
-    spec = [
+    spec: list[tuple[int, int, Callable[[int], tuple[str, str | None]]]] = [
         (0, TITLE_MATCHES, lambda n: (f"Zeppelin shelf {n}", None)),
         (1, CITY_MATCHES, lambda n: (f"Dirigible shelf {n}", "Zeppelin")),
         (2, TRIGRAM_MATCHES, lambda n: (f"Zeppelins shelf {n}", None)),
     ]
-    for group, count, make in spec:
+    for index, count, make in spec:
         for n in range(count):
             title, city = make(n)
             # Pairs share a timestamp, so within a pair only the id breaks the tie.
-            ordered_at = epoch + timedelta(minutes=n // 2 + group * 1000)
+            ordered_at = epoch + timedelta(minutes=n // 2 + index * 1000)
             catalog, _ = await import_catalog_document(
                 db_session,
-                document(title, f"https://zeppelin.example/{group}/{n}", city),
+                document(title, f"https://zeppelin.example/{index}/{n}", city),
                 recommended=False,
                 ordered_at=ordered_at,
             )
-            groups[group].append((ordered_at, str(catalog.id)))
+            groups[index].append((ordered_at, str(catalog.id)))
     await db_session.flush()
     expected: list[str] = []
     for group in groups:

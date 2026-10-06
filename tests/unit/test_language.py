@@ -211,6 +211,7 @@ def test_a_wildcard_matches_at_the_lowest_specificity() -> None:
     explicit = rank_language_match(parse_accept_language("fr"), ["fr"])
     wildcard = rank_language_match(parse_accept_language("*"), ["fr"])
 
+    assert explicit is not None
     assert wildcard == LanguageMatch(rank=0, depth=0)
     assert explicit.sort_key < wildcard.sort_key
 

@@ -126,10 +126,10 @@ psql:  ## Open a psql shell on the development database
 test:  ## Run the test suite against a throwaway Postgres container
 	uv run pytest
 
-lint:  ## ruff check, ruff format --check, mypy --strict
+lint:  ## ruff check, ruff format --check, mypy --strict on src, tests and scripts
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy src/
+	uv run mypy src tests scripts
 
 fmt:  ## Apply ruff fixes and formatting
 	uv run ruff check --fix .
