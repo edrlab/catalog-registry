@@ -1,12 +1,19 @@
-"""The search table of the test plan (section 1) as plain data: (query, [(title, tier)]).
+"""The search table of the test plan (section 1) as plain data.
 
-Expected results are in rank order, measured on 1 October with the real migrations and the two
-data files. Tier 1 is a word match, tier 2 a trigram-only match, which always follows every word
-match (ADR-051). Where the plan calls a result known and accepted, the case says so and pins the
-CURRENT behaviour, so a change is noticed and has to be decided rather than slipping in.
+One `Case` per search: what it checks, the ideal answer ("Expected"), the measured answer
+("Today"), and a note. `today` is `(title, tier)` in rank order, measured with the real migrations
+and the two data files. Tier 1 is a word match, tier 2 a trigram-only match, which always follows
+every word match (ADR-051). Where the plan calls a result known and accepted, the case says so and
+`today` pins the CURRENT behaviour, so a change is noticed and has to be decided rather than
+slipping in.
 
-Kept as data so plan section 6 (a search-quality score) can become a small step.
+Three things read this one file:
+* the exact-result regression tests (`CASES`: query and `today`),
+* the score (`tests/search_quality.py`, `scripts/score_search.py`): `today` against `expected`,
+* the page for Hadrien, generated into `docs/search-test-cases.md` (`make search-cases`).
 """
+
+from dataclasses import dataclass
 
 PARIS = "Bibliothèque numérique de Paris"
 LIRTUEL = "Lirtuel"
@@ -30,95 +37,303 @@ def trigrams(*titles: str) -> list[tuple[str, int]]:
     return [(title, 2) for title in titles]
 
 
-#: (query, expected [(title, tier)]). Ids are not spelled out: titles are unique in the data.
-PLACE_NAMES = [
-    ("Paris", words(PARIS)),
-    ("ile-de-france", words(PARIS)),
-    # Accepted (Q5): 'de' is not a stop word, so both Belgian libraries come in below BnParis.
-    ("Île de France", words(PARIS, OPENBARE, LIRTUEL)),
-    ("France", words(PARIS)),
-    ("Belgique", words(LIRTUEL, OPENBARE)),
-    ("Belgium", words(LIRTUEL, OPENBARE)),
-    ("België", words(LIRTUEL, OPENBARE)),
-    ("Belgien", words(LIRTUEL, OPENBARE)),
-    ("Bruxelles", words(LIRTUEL, OPENBARE)),
-    ("Brussels", words(LIRTUEL, OPENBARE)),
-    ("Brussel", words(OPENBARE, LIRTUEL)),
-    ("Brüssel", words(OPENBARE, LIRTUEL)),
-    ("Wallonie", words(LIRTUEL)),
-    ("Wallonia", words(LIRTUEL)),
-    ("Vlaanderen", words(OPENBARE)),
-    ("Flandre", words(OPENBARE)),
-    ("Flanders", words(OPENBARE)),
-    ("Valais", words(VALAIS)),
-    # Threshold 0.5 (6 Oct): Wallonia is close enough to Wallis to follow the exact match.
-    ("Wallis", words(VALAIS) + trigrams(LIRTUEL)),
-    ("Vallese", words(VALAIS)),
-    ("Suisse", words(VALAIS)),
-    ("Schweiz", words(VALAIS)),
-    ("Svizzera", words(VALAIS)),
-    ("région", words(OPENBARE, LIRTUEL)),
-    ("canton", words(VALAIS)),
+@dataclass(frozen=True)
+class Case:
+    """One search of the test plan: what we ask, what we would like back, and what we get today.
+
+    `expected` is the ideal answer, the "Expected" column of the plan: the catalogs a reader
+    should get, best first when `ordered`, with `first` pinned to rank 1 when only that matters.
+    `None` means the plan gives no judgement (only "no error"), so the case is not scored. An
+    empty tuple means "nothing". `today` is the measured result, `(title, tier)` in rank order,
+    which the regression tests pin exactly; the gap between the two is what the score measures.
+    """
+
+    section: str
+    query: str
+    checks: str
+    expected: tuple[str, ...] | None
+    today: list[tuple[str, int]]
+    note: str = ""
+    ordered: bool = False
+    first: str | None = None
+
+
+#: Short for the table below, which has sixty rows.
+c = Case
+
+
+PLACES = "Place names in several languages"
+NOT_LOADED = "Languages we don't load for that country"
+TITLE = "Titles"
+TYPO = "Typos, plurals, partial words"
+SYNTAX_SECTION = "Query syntax"
+COMMON = "Short common words (no stop words yet)"
+NO_COUNTRY = "Catalogs without a country"
+
+#: Every scored search of the plan, in the order of the plan. Ids are not spelled out: titles are
+#: unique in the data.
+QUALITY_CASES: list[Case] = [
+    c(PLACES, "Paris", "Title word", (PARIS,), words(PARIS)),
+    c(PLACES, "ile-de-france", "Region name with hyphens", (PARIS,), words(PARIS)),
+    c(
+        PLACES,
+        "Île de France",
+        "Same name typed without hyphens",
+        (PARIS,),
+        words(PARIS, OPENBARE, LIRTUEL),
+        "Both Belgian libraries come back because of 'de' (Région de Bruxelles-Capitale, "
+        "De Openbare). Accepted for now (Q5): there are no stop words.",
+        first=PARIS,
+    ),
+    c(PLACES, "France", "Country name, weight B", (PARIS,), words(PARIS)),
+    c(PLACES, "Belgique", "Country, French", (LIRTUEL, OPENBARE), words(LIRTUEL, OPENBARE)),
+    c(PLACES, "Belgium", "Country, English", (LIRTUEL, OPENBARE), words(LIRTUEL, OPENBARE)),
+    c(
+        PLACES,
+        "België",
+        "Country, Dutch, accent folded",
+        (LIRTUEL, OPENBARE),
+        words(LIRTUEL, OPENBARE),
+    ),
+    c(PLACES, "Belgien", "Country, German", (LIRTUEL, OPENBARE), words(LIRTUEL, OPENBARE)),
+    c(PLACES, "Bruxelles", "Region, French", (LIRTUEL, OPENBARE), words(LIRTUEL, OPENBARE)),
+    c(PLACES, "Brussels", "Region, English", (LIRTUEL, OPENBARE), words(LIRTUEL, OPENBARE)),
+    c(
+        PLACES,
+        "Brussel",
+        "Region, Dutch, also in a title",
+        (OPENBARE, LIRTUEL),
+        words(OPENBARE, LIRTUEL),
+        first=OPENBARE,
+    ),
+    c(
+        PLACES,
+        "Brüssel",
+        "Region, German",
+        (OPENBARE, LIRTUEL),
+        words(OPENBARE, LIRTUEL),
+        first=OPENBARE,
+    ),
+    c(PLACES, "Wallonie", "Region, French", (LIRTUEL,), words(LIRTUEL)),
+    c(PLACES, "Wallonia", "Region, English", (LIRTUEL,), words(LIRTUEL)),
+    c(
+        PLACES,
+        "Vlaanderen",
+        "Region, Dutch everyday name, also in the title",
+        (OPENBARE,),
+        words(OPENBARE),
+    ),
+    c(
+        PLACES,
+        "Flandre",
+        "Region, French everyday name added by hand",
+        (OPENBARE,),
+        words(OPENBARE),
+    ),
+    c(PLACES, "Flanders", "Region, English", (OPENBARE,), words(OPENBARE)),
+    c(PLACES, "Valais", "Canton, French and English, also in the title", (VALAIS,), words(VALAIS)),
+    c(
+        PLACES,
+        "Wallis",
+        "Canton, German",
+        (VALAIS,),
+        words(VALAIS) + trigrams(LIRTUEL),
+        "Lirtuel follows as a trigram match (Wallonia is close to Wallis) since the typo "
+        "threshold moved to 0.5.",
+    ),
+    c(PLACES, "Vallese", "Canton, Italian", (VALAIS,), words(VALAIS)),
+    c(PLACES, "Suisse", "Country, French", (VALAIS,), words(VALAIS)),
+    c(PLACES, "Schweiz", "Country, German", (VALAIS,), words(VALAIS)),
+    c(PLACES, "Svizzera", "Country, Italian", (VALAIS,), words(VALAIS)),
+    c(
+        PLACES,
+        "Bristol",
+        "Place with no catalog, close to Brussel",
+        (),
+        [],
+        "Trigrams don't pull in the Belgian libraries.",
+    ),
+    c(
+        PLACES,
+        "région",
+        "Word found in Belgian region names",
+        (LIRTUEL, OPENBARE),
+        words(OPENBARE, LIRTUEL),
+    ),
+    c(PLACES, "canton", "Word found in Swiss canton names", (VALAIS,), words(VALAIS)),
+    c(
+        NOT_LOADED,
+        "Belgio",
+        "Italian name of Belgium, Italian isn't official there",
+        (),
+        trigrams(LIRTUEL, OPENBARE),
+        "Found through trigrams, close to Belgie and Belgien. Harmless, arguably helpful.",
+    ),
+    c(
+        NOT_LOADED,
+        "Vallonia",
+        "Italian name of Wallonia",
+        (),
+        trigrams(LIRTUEL),
+        "Found through trigrams, close to Wallonia. Same as above.",
+    ),
+    c(NOT_LOADED, "Zwitserland", "Dutch name of Switzerland, Dutch isn't official there", (), []),
+    c(TITLE, "Gutenberg", "Title word", (GUTENBERG,), words(GUTENBERG)),
+    c(
+        TITLE,
+        "bibliotheque",
+        "Title word without accents",
+        (PARIS, ROMANDE, RUSSE),
+        words(PARIS, ROMANDE, RUSSE) + trigrams(OPENBARE),
+        "De Openbare bibliotheek also comes back through trigrams, after the three exact matches.",
+    ),
+    c(TITLE, "MÉDIATHÈQUE", "Upper case with accents", (VALAIS,), words(VALAIS)),
+    c(TITLE, "ebooks", "Shared title word", (STANDARD, LIBRES), words(STANDARD, LIBRES)),
+    c(
+        TITLE,
+        "standard ebooks",
+        "Two words, any-word matching",
+        (STANDARD, LIBRES),
+        words(STANDARD, LIBRES),
+        first=STANDARD,
+    ),
+    c(
+        TITLE,
+        "Liber",
+        "Short title word, close to libres",
+        (LIBER,),
+        words(LIBER) + trigrams(LIBRIVOX, LIBRES),
+        "Librivox and Ebooks libres follow as trigram matches since the typo threshold moved "
+        "to 0.5.",
+    ),
+    c(TITLE, "Librivox", "Title word", (LIBRIVOX,), words(LIBRIVOX)),
+    c(
+        TITLE,
+        "Bibliothèque Nationale",
+        "Two words, only one of them in a title",
+        (PARIS, ROMANDE, RUSSE),
+        words(PARIS, ROMANDE, RUSSE),
+        "There's no national library in the seed data, so these match on 'bibliothèque' alone "
+        "and have the same score.",
+    ),
+    c(TITLE, "TV5", "Word with a digit", (TV5,), words(TV5)),
+    c(TYPO, "gutenbrg", "Missing letter in a title", (GUTENBERG,), trigrams(GUTENBERG)),
+    c(
+        TYPO,
+        "bruxels",
+        "Missing letters in a place name",
+        (LIRTUEL, OPENBARE),
+        trigrams(LIRTUEL, OPENBARE),
+    ),
+    c(
+        TYPO,
+        "belgiqe",
+        "Missing letter in a country name",
+        (LIRTUEL, OPENBARE),
+        trigrams(LIRTUEL, OPENBARE),
+    ),
+    c(
+        TYPO,
+        "bibliothèques",
+        "Plural",
+        (PARIS, ROMANDE, RUSSE),
+        trigrams(PARIS, ROMANDE, RUSSE, OPENBARE),
+    ),
+    c(TYPO, "guten", "Start of a word", (GUTENBERG,), trigrams(GUTENBERG)),
+    c(
+        TYPO,
+        "parsi",
+        "Two letters swapped in a short word",
+        (PARIS,),
+        trigrams(PARIS),
+        "Found through trigrams since the typo threshold moved to 0.5 (nothing at 0.6). "
+        "Swapped letters stay the weakest typo: about two in three are found.",
+    ),
+    c(
+        TYPO,
+        "Suiße",
+        "ß is folded by the database's unaccent, not by Python (ADR-059)",
+        (VALAIS,),
+        words(VALAIS),
+    ),
+    c(
+        SYNTAX_SECTION,
+        '"numérique de paris"',
+        "Quoted phrase",
+        (PARIS,),
+        words(PARIS) + trigrams(ROMANDE),
+        "Romande follows as a trigram match: the fuzzy half ignores the quotes.",
+    ),
+    c(
+        SYNTAX_SECTION,
+        "bibliothèque -paris",
+        "Excluding a word",
+        (ROMANDE, RUSSE),
+        words(ROMANDE, RUSSE) + trigrams(OPENBARE),
+        "Negated words exclude catalogs from both halves, so BnParis never comes back.",
+    ),
+    c(
+        SYNTAX_SECTION,
+        "Belgique -lirtuel",
+        "Negation keeps a real score",
+        (OPENBARE,),
+        words(OPENBARE),
+    ),
+    c(
+        SYNTAX_SECTION,
+        "paris OR valais",
+        "OR",
+        (PARIS, VALAIS),
+        words(VALAIS, PARIS),
+    ),
+    c(SYNTAX_SECTION, "PARIS or", "A bare OR is dropped", (PARIS,), words(PARIS)),
+    c(
+        SYNTAX_SECTION,
+        '"de paris',
+        "Unbalanced quote",
+        None,
+        words(PARIS, OPENBARE, LIRTUEL),
+        "No error is the requirement. Treated as the words 'de' and 'paris'; 'de' noise as above.",
+    ),
+    c(
+        SYNTAX_SECTION,
+        "brussel -",
+        "Lone dash",
+        (OPENBARE, LIRTUEL),
+        words(OPENBARE, LIRTUEL),
+        "As Brussel, no error.",
+        first=OPENBARE,
+    ),
+    c(SYNTAX_SECTION, "& | ! :", "Special characters only", (), [], "Nothing, and no error."),
+    c(SYNTAX_SECTION, "xyzzy", "No match at all", (), []),
+    c(SYNTAX_SECTION, "", "Empty search", (), [], "Decided: stays empty, no database work."),
+    c(SYNTAX_SECTION, "   ", "Search with only spaces", (), [], "Same as empty."),
+    c(SYNTAX_SECTION, "-paris", "Only a negation", (), [], "Same as empty."),
+    c(
+        COMMON,
+        "bibliothèque de Paris",
+        "Three words, one of them 'de'",
+        (PARIS,),
+        words(PARIS, OPENBARE, ROMANDE, RUSSE, LIRTUEL),
+        "De Openbare comes second because of 'de' in its title. The stop word problem (Q5).",
+        first=PARIS,
+    ),
 ]
 
-NOT_LOADED_LANGUAGES = [
-    # Accepted: Italian is not loaded for Belgium, but trigrams are close to Belgie/Belgien.
-    ("Belgio", trigrams(LIRTUEL, OPENBARE)),
-    # Accepted: close to Wallonia.
-    ("Vallonia", trigrams(LIRTUEL)),
-    ("Zwitserland", []),
+#: A trailing section of the plan: countries of catalogs that have none, which no search finds.
+QUALITY_CASES += [
+    c(
+        NO_COUNTRY,
+        "Italy",
+        "Country of a catalog with no country set (Liber Liber)",
+        (),
+        [],
+        "Correct for the data we have.",
+    ),
+    c(NO_COUNTRY, "Italia", "Same, in Italian", (), []),
+    c(NO_COUNTRY, "Italie", "Same, in French", (), []),
+    c(NO_COUNTRY, "United States", "Same, for Project Gutenberg and Standard Ebooks", (), []),
 ]
 
-TITLES = [
-    ("Gutenberg", words(GUTENBERG)),
-    # Accepted: 'bibliotheek' in De Openbare's title comes back as a trigram match, after the
-    # three exact ones.
-    ("bibliotheque", words(PARIS, ROMANDE, RUSSE) + trigrams(OPENBARE)),
-    ("MÉDIATHÈQUE", words(VALAIS)),
-    ("ebooks", words(STANDARD, LIBRES)),
-    ("standard ebooks", words(STANDARD, LIBRES)),
-    # Threshold 0.5: Librivox and "libres" are near enough to follow Liber Liber.
-    ("Liber", words(LIBER) + trigrams(LIBRIVOX, LIBRES)),
-    ("Librivox", words(LIBRIVOX)),
-    ("TV5", words(TV5)),
-    ("Bibliothèque Nationale", words(PARIS, ROMANDE, RUSSE)),
-    ("Bristol", []),
-]
-
-TYPOS = [
-    ("gutenbrg", trigrams(GUTENBERG)),
-    ("bruxels", trigrams(LIRTUEL, OPENBARE)),
-    ("belgiqe", trigrams(LIRTUEL, OPENBARE)),
-    ("bibliothèques", trigrams(PARIS, ROMANDE, RUSSE, OPENBARE)),
-    ("guten", trigrams(GUTENBERG)),
-    # Swapped neighbours in a short word: not found at the default 0.6, found at 0.5 (6 Oct).
-    ("parsi", trigrams(PARIS)),
-    # ß is folded by the database's unaccent, not by Python (ADR-059).
-    ("Suiße", words(VALAIS)),
-]
-
-SYNTAX = [
-    # Threshold 0.5: the fuzzy half ignores the quotes, so Romande ("numérique") follows the phrase.
-    ('"numérique de paris"', words(PARIS) + trigrams(ROMANDE)),
-    # Negation removes from both halves: BnParis used to come back through the trigram half.
-    ("bibliothèque -paris", words(ROMANDE, RUSSE) + trigrams(OPENBARE)),
-    ("Belgique -lirtuel", words(OPENBARE)),
-    ("paris OR valais", words(VALAIS, PARIS)),
-    ("PARIS or", words(PARIS)),
-    # Accepted (Q5): treated as the words 'de' and 'paris'.
-    ('"de paris', words(PARIS, OPENBARE, LIRTUEL)),
-    ("brussel -", words(OPENBARE, LIRTUEL)),
-    ("& | ! :", []),
-    ("xyzzy", []),
-    ("", []),
-    ("   ", []),
-    ("-paris", []),
-]
-
-SHORT_COMMON_WORDS = [
-    # Accepted (Q5): no stop words, so 'de' pulls in the Belgian libraries and the other
-    # Bibliothèque catalogs, all below BnParis.
-    ("bibliothèque de Paris", words(PARIS, OPENBARE, ROMANDE, RUSSE, LIRTUEL)),
-]
-
-CASES = PLACE_NAMES + NOT_LOADED_LANGUAGES + TITLES + TYPOS + SYNTAX + SHORT_COMMON_WORDS
+#: The exact-result regression tests read these. (query, [(title, tier)])
+CASES = [(case.query, case.today) for case in QUALITY_CASES]

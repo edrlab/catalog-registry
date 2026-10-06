@@ -86,6 +86,26 @@ then add a **new** data migration carrying the difference and ending with
 migration. A migration that adds a subdivision must add its names too (`subdivision_names`
 only holds rows for subdivisions present in `subdivisions`).
 
+## Test cases and score
+
+The searches we use to check search, with the answer we want and the answer we get, are on one page:
+[`search-test-cases.md`](search-test-cases.md), generated from `tests/search_cases.py` so it cannot
+drift from the tests. The same data is run as exact-result tests (`make test`) and as a score:
+
+```
+make search-score                                  # score the running server, 0 to 1
+make search-score ARGS="--save before.json"        # tweak search, then:
+make search-score ARGS="--baseline before.json"    # better, worse or unchanged, per search
+make search-score ARGS="--url https://… --min-score 0.9"   # a deployed instance, fail below a floor
+```
+
+A search scores 1.0 when it returns the expected catalogs, in the expected order, and nothing else
+(`ndcg x precision`, definitions on the page). Read it as a regression signal, not as a verdict: the
+number depends on which searches are in the list. For example the typo threshold looks slightly worse
+at 0.5 than at 0.6 on today's 61 searches (0.902 against 0.913) because only one of them is a swapped-letter
+typo, while a broader measurement of typos (`tests/integration/test_search_fuzzy.py`) favours 0.5. Add
+searches that look like what readers type before tuning against the score.
+
 ## Operating it
 
 - **Extensions.** The migration runs `CREATE EXTENSION IF NOT EXISTS unaccent` and `pg_trgm`.

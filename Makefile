@@ -19,7 +19,7 @@ export DB_PORT
 .DEFAULT_GOAL := help
 
 .PHONY: help setup env enums seed-schema up down clean run seed seed-libraries seed-sample add migrate revision psql \
-        test lint fmt bench check-db schema-check reference-data docker-build docker-run logs stop
+        test lint fmt bench check-db schema-check reference-data search-score search-cases docker-build docker-run logs stop
 
 # Self-documenting: a target appears here when its line carries a `## ` description, and
 # `##@ ` starts a section. Nothing to keep in step, add a target with `## what it does`
@@ -143,6 +143,15 @@ schema-check:  ## Validate schema/ and every fixture under demo/ and data/
 # pycountry bump; CSVs land in .cache/reference-data/out, and `PY=1` also prints the literals.
 reference-data:  ## Regenerate search reference data from pinned CLDR/ISO sources (offline-cached)
 	uv run --with pycountry==26.2.16 python scripts/generate_reference_data.py $(if $(PY),--python)
+
+# One number for how good search is, against the plan's ideal answers (docs/search-test-cases.md).
+# Read-only. `make search-score ARGS="--save before.json"`, tweak, then `ARGS="--baseline before.json"`.
+search-score:  ## Score the running server's search: make search-score ARGS="--url http://... -v"
+	uv run python scripts/score_search.py $(ARGS)
+
+# The page for Hadrien comes from the same data as the tests; a test fails when it is stale.
+search-cases:  ## Regenerate docs/search-test-cases.md from tests/search_cases.py
+	uv run python scripts/write_search_cases_doc.py
 
 # Confirm a database is usable before anything depends on it, point REGISTRY_DATABASE_URL
 # at Cloud SQL through the Auth Proxy and run this. See README, "The Cloud SQL sandbox".
