@@ -16,7 +16,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from registry.cli.seed import import_catalog_document
+from registry.cli.add import build_catalog_document
+from registry.cli.seed import import_catalog_document, import_feed_document
 from tests.conftest import LIBRARIES_FILE
 from tests.search_helpers import ALL_TITLES, catalog_search_row, search_rows
 
@@ -386,3 +387,31 @@ async def test_reseeding_a_changed_subdivision_list_updates_the_row(
 
     assert await found(db_session, "wallonie") == []
     assert LIRTUEL in await found(db_session, "bruxelles")
+
+
+async def test_a_catalog_imported_the_way_make_add_does_is_searchable_with_its_places(
+    db_session: AsyncSession, searchable_catalogs: None
+) -> None:
+    """Plan section 3, "Import through `registry.cli seed` and `add`". `add` builds a document from
+    a feed with `build_catalog_document` and upserts it through `import_feed_document`; only the
+    download is left out, so nothing here needs a network."""
+    url = "https://remote.example/zanzibar/opds"
+    feed = {"metadata": {"title": "Zanzibar Reading Room"}, "links": []}
+    document = build_catalog_document(
+        feed, url, kind=["public"], country="BE", subdivisions=["BE-BRU"], city="Leuven"
+    )
+
+    created, _ = await import_feed_document(
+        db_session, {"metadata": {"title": "Imported"}, "catalogs": [document]}, source=url
+    )
+    await db_session.flush()
+
+    assert created == 1
+    for query, why in [
+        ("zanzibar", "its title"),
+        ("Belgique", "its country, in French"),
+        ("Brussel", "its subdivision, written after the catalog row"),
+        ("Leuven", "its city"),
+    ]:
+        titles = [title for title, _tier, _score in await search_rows(db_session, query)]
+        assert "Zanzibar Reading Room" in titles, why

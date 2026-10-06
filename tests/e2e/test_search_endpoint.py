@@ -114,3 +114,35 @@ async def test_the_top_level_feed_advertises_the_search_template(
     assert search["href"] == "http://testserver/search{?query}"
     assert search["templated"] is True
     assert_valid_feed(body)
+
+
+@pytest.mark.parametrize(
+    "header", ["fr", "en-US,en;q=0.9", "ja", "de-DE,de;q=0.9,fr;q=0.5", "*", "xx-garbage;;;"]
+)
+async def test_search_ignores_accept_language(
+    client: AsyncClient, searchable_catalogs: None, header: str
+) -> None:
+    """ADR-044: the top-level feed filters and orders by `Accept-Language`, search does not.
+    A reader who asks for `tv5` or `liber` in a French browser still finds Italian catalogs;
+    a language filter is a later, explicit parameter."""
+    plain = await client.get("/search", params={"query": "bibliotheque"})
+    with_header = await client.get(
+        "/search", params={"query": "bibliotheque"}, headers={"Accept-Language": header}
+    )
+
+    assert with_header.status_code == 200
+    assert with_header.json() == plain.json()
+    assert plain.json()["catalogs"], "the comparison would be vacuous on an empty result"
+
+
+async def test_search_finds_a_catalog_whose_language_the_header_would_have_excluded(
+    client: AsyncClient, searchable_catalogs: None
+) -> None:
+    """`Liber Liber` declares Italian only; the top-level feed hides it from a French reader."""
+    feed = await client.get("/", headers={"Accept-Language": "fr"})
+    found = await client.get(
+        "/search", params={"query": "liber liber"}, headers={"Accept-Language": "fr"}
+    )
+
+    assert "Liber Liber" not in [c["metadata"]["title"] for c in feed.json()["catalogs"]]
+    assert "Liber Liber" in [c["metadata"]["title"] for c in found.json()["catalogs"]]
