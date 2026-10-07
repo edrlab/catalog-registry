@@ -287,6 +287,12 @@ server to call its own app in-process with that client's real headers. It shows 
 chosen, wire against decoded bytes, time and the raw JSON, and "Compare all clients" lays them side by
 side. Results follow the OPDS `next` / `previous` links.
 
+Clicking "Browse the catalog" (or pasting a library's feed URL into the path box) reads that feed
+from the library's own server and shows it the same way: navigation, publications with covers, and
+the next/previous links. Only public `http(s)` hosts are fetched (loopback, private and metadata
+addresses are refused, every redirect hop is checked, 2 MB and 10 s caps). A feed that is OPDS 1
+(Atom) or not JSON shows as raw text.
+
 It exists only when `REGISTRY_ENVIRONMENT=local`: the router is not even imported elsewhere, so
 test, staging and production answer 404 (`tests/e2e/test_dev_console.py`). Only `/`, `/search` and
 `/catalogs/{id}` can be simulated.

@@ -56,13 +56,18 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 .pv dl{display:grid;grid-template-columns:130px 1fr;gap:6px 12px;margin:0 0 16px;font-size:13px}.pv dt{color:var(--mut)}.pv dd{margin:0;word-break:break-word}
 .pv .acts{display:flex;gap:8px;flex-wrap:wrap}.pv .acts a{display:inline-block;text-decoration:none;color:#fff;background:var(--c);border-radius:8px;padding:7px 14px;font-weight:500;font-size:13px}
 .pv .acts a.sec{background:var(--soft);color:var(--fg)}
+.grp{padding:8px 20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);background:#fafafa;border-bottom:1px solid var(--line)}
+.pub{display:flex;gap:18px;padding:18px 20px;align-items:flex-start}.pub .cover{flex:none;width:110px;aspect-ratio:2/3;border-radius:6px;background:var(--soft);display:grid;place-items:center;font-size:32px;font-weight:700;color:var(--mut);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.pub .cover img{width:100%;height:100%;object-fit:cover}.pub .info{flex:1;min-width:0}.pub h2{margin:0 0 2px;font-size:19px;letter-spacing:-.02em}.pub .desc{color:#3f3f46;margin:10px 0}
+.pub dl{display:grid;grid-template-columns:100px 1fr;gap:4px 12px;margin:10px 0;font-size:13px}.pub dt{color:var(--mut)}.pub dd{margin:0;word-break:break-word}
+.pub .acts{display:flex;gap:8px;flex-wrap:wrap}.pub .acts a{display:inline-block;text-decoration:none;color:#fff;background:var(--fg);border-radius:8px;padding:7px 14px;font-weight:500;font-size:13px}.pub .acts a.sec{background:var(--soft);color:var(--fg)}
 .empty{padding:40px 20px;color:var(--mut);text-align:center}.err{color:var(--bad)}
 </style>
 </head>
 <body>
 <div class="top"><b>Registry dev console</b><span class="badge">LOCAL ONLY</span><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
 <div class="bar">
-  <div class="req"><span>GET</span><input id="path" spellcheck="false" autocomplete="off" placeholder="/search?query=paris"><button class="pri" id="go">Send</button></div>
+  <div class="req"><span>GET</span><input id="path" spellcheck="false" autocomplete="off" placeholder="/search?query=paris   or a library feed URL, https://…"><button class="pri" id="go">Send</button></div>
   <div class="opts">
     <div class="chips" id="presets"></div>
     <span style="flex:1"></span>
@@ -84,12 +89,17 @@ const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=nu
 const PRESETS=[['Recommended feed','/'],['Search: paris','/search?query=paris'],['Typo: parsi','/search?query=parsi'],['Accents: ecole','/search?query=%C3%A9cole'],['Empty search','/search?query='],['Page 2','/search?query=library&page=2']];
 const LANGS=['','fr','en','fr-FR,fr;q=0.9,en;q=0.5','en-US,en;q=0.9','de,fr;q=0.5','*'];
 const TABS=['Preview','Response','Headers','Raw','curl','Compare'];
+const COLORS={gray:'#6b7280',red:'#dc2626',yellow:'#ca8a04',blue:'#2563eb',green:'#16a34a',purple:'#9333ea',orange:'#ea580c',pink:'#db2777'};
+const REL_LABEL={catalog:'Browse the catalog',shelf:'Shelf',search:'Search it',authenticate:'Sign in',alternate:'Alternate',profile:'Profile',self:'Registry entry',next:'Next',previous:'Previous',first:'First',last:'Last'};
 let clients={},last=null,tab='Preview',selected=null,compareHtml=null;
 
 const links=b=>b?.links||[];
 const rels=l=>[].concat(l.rel||[]);
 const findRel=(b,r)=>links(b).find(l=>rels(l).includes(r));
 const bytes=n=>n<1024?n+' B':(n/1024).toFixed(n<10240?1:0)+' KB';
+const isExt=()=>/^https?:/.test(last?.request.path||'');
+const baseUrl=()=>isExt()?last.request.path:location.origin;
+const names=a=>[].concat(a||[]).map(x=>typeof x==='string'?x:(x.name?.['']||x.name||'')).filter(Boolean);
 
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
 function hl(obj){
@@ -103,7 +113,8 @@ const ALLOWED=['/','/search?query=paris','/catalogs/<uuid>'];
 function friendly(detail,status){
   const d=Array.isArray(detail)?detail[0]:null,field=d?.loc?.[1],e=new Error();
   if(field==='path'){e.title="That path can't be simulated";e.hint='The console only calls the public reads, so it cannot call itself or any other route.';e.examples=ALLOWED}
-  else if(field==='client'||typeof detail==='string'){e.title='Unknown client';e.hint=typeof detail==='string'?detail:'Pick one from the list.'}
+  else if(typeof detail==='string'&&detail.startsWith('unknown client')){e.title='Unknown client';e.hint='Pick one from the list.'}
+  else if(typeof detail==='string'){e.title='Could not read that feed';e.hint=detail}
   else{e.title='Request failed (HTTP '+status+')';e.hint=d?.msg||'The console could not make this request.'}
   e.message=e.title;return e;
 }
@@ -112,8 +123,10 @@ function errorBox(e){
   if(e.examples){const x=el('div','ex');e.examples.forEach(v=>{const c=el('code',null,v);c.onclick=()=>{$('path').value=v.includes('<')?'/':v;send()};x.append(c)});b.append(x)}
   return b;
 }
-async function sim(path,client){
-  const r=await fetch('/dev/simulate?'+new URLSearchParams({path,client,language:$('lang').value}));
+// A path is simulated against this registry; a full URL is read from the library's own server.
+async function call(path,client){
+  const ext=/^https?:/.test(path);
+  const r=await fetch((ext?'/dev/fetch?':'/dev/simulate?')+new URLSearchParams({[ext?'url':'path']:path,client,language:$('lang').value}));
   const j=await r.json();
   if(!r.ok)throw friendly(j.detail,r.status);
   return j;
@@ -123,100 +136,149 @@ function saveHash(){location.hash=new URLSearchParams({p:$('path').value,c:$('cl
 async function send(){
   const path=$('path').value.trim()||'/';
   saveHash();selected=null;tab='Preview';
-  try{last=await sim(path,$('client').value);}
+  $('status').replaceChildren(el('span','stat','Loading\u2026'));
+  try{last=await call(path,$('client').value);}
   catch(e){last=null;const p=el('span','pill err','Error');$('status').replaceChildren(p,el('span','stat',e.message));$('rows').replaceChildren(errorBox(e));$('count').textContent='Results';$('paging').textContent='';$('pager').replaceChildren();renderTabs();return}
   render();
 }
 
+// One flat list for any OPDS document: this registry's catalogs, or a library's navigation and publications.
+function itemsOf(b,path){
+  if(!b||typeof b!=='object')return[];
+  if(Array.isArray(b.catalogs))return b.catalogs.map(c=>({kind:'catalog',raw:c}));
+  const out=[];
+  (b.navigation||[]).forEach(n=>out.push({kind:'nav',raw:n}));
+  (b.publications||[]).forEach(p=>out.push({kind:'pub',raw:p}));
+  (b.groups||[]).forEach(g=>{const t=g.metadata?.title;
+    (g.navigation||[]).forEach(n=>out.push({kind:'nav',raw:n,group:t}));
+    (g.publications||[]).forEach(p=>out.push({kind:'pub',raw:p,group:t}))});
+  if(!out.length&&b.metadata&&/\/catalogs\/[0-9a-f-]{36}$/.test(path||''))out.push({kind:'catalog',raw:b});
+  return out;
+}
+
 function render(){
-  const j=last,b=j.body,ok=j.status<400;
+  const j=last,ok=j.status<400;
   const st=$('status');st.replaceChildren();
   st.append(el('span','pill '+(ok?'ok':'err'),'HTTP '+j.status));
   const mk=(k,v)=>{const s=el('span','stat',k+' ');s.append(el('b',null,v));return s};
+  if(isExt())st.append(mk('from',new URL(j.request.path).host));
   st.append(mk('encoding',j.encoding||'identity'));
   const sz=mk('wire',bytes(j.wire_bytes)+' of '+bytes(j.decoded_bytes));
   const m=el('span','meter');m.append(el('i'));m.firstChild.style.width=Math.min(100,j.wire_bytes/Math.max(j.decoded_bytes,1)*100)+'%';sz.append(m);st.append(sz);
   st.append(mk('time',j.ms+' ms'));
-  st.append(mk('request-id',j.headers['x-request-id']?.slice(0,8)||'-'));
+  if(!isExt())st.append(mk('request-id',j.headers['x-request-id']?.slice(0,8)||'-'));
   renderRows();renderTabs();
 }
 
 function renderRows(){
   const j=last,b=j.body,rows=$('rows');rows.replaceChildren();$('pager').replaceChildren();
-  const cats=Array.isArray(b?.catalogs)?b.catalogs:(b?.metadata&&j.request.path.startsWith('/catalogs/')?[b]:[]);
-  const md=b?.metadata||{};
-  $('count').textContent=cats.length?`${cats.length} shown`+(md.numberOfItems!=null?` of ${md.numberOfItems}`:''):'Results';
+  const items=itemsOf(b,j.request.path),md=b?.metadata||{};
+  if(items.length&&selected==null)selected=0;
+  $('count').textContent=(isExt()&&md.title?md.title+' \u00b7 ':'')+(items.length?`${items.length} shown`+(md.numberOfItems!=null?` of ${md.numberOfItems}`:''):'Results');
   $('paging').textContent=md.currentPage?`page ${md.currentPage}`:'';
-  if(cats.length&&selected==null)selected=0;
-  if(!cats.length){rows.append(el('div','empty',j.is_json?'No catalogs in this response.':'Not JSON.'));}
-  cats.forEach((c,i)=>{
-    const m=c.metadata||c,r=el('div','row'+(selected===i?' sel':''));
-    const t=el('div','t');t.append(el('b',null,m.title||'(untitled)'));
+  if(!items.length)rows.append(el('div','empty',j.is_json?'No catalogs or publications in this response.':'Not an OPDS 2 JSON document (see the Raw tab).'));
+  let lastGroup;
+  items.forEach((it,i)=>{
+    if(it.group&&it.group!==lastGroup){rows.append(el('div','grp',it.group));lastGroup=it.group}
+    const c=it.raw,m=c.metadata||c,r=el('div','row'+(selected===i?' sel':''));
+    const t=el('div','t');
+    t.append(el('b',null,m.title||c.title||'(untitled)'));
     const self=links(c).find(l=>rels(l).includes('self'));
     const id=(self?.href.match(/[0-9a-f-]{36}/)||[''])[0];
-    if(id)t.append(el('span','n',id.slice(0,8)));
+    if(it.kind==='catalog'&&id)t.append(el('span','n',id.slice(0,8)));
+    if(it.kind==='nav')t.append(el('span','n','navigation'));
     r.append(t);
-    if(m.description)r.append(el('div','d',m.description));
+    const sub=it.kind==='pub'?names(m.author).join(', '):m.description;
+    if(sub)r.append(el('div','d',sub));
     const tags=el('div','tags');
     [].concat(m.kind||[]).forEach(k=>tags.append(el('span','tag k',k)));
-    [].concat(m.supportedLanguages||[]).forEach(l=>tags.append(el('span','tag',l)));
-    if(m.country)tags.append(el('span','tag',[m.country,m.city].filter(Boolean).join(' · ')));
-    tags.append(el('span','tag',links(c).length+' links'));
-    r.append(tags);
+    [].concat(m.supportedLanguages||m.language||[]).forEach(l=>tags.append(el('span','tag',l)));
+    if(m.country)tags.append(el('span','tag',[m.country,m.city].filter(Boolean).join(' \u00b7 ')));
+    if(it.kind==='pub'&&m['@type'])tags.append(el('span','tag k',String(m['@type']).split('/').pop()));
+    if(it.kind!=='nav')tags.append(el('span','tag',links(c).length+' links'));
+    if(tags.children.length)r.append(tags);
     r.onclick=()=>{selected=i;tab='Preview';renderRows();renderTabs()};
-    r.ondblclick=()=>{if(id){$('path').value='/catalogs/'+id;send()}};
+    r.ondblclick=()=>{const l=it.kind==='nav'?c:self;if(l)openLink(l)};
     rows.append(r);
   });
   const pg=$('pager');
   for(const rel of['first','previous','next','last']){
     const l=findRel(b,rel);if(!l)continue;
-    const bt=el('button',null,rel);bt.onclick=()=>{const u=new URL(l.href,location.origin);$('path').value=u.pathname+u.search;send()};pg.append(bt);
+    const bt=el('button',null,rel);bt.onclick=()=>openLink(l);pg.append(bt);
   }
-  if(cats.length)rows.append(el('div','empty','Click a row to inspect it. Double-click to open it.'));
+  if(items.length)rows.append(el('div','empty','Click a row to preview it. Double-click to open it.'));
 }
 
-const COLORS={gray:'#6b7280',red:'#dc2626',yellow:'#ca8a04',blue:'#2563eb',green:'#16a34a',purple:'#9333ea',orange:'#ea580c',pink:'#db2777'};
-const REL_LABEL={catalog:'Browse the catalog',shelf:'Shelf',search:'Search it',authenticate:'Sign in',alternate:'Alternate',profile:'Profile',self:'Registry entry'};
-function preview(cat){
-  const m=cat.metadata||cat,color=COLORS[m.color]||COLORS.gray,v=el('div','pv');v.style.setProperty('--c',color);
-  v.append(el('div','hero'));
+// A link stays inside the console when it leads to an OPDS/JSON document; anything else (a web page, a book file) opens in a new tab.
+function leavesConsole(l){return !rels(l).includes('self')&&!/opds|json/.test(l.type||'')}
+function openLink(l){
+  let href=l.href;
+  if(l.templated){
+    const v=(href.match(/\{\?([^,}]+)/)||[,'query'])[1],q=prompt('Search for:');if(!q)return;
+    href=href.replace(/\{\?[^}]*\}/,'?'+v+'='+encodeURIComponent(q));
+  }
+  const u=new URL(href,baseUrl());
+  if(leavesConsole(l)){window.open(u.href,'_blank','noopener,noreferrer');return}
+  $('path').value=!isExt()&&(rels(l).includes('self')||u.origin===location.origin)?u.pathname+u.search:u.href;
+  send();
+}
+function linkButtons(list,skip){
+  const acts=el('div','acts');
+  list.filter(l=>!skip.some(r=>rels(l).includes(r))).forEach(l=>{
+    const r0=rels(l)[0]||'',lab=l.title||REL_LABEL[r0]||r0.split('/').pop()||'Link';
+    const a=el('a',rels(l).includes('catalog')?'':'sec',lab+(l.templated?' \u2026':'')+(leavesConsole(l)?' \u2197':''));
+    a.href=new URL(l.href.replace(/\{[^}]*\}/g,''),baseUrl()).href;a.title=l.href+(l.type?'  ['+l.type+']':'');
+    a.onclick=e=>{e.preventDefault();openLink(l)};acts.append(a)});
+  return acts;
+}
+function initial(t){return[...(t||'?')][0].toUpperCase()}
+function dl(rowsIn){
+  const d=el('dl');
+  rowsIn.forEach(([k,val])=>{if(val==null||val===''||(Array.isArray(val)&&!val.length))return;d.append(el('dt',null,k),el('dd',null,[].concat(val).join(', ')))});
+  return d;
+}
+function preview(it){
+  const cat=it.raw,m=cat.metadata||cat,v=el('div','pv');
+  if(it.kind==='nav'){
+    v.style.setProperty('--c','#2563eb');v.append(el('div','hero'));
+    const hd=el('div','hd');hd.append(el('div','logo',initial(cat.title)),el('h2',null,cat.title||'(untitled)'));v.append(hd);
+    const bd=el('div','bd');bd.append(dl([['Type',cat.type],['Link',cat.href]]));bd.append(linkButtons([{...cat,rel:'catalog',title:'Open'}],[]));v.append(bd);return v;
+  }
+  if(it.kind==='pub'){
+    v.style.setProperty('--c','#52525b');
+    const body=el('div','pub'),cov=el('div','cover'),img=(cat.images||[])[0]||links(cat).find(l=>rels(l).some(r=>/image/.test(r)));
+    if(img){const u=new URL(img.href,baseUrl());if(u.protocol==='https:'){const i=el('img');i.src=u.href;i.alt='';i.onerror=()=>{i.remove();cov.textContent=initial(m.title)};cov.append(i)}else cov.textContent=initial(m.title)}
+    else cov.textContent=initial(m.title);
+    const info=el('div','info');info.append(el('h2',null,m.title||'(untitled)'));
+    const au=names(m.author).join(', ');if(au)info.append(el('div','mut',au));
+    if(m.description)info.append(el('p','desc',m.description.replace(/<[^>]*>/g,'')));
+    info.append(dl([['Publisher',names(m.publisher).join(', ')],['Published',m.published],['Language',m.language],['Subjects',names(m.subject)],['Identifier',m.identifier],['Type',m['@type']]]));
+    info.append(linkButtons(links(cat),['self']));
+    body.append(cov,info);v.append(body);return v;
+  }
+  const color=COLORS[m.color]||COLORS.gray;v.style.setProperty('--c',color);v.append(el('div','hero'));
   const hd=el('div','hd'),logo=el('div','logo'),icon=links(cat).find(l=>rels(l).includes('icon'));
-  if(icon&&/^https:/.test(icon.href)){const i=el('img');i.src=icon.href;i.alt='';i.onerror=()=>{i.remove();logo.textContent=[...(m.title||'?')][0].toUpperCase()};logo.append(i)}
-  else logo.textContent=[...(m.title||'?')][0].toUpperCase();
+  if(icon&&/^https:/.test(icon.href)){const i=el('img');i.src=icon.href;i.alt='';i.onerror=()=>{i.remove();logo.textContent=initial(m.title)};logo.append(i)}
+  else logo.textContent=initial(m.title);
   hd.append(logo,el('h2',null,m.title||'(untitled)'));v.append(hd);
   const bd=el('div','bd');if(m.description)bd.append(el('p','desc',m.description));
-  const dl=el('dl'),row=(k,val)=>{if(val==null||val===''||(Array.isArray(val)&&!val.length))return;dl.append(el('dt',null,k),el('dd',null,[].concat(val).join(', ')))};
-  row('Kind',m.kind);row('Languages',m.supportedLanguages);row('Publications',m.publicationTypes);
-  row('Place',[m.city,m.subdivisions&&m.subdivisions.join(', '),m.country].filter(Boolean).join(' · '));
-  row('Coverage',m.coverage);row('Identifier',m.identifier);row('Colour',m.color);
-  bd.append(dl);
-  const acts=el('div','acts');
-  links(cat).filter(l=>!rels(l).includes('icon')).forEach(l=>{
-    const own=rels(l).includes('self'),a=el('a',rels(l).includes('catalog')?'':'sec',(l.title||REL_LABEL[rels(l)[0]]||rels(l)[0])+(l.templated?' (template)':'')+(own?'':' \u2197'));
-    a.href=l.href;a.title=l.href+(l.type?'  ['+l.type+']':'');
-    if(own){a.onclick=e=>{e.preventDefault();const u=new URL(l.href,location.origin);$('path').value=u.pathname+u.search;send()}}
-    else{a.target='_blank';a.rel='noopener noreferrer'}
-    acts.append(a)});
-  bd.append(acts);v.append(bd);return v;
+  bd.append(dl([['Kind',m.kind],['Languages',m.supportedLanguages],['Publications',m.publicationTypes],
+    ['Place',[m.city,m.subdivisions&&m.subdivisions.join(', '),m.country].filter(Boolean).join(' \u00b7 ')],['Coverage',m.coverage],['Identifier',m.identifier],['Colour',m.color]]));
+  bd.append(linkButtons(links(cat),['icon']));v.append(bd);return v;
 }
+
 function renderTabs(){
   const t=$('tabs');t.replaceChildren();
   TABS.forEach(n=>{const b=el('button',n===tab?'on':'',n);b.onclick=()=>{tab=n;renderTabs()};t.append(b)});
   const p=$('pane');p.replaceChildren();
-  if(!last){return}
-  const j=last;
+  if(!last)return;
+  const j=last,items=itemsOf(j.body,j.request.path),it=selected!=null?items[selected]:null;
   const pre=(html,text)=>{const w=el('div');const tl=el('div','tools');const c=el('button',null,'Copy');c.onclick=()=>copy(text,c);tl.append(c);const pr=el('pre');pr.innerHTML=html;w.append(tl,pr);p.append(w)};
-  if(tab==='Preview'){
-    const b=j.body,cats=Array.isArray(b?.catalogs)?b.catalogs:[];
-    const target=selected!=null&&cats[selected]?cats[selected]:(b?.metadata&&!cats.length&&j.request.path.startsWith('/catalogs/')?b:null);
-    p.append(target?preview(target):el('div','empty','Select a catalog to see how an app could show it.'));
-  }else if(tab==='Response'){
-    const b=j.body;
-    const cats=Array.isArray(b?.catalogs)?b.catalogs:[];
-    const target=selected!=null&&cats[selected]?cats[selected]:(b?.metadata&&!cats.length?b:null);
-    if(target)pre(hl(target),JSON.stringify(target,null,2));
-    else if(j.is_json)pre(hl(b.metadata?{metadata:b.metadata,links:b.links}:b),JSON.stringify(b,null,2));
-    else pre(esc(String(b)),String(b));
+  if(tab==='Preview')p.append(it?preview(it):el('div','empty','Select an item to see how an app could show it.'));
+  else if(tab==='Response'){
+    if(it)pre(hl(it.raw),JSON.stringify(it.raw,null,2));
+    else if(j.is_json)pre(hl(j.body.metadata?{metadata:j.body.metadata,links:j.body.links}:j.body),JSON.stringify(j.body,null,2));
+    else pre(esc(String(j.body)),String(j.body));
   }else if(tab==='Raw'){const s=j.is_json?JSON.stringify(j.body,null,2):String(j.body);pre(j.is_json?hl(j.body):esc(s),s)}
   else if(tab==='Headers'){
     const tbl=el('table');tbl.innerHTML='<tr><th>Request</th><th></th></tr>';
@@ -226,7 +288,7 @@ function renderTabs(){
     p.append(tbl);
   }else if(tab==='curl'){
     const h=Object.entries(j.request.headers).map(([k,v])=>`  -H '${k}: ${v}'`).join(' \\\n');
-    const cmd=`curl -sS -i \\\n${h} \\\n  '${location.origin}${j.request.path}'`;
+    const cmd=`curl -sS -i \\\n${h} \\\n  '${isExt()?j.request.path:location.origin+j.request.path}'`;
     pre(esc(cmd),cmd);
   }else compareTab(p);
 }
@@ -241,7 +303,7 @@ async function compareTab(p){
     box.replaceChildren(tb);compareHtml=tb;
     for(const k of Object.keys(clients)){
       const tr=el('tr');tb.append(tr);
-      try{const r=await sim(path,k);
+      try{const r=await call(path,k);
         const saved=r.decoded_bytes?Math.round((1-r.wire_bytes/r.decoded_bytes)*100):0;
         [clients[k].label,r.encoding||'identity',bytes(r.wire_bytes),bytes(r.decoded_bytes),saved+'%',r.ms].forEach(v=>tr.append(el('td',null,v)));
       }catch(e){tr.append(el('td',null,k),el('td','err',e.message))}
