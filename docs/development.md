@@ -281,7 +281,8 @@ catalog reachable at `/catalogs/{id}` while staying out of `GET /`.
 
 ## The dev console
 
-With `make up` (environment `local`), open <http://localhost:8000/dev>. It tries the feed, search and
+The console is at `/dev`: <http://localhost:8000/dev> locally (after `make up`) and
+<https://registry.thoriumreader.com/dev> in production. It tries the feed, search and
 a single catalog as each kind of reader would: Thorium, KOReader, iOS, Android, Windows, a browser,
 `requests` and `curl`. A browser cannot set `Accept-Encoding` or `User-Agent`, so the page asks the
 server to call its own app in-process with that client's real headers. It shows status, the encoding
@@ -293,20 +294,27 @@ highlighted (accent-blind), a result that matched only by typo tolerance is badg
 results load as you scroll, and the arrow keys move through them. Pick a client and language to see
 how each reader would be answered.
 
-Clicking "Browse the catalog" (or pasting a library's feed URL into the path box) reads that feed
-from the library's own server and shows it the same way: navigation, publications with covers, and
+On a local console, clicking "Browse the catalog" (or pasting a library's feed URL into the path box)
+reads that feed from the library's own server and shows it the same way: navigation, publications with covers, and
 the next/previous links. Only public `http(s)` hosts are fetched (loopback, private and metadata
 addresses are refused, every redirect hop is checked, 2 MB and 10 s caps). A feed that is OPDS 1
 (Atom) or not JSON shows as raw text.
 
-Reading a library's own feed (`/dev/fetch`) exists only on a local console. Anywhere else the page
-knows that: the library links open in a new tab and carry a ↗.
-If it is ever mounted elsewhere it needs `X-Dev-Token` equal to `REGISTRY_DEV_FETCH_TOKEN`, and reaches
-only hosts that appear in a registered catalog's `catalog` link.
+**What exists where.** The page, the client list and the simulator (`/dev`, `/dev/clients`,
+`/dev/simulate`) are mounted in every environment. They read only what the registry already serves
+publicly, and one console request makes exactly one request to the app, so a visitor gains nothing they
+could not do without it. Only `/`, `/search` and `/catalogs/{id}` can be simulated, and the language
+value is limited to the characters an `Accept-Language` header is made of. The page is `no-store`,
+`noindex`, and has a closed content policy. Its traffic is not written to the client log, so it does not
+count as a reader.
 
-It exists only when `REGISTRY_ENVIRONMENT=local`: the router is not even imported elsewhere, so
-test, staging and production answer 404 (`tests/e2e/test_dev_console.py`). Only `/`, `/search` and
-`/catalogs/{id}` can be simulated.
+Reading a library's own feed (`/dev/fetch`) makes the server request a URL a visitor names, so it exists
+**only when `REGISTRY_ENVIRONMENT=local`**: the router is not even imported elsewhere, and production
+(which runs `staging`) answers 404. The page knows that: its library links open in a new tab and carry a
+↗, and pasting a library URL says so. Should it ever be mounted elsewhere it needs `X-Dev-Token` equal to
+`REGISTRY_DEV_FETCH_TOKEN` and reaches only hosts in a registered catalog's `catalog` link
+(`tests/e2e/test_dev_console.py`, `test_dev_fetch_guards.py`). `make live-check ... ARGS="--deployed"`
+verifies on a deployed service that it is not there.
 
 ## Generated files
 

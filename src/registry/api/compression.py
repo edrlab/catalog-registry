@@ -121,7 +121,13 @@ def configure_client_log() -> None:
 def log_client_request(
     scope: Scope, request_headers: Headers, *, status: int, encoding: str | None
 ) -> None:
-    """The one line per request, whichever path the response took (ADR-061)."""
+    """The one line per request, whichever path the response took (ADR-061).
+
+    The console is not a reader. Its own pages (`/dev...`) and the requests it makes to the app on a
+    visitor's behalf (marked in the scope by `call_app`) would pollute the count of real clients.
+    """
+    if scope["path"].startswith("/dev") or scope.get("state", {}).get("dev_console"):
+        return
     _client_log.info(
         json.dumps(
             {

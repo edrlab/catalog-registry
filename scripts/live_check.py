@@ -2,7 +2,7 @@
 
     make live-check                                      # http://localhost:8000
     make live-check URL=https://registry.thoriumreader.com
-    make live-check ARGS="--url https://... -v --max-ms 150"
+    make live-check URL=https://registry.thoriumreader.com ARGS="--deployed --max-ms 300"
 
 Read-only: it only sends GET requests. Exit 0 when everything passed, 1 when a check failed, 2 when
 the server does not answer.
@@ -125,8 +125,12 @@ def titles_of(reply: Reply) -> list[str]:
 PLAIN = {"Accept-Encoding": "identity"}
 
 
-def run_smoke_checks(get: Get) -> list[Check]:
-    """The plumbing a reader depends on, one named check each."""
+def run_smoke_checks(get: Get, *, deployed: bool = False) -> list[Check]:
+    """The plumbing a reader depends on, one named check each.
+
+    *deployed* adds what must be true of a public service and is not true of a local run: the route
+    that reads a library's feed on a visitor's behalf (`/dev/fetch`) must not exist.
+    """
     checks: list[Check] = []
 
     def check(name: str, ok: bool, detail: str = "") -> None:
@@ -182,6 +186,19 @@ def run_smoke_checks(get: Get) -> list[Check]:
     )
     beyond = get(search_path("paris", 0), PLAIN)
     check("page 0 is refused with 422", beyond.status == UNPROCESSABLE, f"HTTP {beyond.status}")
+    console = get("/dev", PLAIN)
+    check(
+        "the console page answers",
+        console.status == OK and b"Catalog Registry" in console.body,
+        f"HTTP {console.status}",
+    )
+    if deployed:
+        relay = get("/dev/fetch?url=https%3A%2F%2Fexample.org%2F", PLAIN)
+        check(
+            "/dev/fetch is not mounted on a deployed service",
+            relay.status == NOT_FOUND,
+            f"HTTP {relay.status}: it can make the server request a URL a visitor names",
+        )
     missing = get(f"/catalogs/{MISSING_CATALOG}", PLAIN)
     check("an unknown catalog is a 404", missing.status == NOT_FOUND, f"HTTP {missing.status}")
     return checks
@@ -235,6 +252,11 @@ def main(argv: list[str]) -> int:
         "-v", "--verbose", action="store_true", help="list every check, not only failures"
     )
     parser.add_argument(
+        "--deployed",
+        action="store_true",
+        help="also require what a public service must have: /dev/fetch is not mounted",
+    )
+    parser.add_argument(
         "--max-ms", type=float, help="fail when the median search takes longer than this (ms)"
     )
     args = parser.parse_args(argv)
@@ -247,7 +269,9 @@ def main(argv: list[str]) -> int:
         return 2
 
     print(f"{args.url}\n")
-    failures = print_report("plumbing", run_smoke_checks(get), verbose=args.verbose)
+    failures = print_report(
+        "plumbing", run_smoke_checks(get, deployed=args.deployed), verbose=args.verbose
+    )
     search_checks, returned = run_search_checks(get)
     print()
     failures += print_report("searches", search_checks, verbose=args.verbose)

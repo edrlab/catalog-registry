@@ -18,7 +18,7 @@ from starlette.middleware.cors import CORSMiddleware
 from registry.api.compression import CompressionMiddleware, configure_client_log
 from registry.api.exception_handlers import register_exception_handlers
 from registry.api.middleware import ResponseHeadersMiddleware
-from registry.api.routes import catalogs, feed, health, search
+from registry.api.routes import catalogs, dev, feed, health, search
 from registry.core.config import Settings
 from registry.db.session import (
     build_read_engine,
@@ -95,11 +95,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(catalogs.router)
     app.include_router(search.router)
     app.include_router(health.router)
+    # The console page and its simulator read only what the registry already serves publicly, so
+    # they are mounted everywhere (ADR-063).
+    app.include_router(dev.router)
     if resolved.environment == "local":
-        # Developer machines only for now (ADR-063): imported here so no other environment loads
-        # either module, or the dev-only `httpx` that `dev_fetch` needs.
-        from registry.api.routes import dev, dev_fetch  # noqa: PLC0415
+        # Reading a library's own feed makes the server request a URL a visitor names, so it is
+        # never mounted in a deployed environment. Imported here so no other environment loads it,
+        # or the dev-only `httpx` it needs.
+        from registry.api.routes import dev_fetch  # noqa: PLC0415
 
-        app.include_router(dev.router)
         app.include_router(dev_fetch.router)
     return app

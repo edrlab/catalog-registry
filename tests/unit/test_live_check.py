@@ -65,9 +65,11 @@ class FakeRegistry:
         self.compress = True
         self.ready = 200
         self.vary = True
+        self.console = True
+        self.relay = False  # /dev/fetch mounted, as in a local run
         self.edit: Callable[[str, list[str]], list[str]] = lambda query, titles: titles
 
-    def __call__(self, path: str, headers: dict[str, str]) -> Reply:
+    def __call__(self, path: str, headers: dict[str, str]) -> Reply:  # noqa: PLR0911 (a router)
         offered = headers.get("Accept-Encoding") if self.compress else "identity"
         url = urllib.parse.urlsplit(path)
         params = urllib.parse.parse_qs(url.query, keep_blank_values=True)
@@ -75,6 +77,11 @@ class FakeRegistry:
             return answer({"status": "ready"}, offered, status=self.ready)
         if url.path == "/":
             return answer(feed_body(search_link=self.search_link), offered, vary=self.vary)
+        if url.path == "/dev":
+            status = 200 if self.console else 404
+            return Reply(status, {"content-type": "text/html"}, b"<title>Catalog Registry</title>")
+        if url.path == "/dev/fetch":
+            return Reply(200 if self.relay else 404, {}, b"{}")
         if url.path.startswith("/catalogs/"):
             return answer({"title": "Not Found"}, offered, status=404)
         if url.path == "/search":
@@ -160,3 +167,24 @@ def test_a_server_error_on_a_search_is_a_failure_not_a_crash() -> None:
 
     assert failed(checks) == [target]
     assert returned[target] == []
+
+
+def test_the_console_page_must_answer() -> None:
+    registry = FakeRegistry()
+    registry.console = False
+
+    assert "the console page answers" in failed(live_check.run_smoke_checks(registry))
+
+
+def test_a_deployed_service_must_not_have_the_fetch_route() -> None:
+    registry = FakeRegistry()
+    registry.relay = True
+
+    assert failed(live_check.run_smoke_checks(registry)) == []  # fine for a local run
+    assert "/dev/fetch is not mounted on a deployed service" in failed(
+        live_check.run_smoke_checks(registry, deployed=True)
+    )
+
+
+def test_a_deployed_service_without_the_fetch_route_passes() -> None:
+    assert failed(live_check.run_smoke_checks(FakeRegistry(), deployed=True)) == []

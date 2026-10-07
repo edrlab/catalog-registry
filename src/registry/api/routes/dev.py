@@ -1,7 +1,8 @@
-"""The dev console: a page to try search and the feed as the real reader apps would (ADR-063).
+"""The console: a page to try search and the feed as the real reader apps would (ADR-063).
 
-Mounted only when `REGISTRY_ENVIRONMENT=local` (see `create_app`). It reads public data, through
-paths the registry already serves.
+Mounted in every environment (see `create_app`). It reads only public data, through paths the
+registry already serves, and one console request makes exactly one request to the app, so it adds
+nothing an anonymous visitor could not already do.
 
 A browser cannot set `Accept-Encoding` or `User-Agent`, so a plain page cannot be KOReader. This
 asks the server to call the app's own ASGI stack, in-process, with a client's exact headers.
@@ -80,6 +81,10 @@ CLIENTS: Final[dict[str, dict[str, Any]]] = {
 }
 
 #: Only the public reads. No `/dev` (no recursion), no health, no docs.
+#: What an `Accept-Language` value is made of (RFC 9110 §12.5.4). Anything else is refused before it
+#: becomes a header, so the field cannot carry control characters or anything unexpected.
+_LANGUAGE: Final = r"^[A-Za-z0-9,;=.*\- ]*$"
+
 _PATH: Final = r"^/(search(\?[^#\s]*)?|catalogs/[0-9a-fA-F-]{36})?$"
 
 #: What the page ships with, so the file also works opened on its own.
@@ -180,7 +185,7 @@ async def simulate(
     request: Request,
     path: str = Query(pattern=_PATH, max_length=600),
     client: str = Query(default="thorium"),
-    language: str = Query(default="", max_length=120),
+    language: str = Query(default="", max_length=120, pattern=_LANGUAGE),
 ) -> JSONResponse:
     """Make one request as *client* would, and report what came back and what it cost."""
     profile = CLIENTS.get(client)

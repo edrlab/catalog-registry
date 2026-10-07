@@ -53,25 +53,31 @@ $ curl -s localhost:8000/ | jq '.metadata'
 If port 5432 is already taken, run `make up DB_PORT=55432` and match it in `.env`. `make up`
 tells you when this happens.
 
-To try it by hand, open <http://localhost:8000/dev> after `make seed` and `make seed-libraries`. It
-is a page for the feed and search as different reader apps would see them, with a search box that
-updates as you type. It only exists when `REGISTRY_ENVIRONMENT=local`, so it is not in a deployed
-service.
+To try it by hand, open the console at `/dev`. It is a page for the feed and search as different
+reader apps would see them, with a search box that updates as you type:
+
+| | Console |
+|---|---|
+| Local | <http://localhost:8000/dev> (after `make seed` and `make seed-libraries`) |
+| Production | <https://registry.thoriumreader.com/dev> |
+
+Both show the registry's own feed, search and catalogs. Reading a library's own feed from inside the
+page works only on a local run; in production those links open in a new tab.
 
 To check a running or deployed registry end to end (health, the feed, compression, and every
 documented search, pass or fail):
 
 ```
 make live-check
-make live-check URL=https://registry.thoriumreader.com
+make live-check URL=https://registry.thoriumreader.com ARGS="--deployed"
 ```
 
 The same endpoints answer in both places:
 
 | | Base URL | Notes |
 |---|---|---|
-| Local | `http://localhost:8000` | After `make up` and `make seed`. Also has the dev page at `/dev` |
-| Production | `https://registry.thoriumreader.com` | Use this name, not the `*.run.app` address, for anything a reader device uses. No dev page |
+| Local | `http://localhost:8000` | After `make up` and `make seed`. Console at `/dev` |
+| Production | `https://registry.thoriumreader.com` | Use this name, not the `*.run.app` address, for anything a reader device uses. Console at `/dev` |
 
 ```
 curl -s 'http://localhost:8000/search?query=wallis'

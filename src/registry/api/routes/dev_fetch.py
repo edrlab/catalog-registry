@@ -1,6 +1,8 @@
 """Read one OPDS document from a library's own server, for the dev console (ADR-063).
 
-Two limits keep this from being an open relay on a public service:
+This route is mounted only when `REGISTRY_ENVIRONMENT=local` (see `create_app`), so none of the
+following applies in a deployed environment. Should it ever be mounted elsewhere, two limits keep it
+from being an open relay on a public service:
 
 * **Who:** outside `local` the caller must send the shared secret in `X-Dev-Token`
   (`REGISTRY_DEV_FETCH_TOKEN`). With none configured the route answers 404.

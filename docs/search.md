@@ -79,9 +79,12 @@ The same searches run as a pass or fail against any running or deployed registry
 
 ```
 make live-check                                           # http://localhost:8000
-make live-check URL=https://registry.thoriumreader.com    # after a deploy
+make live-check URL=https://registry.thoriumreader.com ARGS="--deployed"   # after a deploy
 make live-check ARGS="-v --max-ms 150"                    # list every check, fail if slow
 ```
+
+`--deployed` also requires what a public service must have: the console page answers, and
+`/dev/fetch` (which makes the server request a URL a visitor names) does not exist.
 
 It first checks the plumbing (health, the feed and its `search` link, the compression each kind of
 client should get, the security headers, the error responses), then sends every search of the

@@ -1,7 +1,10 @@
 """The dev console, and which parts of it exist where (ADR-063)."""
 
 import asyncio
-from collections.abc import AsyncIterator
+import json
+import logging
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 import httpx
 import pytest
@@ -32,24 +35,118 @@ async def local_client(
             yield client
 
 
-@pytest.mark.parametrize("environment", ["test", "staging", "production"])
-@pytest.mark.parametrize(
-    "path",
-    [
-        "/dev",
-        "/dev/clients",
-        "/dev/simulate?path=/&client=curl",
-        "/dev/fetch?url=https://example.org/",
-    ],
-)
-async def test_it_is_not_mounted_outside_local(
-    settings: Settings, environment: str, path: str
+ENVIRONMENTS = ["local", "test", "staging", "production"]
+
+
+@pytest.fixture
+def console_in(
+    settings: Settings, session_factory: async_sessionmaker[AsyncSession]
+) -> "Callable[[str], AbstractAsyncContextManager[AsyncClient]]":
+    """The real app for one environment, with the test database behind it."""
+
+    @asynccontextmanager
+    async def build(environment: str) -> AsyncIterator[AsyncClient]:
+        built = create_app(settings.model_copy(update={"environment": environment}))
+        async with built.router.lifespan_context(built):
+            built.state.session_factory = session_factory
+            built.state.search_session_factory = session_factory
+            async with AsyncClient(
+                transport=ASGITransport(app=built), base_url="http://testserver"
+            ) as client:
+                yield client
+
+    return build
+
+
+@pytest.mark.parametrize("environment", ENVIRONMENTS)
+async def test_the_page_and_the_simulator_exist_in_every_environment(
+    console_in: "Callable[[str], AbstractAsyncContextManager[AsyncClient]]",
+    searchable_catalogs: None,
+    environment: str,
 ) -> None:
+    """Production runs `staging`. The console reads only public data, so it is mounted in all."""
+    async with console_in(environment) as client:
+        page = await client.get("/dev")
+        clients = await client.get("/dev/clients")
+        simulated = await client.get(
+            SIMULATE, params={"path": "/search?query=paris", "client": "thorium"}
+        )
+
+    assert page.status_code == 200
+    assert clients.status_code == 200
+    assert simulated.status_code == 200
+    assert simulated.json()["body"]["catalogs"], "it really searched"
+
+
+@pytest.mark.parametrize("environment", ["test", "staging", "production"])
+async def test_reading_a_library_feed_exists_only_in_a_local_run(
+    settings: Settings, environment: str
+) -> None:
+    """`/dev/fetch` makes the server request a URL a visitor names: never in a deployed service."""
     built = create_app(settings.model_copy(update={"environment": environment}))
     async with AsyncClient(
         transport=ASGITransport(app=built), base_url="http://testserver"
     ) as client:
-        assert (await client.get(path)).status_code == 404
+        response = await client.get("/dev/fetch", params={"url": "https://example.org/"})
+
+    assert response.status_code == 404
+
+
+async def test_the_console_is_not_counted_as_a_reader(
+    console_in: "Callable[[str], AbstractAsyncContextManager[AsyncClient]]",
+    searchable_catalogs: None,
+) -> None:
+    """One line per request feeds the count of real clients. The console's own page and the requests
+    it makes for a visitor must not be in it, and a real request must."""
+    logger = logging.getLogger("registry.clients")
+    lines: list[dict[str, object]] = []
+
+    class Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            lines.append(json.loads(record.getMessage()))
+
+    handler = Capture()
+    logger.addHandler(handler)
+    previous = logger.level
+    logger.setLevel(logging.INFO)
+    try:
+        async with console_in("staging") as client:
+            await client.get("/dev")
+            await client.get("/dev/clients")
+            await client.get(SIMULATE, params={"path": "/search?query=paris", "client": "koreader"})
+            await client.get("/", headers={"User-Agent": "a-real-reader/1"})
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(previous)
+
+    assert [(line["path"], line["user_agent"]) for line in lines] == [("/", "a-real-reader/1")]
+
+
+@pytest.mark.parametrize(
+    "language", ["fr", "fr-FR,fr;q=0.9,en;q=0.5", "en-US,en;q=0.9", "*", "de,fr;q=0.5"]
+)
+async def test_an_accept_language_value_is_accepted(
+    local_client: AsyncClient, language: str
+) -> None:
+    response = await local_client.get(
+        SIMULATE, params={"path": "/", "client": "curl", "language": language}
+    )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "language", ["fr\r\nX-Injected: 1", "fr\nx", "<script>", "fr\x00", "fr;q=0.9\t", "é"]
+)
+async def test_anything_that_is_not_an_accept_language_value_is_refused(
+    local_client: AsyncClient, language: str
+) -> None:
+    """The value becomes a request header: only the characters it is made of get through."""
+    response = await local_client.get(
+        SIMULATE, params={"path": "/", "client": "curl", "language": language}
+    )
+
+    assert response.status_code == 422
 
 
 async def test_the_page_is_served_locally_with_a_closed_policy(local_client: AsyncClient) -> None:
