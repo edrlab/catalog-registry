@@ -41,7 +41,7 @@ label.f{display:flex;gap:6px;align-items:center;color:var(--mut);font-size:12px}
 .insp{min-width:0}.tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff}
 .tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;color:var(--mut);padding:10px 10px}.tabs button.on{color:var(--fg);border-bottom-color:var(--fg)}
 .pane{padding:14px 20px}.pane pre{margin:0;font:12px/1.6 var(--mono);overflow:auto;max-height:70vh;white-space:pre-wrap;word-break:break-all}
-.tools{display:flex;justify-content:flex-end;margin-bottom:8px}.tools button{font-size:12px;padding:2px 10px}
+.tools{display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px}.tools button,.tools a.btn{font-size:12px;padding:2px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--fg);text-decoration:none;font-weight:500}.tools a.btn:hover{background:var(--soft)}
 .k1{color:#1d4ed8}.s1{color:#15803d}.n1{color:#b45309}.b1{color:#7e22ce}
 table{border-collapse:collapse;width:100%}td,th{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:12.5px;vertical-align:top}
 th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}td.m{font-family:var(--mono);word-break:break-all}
@@ -131,7 +131,13 @@ async function call(path,client){
   if(!r.ok)throw friendly(j.detail,r.status);
   return j;
 }
-function saveHash(){location.hash=new URLSearchParams({p:$('path').value,c:$('client').value,l:$('lang').value})}
+const hashOf=()=>new URLSearchParams({p:$('path').value,c:$('client').value,l:$('lang').value}).toString();
+// Each request adds a history entry; Back and Forward change the hash, which loads that request again.
+function saveHash(){if(location.hash.slice(1)!==hashOf())location.hash=hashOf()}
+function loadHash(){
+  loadHash();
+}
+addEventListener('hashchange',()=>{if(location.hash.slice(1)===hashOf())return;compareHtml=null;loadHash();send()});
 
 async function send(){
   const path=$('path').value.trim()||'/';
@@ -167,6 +173,8 @@ function render(){
   const m=el('span','meter');m.append(el('i'));m.firstChild.style.width=Math.min(100,j.wire_bytes/Math.max(j.decoded_bytes,1)*100)+'%';sz.append(m);st.append(sz);
   st.append(mk('time',j.ms+' ms'));
   if(!isExt())st.append(mk('request-id',j.headers['x-request-id']?.slice(0,8)||'-'));
+  const rawHref=new URL(j.request.path,baseUrl()).href,ra=el('a','stat','Open raw \u2197');
+  ra.href=rawHref;ra.target='_blank';ra.rel='noopener noreferrer';ra.title=rawHref;ra.style.marginLeft='auto';st.append(ra);
   renderRows();renderTabs();
 }
 
@@ -274,7 +282,14 @@ function renderTabs(){
   if(!last)return;
   const j=last,items=itemsOf(j.body,j.request.path),it=selected!=null?items[selected]:null;
   const pre=(html,text)=>{const w=el('div');const tl=el('div','tools');const c=el('button',null,'Copy');c.onclick=()=>copy(text,c);tl.append(c);const pr=el('pre');pr.innerHTML=html;w.append(tl,pr);p.append(w)};
-  if(tab==='Preview')p.append(it?preview(it):el('div','empty','Select an item to see how an app could show it.'));
+  if(tab==='Preview'){
+    if(it){
+      const tl=el('div','tools'),raw=el('button',null,'{ } Raw JSON of this item');raw.onclick=()=>{tab='Response';renderTabs()};tl.append(raw);
+      const self=links(it.raw).find(l=>rels(l).includes('self')),href=new URL(self?self.href:j.request.path,baseUrl()).href;
+      const a=el('a','btn','Open raw OPDS \u2197');a.href=href;a.target='_blank';a.rel='noopener noreferrer';a.title=href;tl.append(a);
+      p.append(tl,preview(it));
+    }else p.append(el('div','empty','Select an item to see how an app could show it.'));
+  }
   else if(tab==='Response'){
     if(it)pre(hl(it.raw),JSON.stringify(it.raw,null,2));
     else if(j.is_json)pre(hl(j.body.metadata?{metadata:j.body.metadata,links:j.body.links}:j.body),JSON.stringify(j.body,null,2));
@@ -316,8 +331,7 @@ async function compareTab(p){
   for(const[k,c]of Object.entries(clients)){const o=el('option',null,`${c.label} \u00b7 ${c.source}`);o.value=k;$('client').append(o)}
   LANGS.forEach(l=>{const o=el('option',null,l||'(none)');o.value=l;$('lang').append(o)});
   PRESETS.forEach(([n,pth])=>{const b=el('button',null,n);b.onclick=()=>{$('path').value=pth;compareHtml=null;send()};$('presets').append(b)});
-  const h=new URLSearchParams(location.hash.slice(1));
-  $('path').value=h.get('p')||'/';if(h.get('c')&&clients[h.get('c')])$('client').value=h.get('c');$('lang').value=h.get('l')||'';
+  loadHash();
   $('go').onclick=()=>{compareHtml=null;send()};
   $('path').addEventListener('keydown',e=>{if(e.key==='Enter'){compareHtml=null;send()}});
   for(const id of['client','lang'])$(id).onchange=()=>{compareHtml=null;send()};
