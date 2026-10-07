@@ -26,31 +26,39 @@ from starlette.types import ASGIApp, Message
 
 router = APIRouter(prefix="/dev", tags=["dev"], include_in_schema=False)
 
-#: What each reader sends, measured on the real clients (docs/performance.md). The browser rows add
-#: `zstd`, which the server does not offer, so it must be ignored.
+#: What each reader sends. `source` is `measured` where the headers were read from the client's own
+#: source or captured from a real run (docs/performance.md), `typical` where they are the common
+#: defaults and not verified. The User-Agent strings are examples. The browser row adds `zstd`,
+#: which the server does not offer, so it must be ignored.
 CLIENTS: Final[dict[str, dict[str, Any]]] = {
     "thorium": {
         "label": "Thorium Reader (Electron, node-fetch)",
+        "source": "measured",
         "headers": {"Accept-Encoding": "gzip, deflate, br", "User-Agent": "Thorium Reader/3.5"},
     },
     "koreader": {
         "label": "KOReader (Kobo, Kindle, PocketBook, Android)",
+        "source": "measured",
         "headers": {"Accept-Encoding": "identity", "User-Agent": "KOReader/2025.10"},
     },
     "urlsession": {
         "label": "iOS / macOS app (URLSession, Readium Swift)",
+        "source": "measured",
         "headers": {"Accept-Encoding": "gzip, deflate", "User-Agent": "Reader/1.0 CFNetwork"},
     },
     "android": {
         "label": "Android app (HttpURLConnection, Readium Kotlin)",
+        "source": "typical",
         "headers": {"Accept-Encoding": "gzip", "User-Agent": "Dalvik/2.1.0 (Linux; Android 14)"},
     },
     "windows": {
         "label": "Windows app (.NET HttpClient, no decompression set)",
+        "source": "typical",
         "headers": {"User-Agent": "ReaderApp/1.0 .NET"},
     },
     "browser": {
         "label": "Browser (Chrome, Firefox, Safari)",
+        "source": "typical",
         "headers": {
             "Accept-Encoding": "gzip, deflate, br, zstd",
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Chrome/130 Safari/537.36",
@@ -58,9 +66,14 @@ CLIENTS: Final[dict[str, dict[str, Any]]] = {
     },
     "requests": {
         "label": "Python requests / httpx",
+        "source": "typical",
         "headers": {"Accept-Encoding": "gzip, deflate", "User-Agent": "python-requests/2.32"},
     },
-    "curl": {"label": "curl (no flags)", "headers": {"User-Agent": "curl/8.7"}},
+    "curl": {
+        "label": "curl (no flags)",
+        "source": "typical",
+        "headers": {"User-Agent": "curl/8.7"},
+    },
 }
 
 #: Only the public reads. No `/dev` (no recursion), no health, no docs.
@@ -144,7 +157,10 @@ async def read_console(request: Request) -> HTMLResponse:
 async def read_clients(request: Request) -> JSONResponse:
     _require_local(request)
     return JSONResponse(
-        {key: {"label": c["label"], "headers": c["headers"]} for key, c in CLIENTS.items()},
+        {
+            key: {"label": c["label"], "source": c["source"], "headers": c["headers"]}
+            for key, c in CLIENTS.items()
+        },
         headers={"Cache-Control": "no-store"},
     )
 

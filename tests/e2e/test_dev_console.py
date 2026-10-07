@@ -110,3 +110,13 @@ async def test_a_bare_search_path_is_allowed(local_client: AsyncClient, path: st
 
     assert response.status_code == 200
     assert response.json()["status"] == 200
+
+
+async def test_every_client_says_whether_its_headers_were_measured(
+    local_client: AsyncClient,
+) -> None:
+    clients = (await local_client.get("/dev/clients")).json()
+
+    assert {c["source"] for c in clients.values()} <= {"measured", "typical"}
+    assert clients["koreader"]["source"] == "measured"
+    assert clients["android"]["source"] == "typical"

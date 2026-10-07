@@ -100,7 +100,7 @@ async function send(){
   const path=$('path').value.trim()||'/';
   saveHash();selected=null;
   try{last=await sim(path,$('client').value);}
-  catch(e){last=null;$('status').replaceChildren(el('span','err',e.message));$('rows').replaceChildren(el('div','empty err','Path must be /, /search[?…] or /catalogs/<uuid>'));return}
+  catch(e){last=null;$('status').replaceChildren(el('span','err',e.message));$('rows').replaceChildren(el('div','empty err','Path must be /, /search[?…] or /catalogs/<uuid>'));$('count').textContent='Results';$('paging').textContent='';$('pager').replaceChildren();renderTabs();return}
   render();
 }
 
@@ -198,7 +198,7 @@ async function compareTab(p){
 
 (async()=>{
   clients=await(await fetch('/dev/clients')).json();
-  for(const[k,c]of Object.entries(clients)){const o=el('option',null,c.label);o.value=k;$('client').append(o)}
+  for(const[k,c]of Object.entries(clients)){const o=el('option',null,`${c.label} \u00b7 ${c.source}`);o.value=k;$('client').append(o)}
   LANGS.forEach(l=>{const o=el('option',null,l||'(none)');o.value=l;$('lang').append(o)});
   PRESETS.forEach(([n,pth])=>{const b=el('button',null,n);b.onclick=()=>{$('path').value=pth;compareHtml=null;send()};$('presets').append(b)});
   const h=new URLSearchParams(location.hash.slice(1));
