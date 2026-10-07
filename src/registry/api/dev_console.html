@@ -45,6 +45,7 @@ label.f{display:flex;gap:6px;align-items:center;color:var(--mut);font-size:12px}
 .k1{color:#1d4ed8}.s1{color:#15803d}.n1{color:#b45309}.b1{color:#7e22ce}
 table{border-collapse:collapse;width:100%}td,th{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:12.5px;vertical-align:top}
 th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}td.m{font-family:var(--mono);word-break:break-all}
+.errbox{margin:20px;padding:14px 16px;border:1px solid #fecaca;background:#fef2f2;border-radius:10px}.errbox b{display:block;color:var(--bad);margin-bottom:2px}.errbox p{margin:0;color:#7f1d1d;font-size:13px}.errbox .ex{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.errbox code{font:12px var(--mono);background:#fff;border:1px solid #fecaca;border-radius:5px;padding:1px 7px;cursor:pointer}
 .empty{padding:40px 20px;color:var(--mut);text-align:center}.err{color:var(--bad)}
 </style>
 </head>
@@ -88,10 +89,23 @@ function hl(obj){
 }
 function copy(text,btn){navigator.clipboard?.writeText(text);const o=btn.textContent;btn.textContent='Copied';setTimeout(()=>btn.textContent=o,900)}
 
+const ALLOWED=['/','/search?query=paris','/catalogs/<uuid>'];
+function friendly(detail,status){
+  const d=Array.isArray(detail)?detail[0]:null,field=d?.loc?.[1],e=new Error();
+  if(field==='path'){e.title="That path can't be simulated";e.hint='The console only calls the public reads, so it cannot call itself or any other route.';e.examples=ALLOWED}
+  else if(field==='client'||typeof detail==='string'){e.title='Unknown client';e.hint=typeof detail==='string'?detail:'Pick one from the list.'}
+  else{e.title='Request failed (HTTP '+status+')';e.hint=d?.msg||'The console could not make this request.'}
+  e.message=e.title;return e;
+}
+function errorBox(e){
+  const b=el('div','errbox');b.append(el('b',null,e.title||e.message),el('p',null,e.hint||''));
+  if(e.examples){const x=el('div','ex');e.examples.forEach(v=>{const c=el('code',null,v);c.onclick=()=>{$('path').value=v.includes('<')?'/':v;send()};x.append(c)});b.append(x)}
+  return b;
+}
 async function sim(path,client){
   const r=await fetch('/dev/simulate?'+new URLSearchParams({path,client,language:$('lang').value}));
   const j=await r.json();
-  if(!r.ok)throw new Error(j.detail?JSON.stringify(j.detail):'request failed');
+  if(!r.ok)throw friendly(j.detail,r.status);
   return j;
 }
 function saveHash(){location.hash=new URLSearchParams({p:$('path').value,c:$('client').value,l:$('lang').value})}
@@ -100,7 +114,7 @@ async function send(){
   const path=$('path').value.trim()||'/';
   saveHash();selected=null;
   try{last=await sim(path,$('client').value);}
-  catch(e){last=null;$('status').replaceChildren(el('span','err',e.message));$('rows').replaceChildren(el('div','empty err','Path must be /, /search[?…] or /catalogs/<uuid>'));$('count').textContent='Results';$('paging').textContent='';$('pager').replaceChildren();renderTabs();return}
+  catch(e){last=null;const p=el('span','pill err','Error');$('status').replaceChildren(p,el('span','stat',e.message));$('rows').replaceChildren(errorBox(e));$('count').textContent='Results';$('paging').textContent='';$('pager').replaceChildren();renderTabs();return}
   render();
 }
 
