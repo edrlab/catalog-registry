@@ -170,7 +170,7 @@ def build_fetch_headers(profile: Mapping[str, Any], language: str) -> dict[str, 
 async def fetch_feed(
     request: Request,
     url: str = Query(max_length=2000),
-    client: str = Query(default="thorium"),
+    client: str = Query(default="browser"),
     language: str = Query(default="", max_length=120),
 ) -> JSONResponse:
     """Read one OPDS document from a library's own server, as *client* would ask for it."""

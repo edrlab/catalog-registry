@@ -197,8 +197,10 @@ async function call(path,client,lang=$('lang').value){
   }
   loading(true);
   try{
+  const t0=performance.now();
   const r=await fetch((ext?'/dev/fetch?':'/dev/simulate?')+new URLSearchParams({[ext?'url':'path']:path,client,language:lang}));
   const j=await r.json();
+  j.rt=Math.round(performance.now()-t0);
   if(!r.ok)throw friendly(j.detail,r.status);
   return j;
   }finally{loading(false)}
@@ -262,7 +264,7 @@ function render(){
   st.append(mk('encoding',j.encoding||'identity'));
   const sz=mk('wire',bytes(j.wire_bytes)+' of '+bytes(j.decoded_bytes));
   const m=el('span','meter');m.append(el('i'));m.firstChild.style.width=Math.min(100,j.wire_bytes/Math.max(j.decoded_bytes,1)*100)+'%';sz.append(m);st.append(sz);
-  st.append(mk('time',j.ms+' ms'));
+  const tm=mk('server',j.ms+' ms'),rt=mk('round trip',j.rt+' ms');tm.title='Time the app spent handling the request. No network.';rt.title='Measured in this browser: includes the network to the server.';st.append(tm,rt);
   if(!isExt())st.append(mk('request-id',j.headers['x-request-id']?.slice(0,8)||'-'));
   const rawHref=new URL(j.request.path,baseUrl()).href,ra=el('a','stat','Open this response raw \u2197');
   ra.href=rawHref;ra.target='_blank';ra.rel='noopener noreferrer';ra.title=rawHref;ra.style.marginLeft='auto';st.append(ra);
@@ -527,10 +529,11 @@ const sSchedule=()=>{$('sclear').hidden=!$('sq').value;clearTimeout(sTimer);sTim
   if(!DEV.fetch)$('path').placeholder='/search?query=paris';
   clients=await(await fetch('/dev/clients')).json();
   for(const[k,c]of Object.entries(clients)){const o=el('option',null,`${c.label} \u00b7 ${c.source}`);o.value=k;$('client').append(o)}
+  $('client').value='browser';
   LANGS.forEach(l=>{const o=el('option',null,l||'(none)');o.value=l;$('lang').append(o)});
   PRESETS.forEach(([n,pth])=>{const b=el('button',null,n);b.onclick=()=>{$('path').value=pth;compareHtml=null;send()};$('presets').append(b)});
   loadHash();
-  ['sclient'].forEach(id=>{for(const[k,c]of Object.entries(clients)){const o=el('option',null,c.label.split(' (')[0]);o.value=k;$(id).append(o)}});
+  ['sclient'].forEach(id=>{for(const[k,c]of Object.entries(clients)){const o=el('option',null,c.label.split(' (')[0]);o.value=k;$(id).append(o)}$(id).value='browser'});
   LANGS.forEach(l=>{const o=el('option',null,l||'(none)');o.value=l;$('slang').append(o)});
   ['paris','parsi','numerique','"numérique de paris"','wallis','bibliotheque','bruxels','fr'].forEach(q=>{const b=el('button',null,q);b.onclick=()=>{$('sq').value=q;sSearch(false)};$('schips').append(b)});
   $('sq').addEventListener('input',sSchedule);

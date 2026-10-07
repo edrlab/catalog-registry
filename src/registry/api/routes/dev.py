@@ -184,7 +184,7 @@ async def read_clients() -> JSONResponse:
 async def simulate(
     request: Request,
     path: str = Query(pattern=_PATH, max_length=600),
-    client: str = Query(default="thorium"),
+    client: str = Query(default="browser"),
     language: str = Query(default="", max_length=120, pattern=_LANGUAGE),
 ) -> JSONResponse:
     """Make one request as *client* would, and report what came back and what it cost."""

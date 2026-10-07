@@ -76,7 +76,7 @@ for a new instance: seconds.
 
 **Distance from the client is not ours to fix.** From a far country even `/health/live`, which
 touches no database, takes several hundred milliseconds. Caching at the edge would help; it is
-deferred (ADR-009).
+deferred.
 
 ## Measure it
 
@@ -106,7 +106,7 @@ client names it (a `*` never gets it): it compresses several times faster than b
 bytes on the real feed (level 6: 967 B against 948 B for a 4.2 KB page), so it costs nothing and
 helps a large response. A client that refuses `identity` and every coding we offer (`identity;q=0`, or `*;q=0`) gets
 `406 Not Acceptable` as a problem document, as RFC 9110 §12.5.3 allows. Responses under 1 KB are not
-compressed. `Vary: Accept-Encoding` is always set. Code: `src/registry/api/compression.py`, ADR-061.
+compressed. `Vary: Accept-Encoding` is always set. Code: `src/registry/api/compression.py`.
 
 ## Who is asking
 
