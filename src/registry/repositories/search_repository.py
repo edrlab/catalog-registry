@@ -17,7 +17,6 @@ from sqlalchemy import REAL, TEXT, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from registry.core.errors import SearchTimeoutError
 from registry.domain.search_query import ParsedQuery
 from registry.repositories.catalog_rows import (
     CATALOG_COLUMNS,
@@ -119,12 +118,7 @@ class CatalogSearchRepository:
             "limit": limit,
             "offset": offset,
         }
-        rows = await fetch_rows(
-            self._session,
-            _SEARCH,
-            params,
-            timeout=SearchTimeoutError("the search took too long, try a more specific query"),
-        )
+        rows = await fetch_rows(self._session, _SEARCH, params)
         total = rows[0]["total"]  # the statement always returns at least one row
         return SearchPage(
             total=total,

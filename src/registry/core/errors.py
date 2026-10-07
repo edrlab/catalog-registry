@@ -29,7 +29,3 @@ class ReadTimeoutError(RegistryError):
 
     status_code = 503
     title = "Service Unavailable"
-
-
-class SearchTimeoutError(ReadTimeoutError):
-    """A search outran its statement timeout."""

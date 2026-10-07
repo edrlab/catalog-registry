@@ -91,28 +91,28 @@ def build_catalog_from_row(row: Any) -> Catalog:
     )
 
 
+async def _run(session: AsyncSession, statement: TextClause, params: dict[str, Any]) -> list[Any]:
+    try:
+        return list((await session.execute(statement, params)).mappings().all())
+    except DBAPIError as error:
+        if getattr(error.orig, "sqlstate", None) == _QUERY_CANCELED:
+            raise ReadTimeoutError("the read took too long, try again") from error
+        raise
+
+
 async def fetch_rows(
-    session: AsyncSession,
-    statement: TextClause,
-    params: dict[str, Any],
-    *,
-    timeout: ReadTimeoutError | None = None,
+    session: AsyncSession, statement: TextClause, params: dict[str, Any]
 ) -> list[Any]:
     """Run one read statement and return its rows.
 
-    A timeout (`statement_timeout` on the connection) is translated here because `api` may not
-    import SQLAlchemy: *timeout* is the error to raise, so search can say "search" and the feed can
-    say "feed". A connection the database dropped while it sat idle is retried once; the statement
-    only reads, so repeating it is safe.
+    A timeout (`statement_timeout` on the connection) becomes a `ReadTimeoutError` here, because
+    `api` may not import SQLAlchemy. A connection the database dropped while it sat idle is retried
+    once; the statement only reads, so repeating it is safe.
     """
-    for attempt in (1, 2):
-        try:
-            return list((await session.execute(statement, params)).mappings().all())
-        except DBAPIError as error:
-            if getattr(error.orig, "sqlstate", None) == _QUERY_CANCELED:
-                raise (timeout or ReadTimeoutError("the read took too long")) from error
-            if error.connection_invalidated and attempt == 1:
-                await session.rollback()
-                continue
+    try:
+        return await _run(session, statement, params)
+    except DBAPIError as error:
+        if not error.connection_invalidated:
             raise
-    raise AssertionError("unreachable: the second attempt returns or raises")  # pragma: no cover
+        await session.rollback()
+        return await _run(session, statement, params)

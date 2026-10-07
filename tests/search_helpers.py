@@ -129,21 +129,6 @@ async def add_synthetic_catalogs(session: AsyncSession, count: int, word: str) -
 
 
 @asynccontextmanager
-async def table_locked(url: str) -> AsyncIterator[None]:
-    """Hold ACCESS EXCLUSIVE on `catalog_search` from another connection until the block ends."""
-    engine = create_async_engine(url)
-    try:
-        async with engine.connect() as locker:
-            await locker.execute(text("LOCK TABLE catalog_search IN ACCESS EXCLUSIVE MODE"))
-            try:
-                yield
-            finally:
-                await locker.rollback()
-    finally:
-        await engine.dispose()
-
-
-@asynccontextmanager
 async def search_engine_with(settings: Settings, **overrides: str) -> AsyncIterator[AsyncEngine]:
     """The production search pool (`build_read_engine`), with some server settings replaced.
 

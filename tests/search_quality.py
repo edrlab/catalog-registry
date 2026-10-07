@@ -56,12 +56,10 @@ class Summary:
 
 
 def _gains(case: Case) -> dict[str, float]:
-    """What each expected catalog is worth. Equal, unless the order matters."""
+    """What each expected catalog is worth. Equal, unless one must come first."""
     expected = case.expected or ()
     if not expected:
         return {}
-    if case.ordered:
-        return {title: float(len(expected) - i) for i, title in enumerate(expected)}
     if case.first is not None:
         return {title: 2.0 if title == case.first else 1.0 for title in expected}
     return dict.fromkeys(expected, 1.0)
@@ -199,8 +197,8 @@ def render_cases_markdown() -> str:
         "",
         "* Exact results, over the database: "
         "[`tests/integration/test_search_table.py`](../tests/integration/test_search_table.py)",
-        "* Exact results, over HTTP: "
-        "[`tests/e2e/test_search_table_http.py`](../tests/e2e/test_search_table_http.py)",
+        "* Exact results, over HTTP, with the schema check: "
+        "[`tests/e2e/test_search_score.py`](../tests/e2e/test_search_score.py)",
         "* The score: [`tests/search_quality.py`](../tests/search_quality.py), "
         "[`scripts/score_search.py`](../scripts/score_search.py)",
         "* The data these tables come from: [`tests/search_cases.py`](../tests/search_cases.py)",

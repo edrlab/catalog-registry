@@ -144,13 +144,12 @@ async def test_a_lock_on_the_search_table_does_not_affect_the_feed_or_a_catalog(
     wired_client: AsyncClient, migrated_database: str
 ) -> None:
     """The feed and one catalog do not read `catalog_search`."""
-    from tests.search_helpers import table_locked  # noqa: PLC0415
 
     async with (
         committed_catalogs(migrated_database, [link_document("Probe")], recommended=True) as (
             catalog_id,
         ),
-        table_locked(migrated_database),
+        locked(migrated_database, "catalog_search"),
     ):
         async with asyncio.timeout(HANG_GUARD_SECONDS):
             feed = await wired_client.get("/")

@@ -19,13 +19,14 @@ rollback fixtures are invisible to a second connection, and the proxy needs real
 from collections.abc import AsyncIterator
 
 import pytest
-from sqlalchemy import event, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from registry.core.config import Settings
 from registry.db.session import build_session_factory, create_database_engine
 from registry.domain.search_query import parse_search_query
 from registry.repositories.search_repository import CatalogSearchRepository
+from tests.read_helpers import Statements
 from tests.search_helpers import committed_catalogs, search_engine_with
 from tests.wire_proxy import WireLog, counting_proxy
 
@@ -65,23 +66,12 @@ async def quokkas(migrated_database: str) -> AsyncIterator[None]:
         yield
 
 
-class Statements:
-    """What SQLAlchemy sends to the driver on one engine."""
-
-    def __init__(self) -> None:
-        self.statements: list[str] = []
-
-    def __call__(self, _conn: object, _cursor: object, statement: str, *_a: object) -> None:
-        self.statements.append(statement)
-
-
 @pytest.fixture
 async def counted_search(
     settings: Settings,
 ) -> AsyncIterator[tuple[async_sessionmaker[AsyncSession], Statements]]:
     async with search_engine_with(settings) as engine:
-        counter = Statements()
-        event.listen(engine.sync_engine, "before_cursor_execute", counter)
+        counter = Statements(engine)
         yield build_session_factory(engine), counter
 
 

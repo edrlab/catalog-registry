@@ -19,7 +19,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from registry.core.config import Settings
-from registry.core.errors import ReadTimeoutError, SearchTimeoutError
+from registry.core.errors import ReadTimeoutError
 from registry.db.session import (
     build_read_engine,
     build_session_factory,
@@ -45,7 +45,7 @@ from tests.read_helpers import (
     read_engine_with,
     terminate_backends,
 )
-from tests.search_helpers import HANG_GUARD_SECONDS, committed_catalogs, table_locked
+from tests.search_helpers import HANG_GUARD_SECONDS, committed_catalogs
 
 pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("migrated_database")]
 
@@ -207,7 +207,6 @@ async def test_a_blocked_feed_raises_read_timeout_error_not_search_timeout_error
             elapsed = time.monotonic() - started
 
     assert type(raised.value) is ReadTimeoutError
-    assert not isinstance(raised.value, SearchTimeoutError)
     assert isinstance(raised.value.__cause__, DBAPIError)
     assert getattr(raised.value.__cause__.orig, "sqlstate", None) == "57014"
     assert (raised.value.status_code, raised.value.title) == (503, "Service Unavailable")
@@ -250,18 +249,13 @@ async def test_a_timeout_on_one_pool_does_not_reach_the_other_tables_read(
     the feed (which does not read that table)."""
     async with read_engine_with(settings) as engine:
         factory = build_session_factory(engine)
-        async with table_locked(migrated_database):
+        async with locked(migrated_database, "catalog_search"):
             async with asyncio.timeout(HANG_GUARD_SECONDS):
                 async with factory() as session:
                     assert await CatalogRepository(session).fetch_recommended_catalogs() == []
 
 
-def test_a_search_timeout_is_a_read_timeout() -> None:
-    assert issubclass(SearchTimeoutError, ReadTimeoutError)
-    assert SearchTimeoutError.status_code == ReadTimeoutError.status_code == 503
-
-
-async def test_a_blocked_search_still_raises_search_timeout_error(
+async def test_a_blocked_search_raises_a_read_timeout_error(
     settings: Settings, migrated_database: str
 ) -> None:
     from registry.domain.search_query import parse_search_query  # noqa: PLC0415
@@ -270,9 +264,9 @@ async def test_a_blocked_search_still_raises_search_timeout_error(
 
     async with search_engine_with(settings, statement_timeout=SHORT) as engine:
         factory = build_session_factory(engine)
-        async with table_locked(migrated_database):
+        async with locked(migrated_database, "catalog_search"):
             async with asyncio.timeout(HANG_GUARD_SECONDS):
-                with pytest.raises(SearchTimeoutError) as raised:
+                with pytest.raises(ReadTimeoutError) as raised:
                     async with factory() as session:
                         await CatalogSearchRepository(session).search_catalogs(
                             parse_search_query("paris"), limit=50, offset=0
@@ -419,21 +413,7 @@ async def test_a_database_error_is_raised_unchanged_and_not_retried(settings: Se
     assert len(counter.statements) == 1
 
 
-async def test_a_timeout_is_not_retried_and_raises_the_error_it_was_given() -> None:
-    class MineError(ReadTimeoutError):
-        pass
-
-    error = DBAPIError("SELECT", {}, SqlstateError("57014"), connection_invalidated=False)
-    stub = StubSession(error, failures=99)
-    mine = MineError("my own words")
-
-    with pytest.raises(MineError, match="my own words"):
-        await fetch_rows(stub, text("SELECT 1"), {}, timeout=mine)  # type: ignore[arg-type]
-
-    assert (stub.executes, stub.rollbacks) == (1, 0)
-
-
-async def test_a_timeout_without_a_given_error_is_a_plain_read_timeout() -> None:
+async def test_a_timeout_is_not_retried_and_is_a_plain_read_timeout() -> None:
     error = DBAPIError("SELECT", {}, SqlstateError("57014"), connection_invalidated=False)
     stub = StubSession(error, failures=99)
 
@@ -442,3 +422,4 @@ async def test_a_timeout_without_a_given_error_is_a_plain_read_timeout() -> None
 
     assert type(raised.value) is ReadTimeoutError
     assert raised.value.__cause__ is error
+    assert (stub.executes, stub.rollbacks) == (1, 0)

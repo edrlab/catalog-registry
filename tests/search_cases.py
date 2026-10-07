@@ -42,7 +42,7 @@ class Case:
     """One search of the test plan: what we ask, what we would like back, and what we get today.
 
     `expected` is the ideal answer, the "Expected" column of the plan: the catalogs a reader
-    should get, best first when `ordered`, with `first` pinned to rank 1 when only that matters.
+    should get, with `first` pinned to rank 1 when that matters.
     `None` means the plan gives no judgement (only "no error"), so the case is not scored. An
     empty tuple means "nothing". `today` is the measured result, `(title, tier)` in rank order,
     which the regression tests pin exactly; the gap between the two is what the score measures.
@@ -54,7 +54,6 @@ class Case:
     expected: tuple[str, ...] | None
     today: list[tuple[str, int]]
     note: str = ""
-    ordered: bool = False
     first: str | None = None
 
 

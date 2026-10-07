@@ -9,6 +9,7 @@ import pytest
 from httpx import AsyncClient
 
 from tests.search_cases import QUALITY_CASES
+from tests.search_helpers import assert_valid_catalog, assert_valid_feed
 from tests.search_quality import score_all, summarise, today_titles
 
 pytestmark = pytest.mark.e2e
@@ -34,15 +35,22 @@ async def test_the_app_scores_exactly_what_the_page_says(
     )
 
 
-async def test_every_search_returns_what_the_page_says_for_it(
+async def test_every_search_returns_what_the_page_says_for_it_and_a_valid_feed(
     client: AsyncClient, searchable_catalogs: None
 ) -> None:
-    """The same check one search at a time, so a regression names the query."""
+    """One pass over every search: what a client sees (titles in order, the total), and every
+    response a valid feed of valid catalogs (R7). A regression names the queries."""
     expected = today_titles()
-    wrong = {
-        case.query: (await titles_for(client, case.query), expected[case.query])
-        for case in QUALITY_CASES
-        if await titles_for(client, case.query) != expected[case.query]
-    }
+    wrong: dict[str, tuple[list[str], list[str]]] = {}
+    for case in QUALITY_CASES:
+        response = await client.get("/search", params={"query": case.query})
+        assert response.status_code == 200, case.query
+        body = response.json()
+        assert_valid_feed(body)
+        for catalog in body["catalogs"]:
+            assert_valid_catalog(catalog)
+        titles = [c["metadata"]["title"] for c in body["catalogs"]]
+        if titles != expected[case.query] or body["metadata"]["numberOfItems"] != len(titles):
+            wrong[case.query] = (titles, expected[case.query])
 
     assert wrong == {}

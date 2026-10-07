@@ -26,13 +26,9 @@ def test_every_link_rel_has_a_priority() -> None:
 def test_self_sorts_first_however_it_arrives() -> None:
     links = [Stub(LinkRel.ALTERNATE, "a"), Stub(LinkRel.CATALOG, "c"), Stub(LinkRel.SELF, "s")]
 
-    assert [link.tag for link in order_links(links, rel_of=rel_of)] == ["s", "c", "a"]
+    ordered = order_links(links, rel_of=rel_of, then_by=lambda link: link.tag)
 
-
-def test_two_links_with_the_same_rel_keep_their_input_order() -> None:
-    links = [Stub(LinkRel.ALTERNATE, "first"), Stub(LinkRel.ALTERNATE, "second")]
-
-    assert [link.tag for link in order_links(links, rel_of=rel_of)] == ["first", "second"]
+    assert [link.tag for link in ordered] == ["s", "c", "a"]
 
 
 def test_links_sharing_a_rel_are_ordered_by_then_by_whatever_order_they_arrive_in() -> None:

@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 from registry.core.constants import OPDS_JSON_MEDIA_TYPE
-from registry.core.errors import RegistryError, SearchTimeoutError
+from registry.core.errors import ReadTimeoutError, RegistryError
 from registry.rendering.search_renderer import (
     SEARCH_TITLE,
     build_search_template_link,
@@ -213,7 +213,7 @@ def test_the_empty_query_renders_a_feed_with_an_empty_query_in_every_link() -> N
 
 
 def test_a_search_timeout_is_a_503_service_unavailable_registry_error() -> None:
-    error = SearchTimeoutError("took too long")
+    error = ReadTimeoutError("took too long")
 
     assert isinstance(error, RegistryError)
     assert (error.status_code, error.title) == (503, "Service Unavailable")

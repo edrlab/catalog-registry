@@ -21,7 +21,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from registry.core.config import Settings
-from registry.core.errors import SearchTimeoutError
+from registry.core.errors import ReadTimeoutError
 from registry.db.session import build_read_engine, build_session_factory, create_database_engine
 from registry.domain.search_query import parse_search_query
 from registry.repositories.protocols import SearchPage
@@ -29,7 +29,8 @@ from registry.repositories.search_repository import (
     SEARCH_CONNECTION_SETTINGS,
     CatalogSearchRepository,
 )
-from tests.search_helpers import HANG_GUARD_SECONDS, search_engine_with, table_locked
+from tests.read_helpers import locked
+from tests.search_helpers import HANG_GUARD_SECONDS, search_engine_with
 
 pytestmark = pytest.mark.integration
 
@@ -47,11 +48,11 @@ async def test_a_blocked_search_raises_search_timeout_error(
 ) -> None:
     async with search_engine_with(settings, statement_timeout=SHORT) as engine:
         factory = build_session_factory(engine)
-        async with table_locked(migrated_database):
+        async with locked(migrated_database, "catalog_search"):
             started = time.monotonic()
             # A missing timeout would block until the lock is released: fail, do not hang.
             async with asyncio.timeout(HANG_GUARD_SECONDS):
-                with pytest.raises(SearchTimeoutError, match="took too long"):
+                with pytest.raises(ReadTimeoutError, match="took too long"):
                     await search_paris(factory)
             elapsed = time.monotonic() - started
 
@@ -64,9 +65,9 @@ async def test_the_translated_error_keeps_the_database_error_as_its_cause(
 ) -> None:
     async with search_engine_with(settings, statement_timeout=SHORT) as engine:
         factory = build_session_factory(engine)
-        async with table_locked(migrated_database):
+        async with locked(migrated_database, "catalog_search"):
             async with asyncio.timeout(HANG_GUARD_SECONDS):
-                with pytest.raises(SearchTimeoutError) as raised:
+                with pytest.raises(ReadTimeoutError) as raised:
                     await search_paris(factory)
 
     assert isinstance(raised.value.__cause__, DBAPIError)
@@ -78,10 +79,10 @@ async def test_a_timeout_is_not_retried(settings: Settings, migrated_database: s
     """A slow search must cost one timeout, not two: only a dropped connection is retried."""
     async with search_engine_with(settings, statement_timeout=SHORT) as engine:
         factory = build_session_factory(engine)
-        async with table_locked(migrated_database):
+        async with locked(migrated_database, "catalog_search"):
             started = time.monotonic()
             async with asyncio.timeout(HANG_GUARD_SECONDS):
-                with pytest.raises(SearchTimeoutError):
+                with pytest.raises(ReadTimeoutError):
                     await search_paris(factory)
             elapsed = time.monotonic() - started
 
@@ -194,9 +195,9 @@ async def test_a_timed_out_connection_goes_back_clean_and_works_again(
         async with engine.connect() as connection:
             backend = await connection.scalar(text("SELECT pg_backend_pid()"))
 
-        async with table_locked(migrated_database):
+        async with locked(migrated_database, "catalog_search"):
             async with asyncio.timeout(HANG_GUARD_SECONDS):
-                with pytest.raises(SearchTimeoutError):
+                with pytest.raises(ReadTimeoutError):
                     await search_paris(factory)
 
         async with engine.connect() as connection:
@@ -220,9 +221,9 @@ async def test_the_timeout_leaves_no_idle_in_transaction_backend(
             settings, statement_timeout=SHORT, application_name=name
         ) as engine:
             factory = build_session_factory(engine)
-            async with table_locked(migrated_database):
+            async with locked(migrated_database, "catalog_search"):
                 async with asyncio.timeout(HANG_GUARD_SECONDS):
-                    with pytest.raises(SearchTimeoutError):
+                    with pytest.raises(ReadTimeoutError):
                         await search_paris(factory)
             async with observer.connect() as connection:
                 states = (

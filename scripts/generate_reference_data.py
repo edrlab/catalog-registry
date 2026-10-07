@@ -13,7 +13,7 @@ Sources, all pinned:
 
 pycountry is not a runtime dependency; run the script with
 `make reference-data`.
-Downloads are cached in `--cache` (default `.cache/reference-data`).
+Downloads are cached in `.cache/reference-data`.
 """
 
 import argparse
@@ -28,6 +28,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = REPO_ROOT / "migrations" / "versions"
+#: Downloads are cached here, so a rerun is offline; the CSVs are written next to them (gitignored).
+CACHE = REPO_ROOT / ".cache" / "reference-data"
+OUT = CACHE / "out"
 JSON_BASE = "https://raw.githubusercontent.com/unicode-org/cldr-json/48.2.0/cldr-json"
 XML_BASE = "https://raw.githubusercontent.com/unicode-org/cldr/release-48-2/common/subdivisions"
 
@@ -210,38 +213,34 @@ def write_csv(path: Path, header: list[str], rows: Sequence[tuple[object, ...]])
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--out", type=Path, default=REPO_ROOT / ".cache" / "reference-data" / "out")
-    parser.add_argument("--cache", type=Path, default=REPO_ROOT / ".cache" / "reference-data")
     parser.add_argument("--python", action="store_true", help="print the rows as Python literals")
     args = parser.parse_args()
 
     iso = extract_iso_countries()
-    status_languages = generate_country_languages(iso, args.cache)
+    status_languages = generate_country_languages(iso, CACHE)
     languages = {country: tags for country, (_, tags) in status_languages.items()}
     language_rows = [
         (country, tag, status)
         for country, (status, tags) in sorted(status_languages.items())
         for tag in tags
     ]
-    names = generate_country_names(iso, languages, args.cache)
-    sub_names = generate_subdivision_names(extract_subdivision_codes(), languages, args.cache)
+    names = generate_country_names(iso, languages, CACHE)
+    sub_names = generate_subdivision_names(extract_subdivision_codes(), languages, CACHE)
     types = generate_subdivision_types()
 
     write_csv(
-        args.out / "country-languages-cldr48.csv",
+        OUT / "country-languages-cldr48.csv",
         ["country_code", "language_tag", "cldr_status"],
         language_rows,
     )
+    write_csv(OUT / "country-names-cldr48.csv", ["country_code", "language_tag", "name"], names)
     write_csv(
-        args.out / "country-names-cldr48.csv", ["country_code", "language_tag", "name"], names
-    )
-    write_csv(
-        args.out / "subdivision-names-cldr48.csv",
+        OUT / "subdivision-names-cldr48.csv",
         ["subdivision_code", "language_tag", "name"],
         sub_names,
     )
     write_csv(
-        args.out / "iso-3166-2-subdivision-types.csv",
+        OUT / "iso-3166-2-subdivision-types.csv",
         ["iso_label", "subdivision_type", "countries", "subdivisions", "country_codes"],
         types,
     )

@@ -30,7 +30,6 @@ MINIMUM_SIZE: Final = 1024
 BROTLI_QUALITY: Final = 4
 GZIP_LEVEL: Final = 6
 
-_NO_BODY_STATUSES: Final = frozenset({204, 304})
 _USER_AGENT_LIMIT: Final = 200
 
 
@@ -75,14 +74,6 @@ def choose_encoding(header: str | None) -> str | None:
     return best
 
 
-def compress(body: bytes, encoding: str) -> bytes:
-    if encoding == "br":
-        compressed: bytes = brotli.compress(body, quality=BROTLI_QUALITY)
-        return compressed
-    # mtime=0: the same body always gives the same bytes, so a cache can hold one copy.
-    return gzip.compress(body, compresslevel=GZIP_LEVEL, mtime=0)
-
-
 _client_log = logging.getLogger("registry.clients")
 
 
@@ -118,9 +109,8 @@ class CompressionMiddleware:
     of the body it does not send), so it is passed through untouched except for `Vary`.
     """
 
-    def __init__(self, app: ASGIApp, *, minimum_size: int = MINIMUM_SIZE) -> None:
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
-        self.minimum_size = minimum_size
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -158,12 +148,16 @@ class CompressionMiddleware:
             applied = None
             if (
                 encoding is not None
-                and start["status"] not in _NO_BODY_STATUSES
-                and len(body) >= self.minimum_size
+                and len(body) >= MINIMUM_SIZE
                 and "content-encoding" not in headers
-                and "no-transform" not in headers.get("cache-control", "").lower()
             ):
-                body = compress(body, encoding)
+                # gzip with mtime=0: the same body always gives the same bytes, so a cache can
+                # hold one copy.
+                body = (
+                    brotli.compress(body, quality=BROTLI_QUALITY)
+                    if encoding == "br"
+                    else gzip.compress(body, compresslevel=GZIP_LEVEL, mtime=0)
+                )
                 headers["content-encoding"] = encoding
                 applied = encoding
             headers["content-length"] = str(len(body))

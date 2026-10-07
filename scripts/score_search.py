@@ -7,8 +7,8 @@
 
 Runs every search of `tests/search_cases.py` against `GET /search` and reports, per search, whether
 the expected catalogs came back and where, and overall one number (see `tests/search_quality.py`).
-Read-only: it only issues searches. `--min-score` makes it exit 1 below a floor and `--baseline`
-exits 1 when the score dropped, which is what lets a tweak be judged better or worse in CI.
+Read-only: it only issues searches. `--baseline` exits 1 when the score dropped, which is what
+lets a tweak be judged better or worse in CI.
 """
 
 import argparse
@@ -47,7 +47,6 @@ def main(argv: list[str]) -> int:
     parser.add_argument("-v", "--verbose", action="store_true", help="show every search")
     parser.add_argument("--save", type=Path, help="write the per-search scores to this file")
     parser.add_argument("--baseline", type=Path, help="compare with a file written by --save")
-    parser.add_argument("--min-score", type=float, help="exit 1 when the mean score is below this")
     args = parser.parse_args(argv)
 
     from tests.search_cases import QUALITY_CASES  # noqa: PLC0415
@@ -112,9 +111,6 @@ def main(argv: list[str]) -> int:
             f"vs baseline {before_mean:.3f}: {direction} ({summary.mean_score - before_mean:+.3f})"
         )
         status = 1 if direction == "worse" else 0
-    if args.min_score is not None and summary.mean_score < args.min_score:
-        print(f"below the floor of {args.min_score}")
-        status = 1
     return status
 
 

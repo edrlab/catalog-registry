@@ -27,12 +27,12 @@ from registry.core.config import Settings
 from registry.core.constants import PROBLEM_JSON_MEDIA_TYPE
 from registry.main import create_app
 from registry.repositories.search_repository import SEARCH_STATEMENT_TIMEOUT_MS
+from tests.read_helpers import locked
 from tests.search_helpers import (
     HANG_GUARD_SECONDS,
     assert_valid_catalog,
     assert_valid_feed,
     committed_catalogs,
-    table_locked,
 )
 
 pytestmark = pytest.mark.e2e
@@ -91,7 +91,7 @@ def test_the_production_timeout_is_one_second() -> None:
 async def test_a_blocked_search_answers_503_after_about_one_second(
     wired_client: AsyncClient, migrated_database: str
 ) -> None:
-    async with table_locked(migrated_database):
+    async with locked(migrated_database, "catalog_search"):
         started = time.monotonic()
         response = await asyncio.wait_for(
             wired_client.get("/search", params={"query": "paris"}), HANG_GUARD_SECONDS
@@ -112,7 +112,7 @@ async def test_a_blocked_search_answers_503_after_about_one_second(
 async def test_the_service_recovers_when_the_lock_is_gone(
     wired_client: AsyncClient, migrated_database: str
 ) -> None:
-    async with table_locked(migrated_database):
+    async with locked(migrated_database, "catalog_search"):
         blocked = await asyncio.wait_for(
             wired_client.get("/search", params={"query": "paris"}), HANG_GUARD_SECONDS
         )
@@ -127,7 +127,7 @@ async def test_the_service_recovers_when_the_lock_is_gone(
 async def test_a_timeout_does_not_poison_the_next_request_on_the_same_app(
     wired_client: AsyncClient, migrated_database: str
 ) -> None:
-    async with table_locked(migrated_database):
+    async with locked(migrated_database, "catalog_search"):
         await asyncio.wait_for(
             wired_client.get("/search", params={"query": "paris"}), HANG_GUARD_SECONDS
         )
@@ -231,7 +231,7 @@ async def test_the_feed_and_a_catalog_can_still_read_while_the_search_pool_is_st
         committed_catalogs(migrated_database, [probe_document()], recommended=True) as (
             catalog_id,
         ),
-        table_locked(migrated_database),
+        locked(migrated_database, "catalog_search"),
     ):
         blocked = asyncio.create_task(wired_client.get("/search", params={"query": "paris"}))
         await asyncio.sleep(0.2)  # the search is now waiting on the lock

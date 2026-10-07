@@ -17,7 +17,7 @@ make test                                  # the same searches as exact-result t
 ```
 
 * Exact results, over the database: [`tests/integration/test_search_table.py`](../tests/integration/test_search_table.py)
-* Exact results, over HTTP: [`tests/e2e/test_search_table_http.py`](../tests/e2e/test_search_table_http.py)
+* Exact results, over HTTP, with the schema check: [`tests/e2e/test_search_score.py`](../tests/e2e/test_search_score.py)
 * The score: [`tests/search_quality.py`](../tests/search_quality.py), [`scripts/score_search.py`](../scripts/score_search.py)
 * The data these tables come from: [`tests/search_cases.py`](../tests/search_cases.py)
 * How fast, and why: [`performance.md`](performance.md)

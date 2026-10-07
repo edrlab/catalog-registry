@@ -27,13 +27,8 @@ pytestmark = pytest.mark.unit
 A, B, C = "Alpha", "Bravo", "Charlie"
 
 
-def case(
-    expected: tuple[str, ...] | None,
-    *,
-    ordered: bool = False,
-    first: str | None = None,
-) -> Case:
-    return Case("s", "q", "checks", expected, [], ordered=ordered, first=first)
+def case(expected: tuple[str, ...] | None, *, first: str | None = None) -> Case:
+    return Case("s", "q", "checks", expected, [], first=first)
 
 
 # --- one search ------------------------------------------------------------------------------
@@ -99,16 +94,6 @@ def test_without_a_required_order_either_order_is_the_ideal() -> None:
     swapped = score_case(case((A, B)), [B, A])
     assert swapped is not None
     assert swapped.score == 1.0
-
-
-def test_an_ordered_case_rewards_the_expected_order_in_full() -> None:
-    right = score_case(case((A, B, C), ordered=True), [A, B, C])
-    wrong = score_case(case((A, B, C), ordered=True), [C, B, A])
-
-    assert right is not None
-    assert wrong is not None
-    assert right.score == 1.0
-    assert 0 < wrong.score < 1.0
 
 
 def test_a_search_whose_ideal_is_nothing_scores_one_for_nothing_and_zero_for_anything() -> None:
@@ -243,16 +228,6 @@ def test_the_command_scores_a_server_and_exits_zero(
     assert "score 0.877" in out
     assert "perfect 73/90" in out
     assert "Île de France" in out, "an imperfect search is listed with what it wanted and got"
-
-
-def test_the_command_fails_below_a_floor(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(score_search, "fetch_search_titles", fake_fetch(today_titles()))
-
-    assert score_search.main(["--min-score", "0.95"]) == 1
-    assert "below the floor" in capsys.readouterr().out
-    assert score_search.main(["--min-score", "0.85"]) == 0
 
 
 def test_a_baseline_shows_a_tweak_as_better_worse_or_unchanged(
