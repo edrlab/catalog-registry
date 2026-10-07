@@ -95,4 +95,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(catalogs.router)
     app.include_router(search.router)
     app.include_router(health.router)
+    if resolved.environment == "local":
+        # Developer machines only (ADR-063): imported here so no other environment loads it.
+        from registry.api.routes import dev  # noqa: PLC0415
+
+        app.include_router(dev.router)
     return app

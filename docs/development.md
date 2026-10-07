@@ -278,6 +278,19 @@ catalog reachable at `/catalogs/{id}` while staying out of `GET /`.
 
 ---
 
+## The dev console
+
+With `make up` (environment `local`), open <http://localhost:8000/dev>. It tries the feed, search and
+a single catalog as each kind of reader would: Thorium, KOReader, iOS, Android, Windows, a browser,
+`requests` and `curl`. A browser cannot set `Accept-Encoding` or `User-Agent`, so the page asks the
+server to call its own app in-process with that client's real headers. It shows status, the encoding
+chosen, wire against decoded bytes, time and the raw JSON, and "Compare all clients" lays them side by
+side. Results follow the OPDS `next` / `previous` links.
+
+It exists only when `REGISTRY_ENVIRONMENT=local`: the router is not even imported elsewhere, so
+test, staging and production answer 404 (`tests/e2e/test_dev_console.py`). Only `/`, `/search` and
+`/catalogs/{id}` can be simulated.
+
 ## Generated files
 
 Three files are generated and committed. Each is diffed by CI, so a stale copy fails the build
