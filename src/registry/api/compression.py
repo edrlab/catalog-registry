@@ -6,9 +6,10 @@ sends by default; Thorium Reader and browsers also offer `br`; recent browsers a
 sends `identity` and must get the body as it is. So: `zstd` if the client names it, else `br`, else
 `gzip`, nothing when it asks for nothing.
 
-Levels are the measured sweet spot for a response made while the client waits: zstd 3, brotli 4 and
-gzip 6. Never brotli 11 (25 ms for a 27 KB page) or gzip 9. zstd compresses about 5 to 10 times
-faster than brotli 4 at a similar size, and only a client that names it ever gets it (RFC 8878).
+Levels are the measured sweet spot for a response made while the client waits: zstd 6, brotli 4 and
+gzip 6. Never brotli 11 (25 ms for a 27 KB page) or gzip 9. zstd 6 compresses in about 0.02 ms
+where brotli 4 takes 0.07, for 2% more bytes on the real feed, and only a client that names it
+ever gets it (RFC 8878).
 """
 
 import gzip
@@ -29,7 +30,7 @@ OFFERED: Final = ("zstd", "br", "gzip")
 MINIMUM_SIZE: Final = 1024
 
 BROTLI_QUALITY: Final = 4
-ZSTD_LEVEL: Final = 3
+ZSTD_LEVEL: Final = 6
 GZIP_LEVEL: Final = 6
 
 _USER_AGENT_LIMIT: Final = 200

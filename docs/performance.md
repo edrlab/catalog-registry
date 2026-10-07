@@ -85,15 +85,16 @@ The client says what it can decode in `Accept-Encoding`; the server picks. Measu
 
 | Client | Sends | Gets |
 |---|---|---|
-| Recent browsers | `gzip, deflate, br, zstd` | **zstd** (level 3) |
+| Recent browsers | `gzip, deflate, br, zstd` | **zstd** (level 6) |
 | Thorium Reader (`node-fetch`) | `gzip, deflate, br` | **brotli** (level 4) |
 | Apple `URLSession`, Node, OkHttp, Android, Python `requests` | `gzip` (and `deflate`) | **gzip** (level 6) |
 | KOReader, Python `urllib` | `identity` | the body as it is |
 | `curl` with no flags | nothing | the body as it is |
 
 gzip is the only coding every client accepts, so it is always the fallback. zstd is used only when a
-client names it (a `*` never gets it): it compresses 5 to 10 times faster than brotli 4 at a similar
-size, so it costs nothing and helps a large response. Responses under 1 KB are not
+client names it (a `*` never gets it): it compresses several times faster than brotli 4 for about 2% more
+bytes on the real feed (level 6: 967 B against 948 B for a 4.2 KB page), so it costs nothing and
+helps a large response. Responses under 1 KB are not
 compressed. `Vary: Accept-Encoding` is always set. Code: `src/registry/api/compression.py`, ADR-061.
 
 ## Who is asking
