@@ -1,7 +1,7 @@
 # Search
 
 `GET /search?query=…&page=N` finds catalogs by title, place name or city, in the languages the
-place speaks. Design and decisions: ADR-051 to ADR-061 in the knowledge base. Speed, compression
+place speaks. Speed, compression
 and what clients send: [`performance.md`](performance.md).
 
 ```
@@ -132,4 +132,4 @@ anything containing them, ranked below the real match.
 - "Belgio" and "Vallonia" (Italian, not loaded for Belgium) still find the Belgian catalogs, as
   trigram matches.
 - A quoted phrase also lists fuzzy extras after the exact match: the fuzzy half ignores quotes.
-- BM25 ranking arrives with `pg_textsearch` once it is generally available on Cloud SQL (ADR-047).
+- BM25 ranking arrives with `pg_textsearch` once it is generally available on Cloud SQL.

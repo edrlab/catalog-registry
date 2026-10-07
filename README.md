@@ -1,121 +1,99 @@
 # Catalog Registry
 
-[![tests](https://github.com/ronibhakta1/catalog-registry/actions/workflows/ci-test.yaml/badge.svg)](https://github.com/ronibhakta1/catalog-registry/actions/workflows/ci-test.yaml) [![lint](https://github.com/ronibhakta1/catalog-registry/actions/workflows/ci-lint.yaml/badge.svg)](https://github.com/ronibhakta1/catalog-registry/actions/workflows/ci-lint.yaml) [![schemas](https://github.com/ronibhakta1/catalog-registry/actions/workflows/ci-schema.yaml/badge.svg)](https://github.com/ronibhakta1/catalog-registry/actions/workflows/ci-schema.yaml) [![audit](https://github.com/ronibhakta1/catalog-registry/actions/workflows/ci-audit.yaml/badge.svg)](https://github.com/ronibhakta1/catalog-registry/actions/workflows/ci-audit.yaml)
-[![python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
+[![tests](https://github.com/edrlab/catalog-registry/actions/workflows/ci-test.yaml/badge.svg)](https://github.com/edrlab/catalog-registry/actions/workflows/ci-test.yaml) [![lint](https://github.com/edrlab/catalog-registry/actions/workflows/ci-lint.yaml/badge.svg)](https://github.com/edrlab/catalog-registry/actions/workflows/ci-lint.yaml) [![schemas](https://github.com/edrlab/catalog-registry/actions/workflows/ci-schema.yaml/badge.svg)](https://github.com/edrlab/catalog-registry/actions/workflows/ci-schema.yaml) [![audit](https://github.com/edrlab/catalog-registry/actions/workflows/ci-audit.yaml/badge.svg)](https://github.com/edrlab/catalog-registry/actions/workflows/ci-audit.yaml) [![docker build](https://github.com/edrlab/catalog-registry/actions/workflows/ci-docker-build.yaml/badge.svg)](https://github.com/edrlab/catalog-registry/actions/workflows/ci-docker-build.yaml)
+[![python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/) [![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) [![live](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fregistry.thoriumreader.com%2Fhealth%2Flive&query=%24.status&label=registry.thoriumreader.com&color=brightgreen)](https://registry.thoriumreader.com) [![cloud run revision](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fregistry.thoriumreader.com%2Fhealth%2Flive&query=%24.revision&label=Cloud%20Run%20revision&logo=googlecloud&logoColor=white&color=4285F4)](https://registry.thoriumreader.com/health/live)
 
 This project is part of EDRLab's OPDS Interoperability Task Force.
 
-## Demo 
+## What it is
+
+A registry of OPDS catalogs: public, academic, school and specialized libraries, plus public domain
+and open access publications. It is pre-loaded in Thorium Reader (all platforms) and dedicated
+reading devices, so readers can discover libraries on a wide variety of platforms.
+
 Live: [registry.thoriumreader.com](https://registry.thoriumreader.com)
 
-The Catalog Registry will contain:
+- Recommended catalogs, ranked by the reader's language
+- Full-text search: title, place name or city ([`docs/search.md`](docs/search.md))
+- Responses compressed to what each reader can decode: zstd, brotli, gzip or plain ([`docs/performance.md`](docs/performance.md))
+- A dev console at `/dev` to see the feed and search as different reader apps would
 
-- public libraries
-- academic libraries
-- school libraries
-- specialized libraries
-- public domain publications
-- and open access publications
-
-This Catalog Registry will be pre-loaded in Thorium Reader (all platforms) and dedicated reading devices, providing discoverability for libraries and their patrons on a wide variety of platforms.
-
-## User-facing features
-
-This project will serve a registry using both OPDS 2.0 and HTML with the following feature-set:
-
-- List of recommended catalogs (language specific)
-- Full-text search (`GET /search`, see [`docs/search.md`](docs/search.md))
-- Responses compressed to what each reader can decode: zstd, brotli, gzip, or plain (see [`docs/performance.md`](docs/performance.md))
-- Geo-based search
-
-## Running it
+## Quick start
 
 Requires [uv](https://docs.astral.sh/uv/) and Docker. Python 3.13 is fetched automatically.
 
 ```
-make            # list every target, grouped
 make setup      # uv sync, then .env from .env.example
 make up         # database, migrations, API on http://localhost:8000
-make seed       # the recommended catalogs for testing locally
-make seed-libraries  # the library data set, not recommended (needs data/libraries.json)
+make seed       # the recommended catalogs
 make down       # stop, keep the data
 make clean      # stop, drop the volume
 ```
 
-`make up` migrates but does not seed. A registry you have just started is empty, so nothing
-you delete comes back on the next start. After `make seed`:
+If port 5432 is taken, run `make up DB_PORT=55432` and
+match it in `.env`.
 
-```
-$ curl -s localhost:8000/ | jq '.metadata'
-{ "title": "Recommended Catalogs", "numberOfItems": 4 }
-```
+`make up` migrates but does not seed, so a fresh registry is empty until `make seed`.
 
-If port 5432 is already taken, run `make up DB_PORT=55432` and match it in `.env`. `make up`
-tells you when this happens.
+## Make targets
 
-To try it by hand, open the console at `/dev`. It is a page for the feed and search as different
-reader apps would see them, with a search box that updates as you type:
+`make` on its own lists them with descriptions.
 
-| | Console |
+| | Targets |
 |---|---|
-| Local | <http://localhost:8000/dev> (after `make seed` and `make seed-libraries`) |
-| Production | <https://registry.thoriumreader.com/dev> |
+| Run | `setup`, `up`, `down`, `clean`, `run` (API on the host, needs `up`), `logs`, `psql` |
+| Data | `seed`, `seed-libraries` (needs `data/libraries.json`), `seed-sample`, `add ARGS="<url> --kind public"` |
+| Database | `migrate`, `revision m="add x"`, `check-db` |
+| Quality | `test`, `lint`, `fmt`, `schema-check` |
+| Search | `search-score`, `search-cases`, `reference-data`, `bench N="10 1000"` |
+| Check | `live-check URL=...` |
+| Generate | `env`, `enums`, `seed-schema` |
+| Docker | `docker-build`, `docker-run`, `stop` |
 
-Both show the registry's own feed, search and catalogs. Reading a library's own feed from inside the
-page works only on a local run; in production those links open in a new tab.
+## Endpoints
 
-To check a running or deployed registry end to end (health, the feed, compression, and every
-documented search, pass or fail):
+Local: `http://localhost:8000`. Production: `https://registry.thoriumreader.com`. Use that name,
+not the `*.run.app` address, for anything a reader device uses.
+
+| Endpoint | |
+|---|---|
+| `GET /` | The top-level feed, `application/opds-catalog+json`, ranked by `Accept-Language` |
+| `GET /search?query=&page=` | Search, 50 per page, same media type. An empty query returns an empty feed |
+| `GET /catalogs/{id}` | One catalog. 404 problem+json if unknown, 422 if the uuid is malformed |
+| `GET /dev` | The console. Reading a library's own feed from it works only on a local run |
+| `GET /health/live` | Liveness. Does not touch the database |
+| `GET /health/ready` | Readiness. 503 when the database is unreachable |
+
+```
+curl -s 'http://localhost:8000/search?query=wallis'
+```
+
+Check a running or deployed registry end to end (health, feed, compression, every documented search):
 
 ```
 make live-check
 make live-check URL=https://registry.thoriumreader.com ARGS="--deployed"
 ```
 
-The same endpoints answer in both places:
-
-| | Base URL | Notes |
-|---|---|---|
-| Local | `http://localhost:8000` | After `make up` and `make seed`. Console at `/dev` |
-| Production | `https://registry.thoriumreader.com` | Use this name, not the `*.run.app` address, for anything a reader device uses. Console at `/dev` |
-
-```
-curl -s 'http://localhost:8000/search?query=wallis'
-curl -s 'https://registry.thoriumreader.com/search?query=wallis'
-```
-
-| Endpoint | |
-|---|---|
-| `GET /` | The top-level feed, `application/opds-catalog+json`, ranked by `Accept-Language` |
-| `GET /search?query=&page=` | Search, 50 per page, same media type. An empty query returns an empty feed. See [`docs/search.md`](docs/search.md) and [`docs/performance.md`](docs/performance.md) |
-| `GET /catalogs/{id}` | One catalog. 404 problem+json if unknown, 422 if the uuid is malformed |
-| `GET /health/live` | Liveness. Does not touch the database |
-| `GET /health/ready` | Readiness. 503 when the database is unreachable |
-
 ## Documentation
 
 | | |
 |---|---|
-| [`docs/development.md`](docs/development.md) | Setup, the daily loop, configuration, migrations, the seed, testing, benchmarks, the Cloud SQL sandbox, and troubleshooting |
-| [`docs/search.md`](docs/search.md) | What search does, the query syntax, ordering, paging, the analyzer, reloading reference data, grants and operating notes |
-| [`docs/performance.md`](docs/performance.md) | Why one search is one database round trip, where it runs, how to measure it, what compression each client gets, and what old devices can connect to |
-| [`docs/search-test-cases.md`](docs/search-test-cases.md) | The searches used to check search: what each should return, what it returns today, a score, and how to run them (`make search-score`, `make live-check`) |
-| [`docs/importing.md`](docs/importing.md) | `make add`, which imports a catalog from its live OPDS feed. The flags, how links are mapped, when it refuses |
-| [`docs/schemas.md`](docs/schemas.md) | The `schema/` directory. What is contract, what is vendored, what is generated, and why Python cannot use these schemas as published |
+| [`docs/development.md`](docs/development.md) | Setup, the daily loop, configuration, migrations, the seed, testing, benchmarks, troubleshooting |
+| [`docs/search.md`](docs/search.md) | The query syntax, ordering, paging, reference data and operating notes |
+| [`docs/performance.md`](docs/performance.md) | Why a search is one database round trip, how to measure it, what compression each client gets |
+| [`docs/search-test-cases.md`](docs/search-test-cases.md) | The searches used to check search and how to run them (`make search-score`) |
+| [`docs/importing.md`](docs/importing.md) | `make add`: import a catalog from its live OPDS feed |
+| [`docs/schemas.md`](docs/schemas.md) | The `schema/` directory: contract, vendored and generated files |
 
-`make` on its own lists every target. The listing is generated from the Makefile, so a target
-appears as soon as its line carries a `## description`.
-
-## Where the data comes from
-
-Postgres, with thirteen tables (eight for the catalogs, five for search), four migrations and six native enums.
+## Data
 
 | | |
 |---|---|
-| `data/recommended.json` | The seed source. `make seed` upserts it, idempotently. Removing an entry does not unrecommend its row, see `docs/development.md` |
-| `demo/` | Example output, and the contract-test corpus. Hadrien's, like the seed file |
-| `data/libraries.json` | Library catalogs. `make seed-libraries` upserts them **not recommended**: active and readable at `/catalogs/{id}`, absent from the top-level feed |
-| `data/dev-sample.json` | Invented data for trying ranking out by hand, loaded by `make seed-sample`. No test reads it |
+| `data/recommended.json` | Seed source for `make seed`, idempotent. Removing an entry does not unrecommend its row (see `docs/development.md`) |
+| `data/libraries.json` | `make seed-libraries`: active and readable at `/catalogs/{id}`, **not recommended**, so absent from the top-level feed |
+| `data/dev-sample.json` | Invented data for trying ranking by hand (`make seed-sample`) |
+| `demo/` | Example output and the contract-test corpus |
 
 ## Language ranking
 

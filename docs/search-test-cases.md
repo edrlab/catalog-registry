@@ -91,7 +91,7 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 | `bibliothèques` | Plural | BnParis, BN Romande, Bibliothèque russe et slave | BnParis (trigram only), BN Romande (trigram only), Bibliothèque russe et slave (trigram only), De Openbare (trigram only) | 0.75 |  |
 | `guten` | Start of a word | Project Gutenberg | Project Gutenberg (trigram only) | 1.00 |  |
 | `parsi` | Two letters swapped in a short word | BnParis | BnParis (trigram only) | 1.00 | Found through trigrams since the typo threshold moved to 0.5 (nothing at 0.6). Swapped letters stay the weakest typo: about two in three are found. |
-| `Suiße` | ß is folded by the database's unaccent, not by Python (ADR-059) | Médiathèque Valais | Médiathèque Valais | 1.00 |  |
+| `Suiße` | ß is folded by the database's unaccent, not by Python | Médiathèque Valais | Médiathèque Valais | 1.00 |  |
 
 ## Realistic typos, one slip per word
 

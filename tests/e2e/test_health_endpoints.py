@@ -30,3 +30,13 @@ async def test_an_incoming_request_id_is_echoed_back(client: AsyncClient) -> Non
     response = await client.get("/health/live", headers={"X-Request-Id": "abc-123"})
 
     assert response.headers["x-request-id"] == "abc-123"
+
+
+async def test_liveness_names_the_cloud_run_revision_when_there_is_one(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("K_REVISION", "registry-00013-cnz")
+
+    response = await client.get("/health/live")
+
+    assert response.json() == {"status": "alive", "revision": "registry-00013-cnz"}

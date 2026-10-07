@@ -4,6 +4,8 @@ Liveness must not depend on the database: a probe that fails when Postgres is do
 container restarted, which fixes nothing.
 """
 
+import os
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -12,7 +14,9 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health/live")
 async def read_liveness() -> dict[str, str]:
-    return {"status": "alive"}
+    # Cloud Run sets K_REVISION; it is how the README badge shows what is deployed.
+    revision = os.environ.get("K_REVISION")
+    return {"status": "alive", **({"revision": revision} if revision else {})}
 
 
 @router.get("/health/ready")

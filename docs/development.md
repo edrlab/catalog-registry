@@ -387,7 +387,7 @@ information. It exists to answer "what happens at n" and to give a change a meas
 Hadrien's target for search (under 100 ms warm from Europe) is judged with the numbers in
 [`performance.md`](performance.md) and the Cloud Run metrics tab, not with this script alone.
 
-The feed is one database statement (ADR-062), so the time it takes grows with the number of
+The feed is one database statement, so the time it takes grows with the number of
 recommended catalogs only through the work of rendering them: roughly 0.04 ms each on one machine,
 with no knee. Production has about a dozen. Search is one statement too, and its time follows the
 number of matches, not the size of the table (`performance.md`).

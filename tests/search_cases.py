@@ -258,7 +258,7 @@ QUALITY_CASES: list[Case] = [
     c(
         TYPO,
         "Suiße",
-        "ß is folded by the database's unaccent, not by Python (ADR-059)",
+        "ß is folded by the database's unaccent, not by Python",
         (VALAIS,),
         words(VALAIS),
     ),
