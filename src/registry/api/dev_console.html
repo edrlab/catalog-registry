@@ -26,8 +26,8 @@ button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius
 button:hover{background:var(--soft)}button.pri{background:var(--fg);color:#fff;border-color:var(--fg)}button.pri:hover{background:#27272a}
 .chips{display:flex;gap:6px;flex-wrap:wrap}.chips button{font-size:12px;padding:3px 10px;border-radius:999px;color:var(--mut)}
 label.f{display:flex;gap:6px;align-items:center;color:var(--mut);font-size:12px}
-.status{display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:12px 20px;font-size:13px}
-.status:empty{display:none}.pill{font:600 12px var(--mono);border-radius:6px;padding:1px 8px}.pill.ok{background:var(--okbg);color:var(--ok)}.pill.err{background:var(--badbg);color:var(--bad)}
+.busy .grid{opacity:.5;transition:opacity .15s}.status{min-height:48px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:12px 20px;font-size:13px}
+.pill{font:600 12px var(--mono);border-radius:6px;padding:1px 8px}.pill.ok{background:var(--okbg);color:var(--ok)}.pill.err{background:var(--badbg);color:var(--bad)}
 .stat{color:var(--mut)}.stat b{color:var(--fg);font-weight:600;font-family:var(--mono);font-size:12.5px}
 .meter{width:120px;height:6px;background:var(--soft);border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle;margin-left:6px}.meter i{display:block;height:100%;background:var(--acc)}
 .grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:0;border-top:1px solid var(--line);min-height:60vh}
@@ -93,7 +93,7 @@ const LANGS=['','fr','en','fr-FR,fr;q=0.9,en;q=0.5','en-US,en;q=0.9','de,fr;q=0.
 const TABS=['Preview','Response','Headers','Raw','curl','Compare'];
 const COLORS={gray:'#6b7280',red:'#dc2626',yellow:'#ca8a04',blue:'#2563eb',green:'#16a34a',purple:'#9333ea',orange:'#ea580c',pink:'#db2777'};
 const REL_LABEL={catalog:'Browse the catalog',shelf:'Shelf',search:'Search it',authenticate:'Sign in',alternate:'Alternate',profile:'Profile',self:'Registry entry',next:'Next',previous:'Previous',first:'First',last:'Last'};
-let idx=0,furthest=0,clients={},last=null,nextTab=null,tab='Preview',selected=null,compareHtml=null;
+let nextSel=null,idx=0,furthest=0,clients={},last=null,nextTab=null,tab='Preview',selected=null,compareHtml=null;
 
 const links=b=>b?.links||[];
 const rels=l=>[].concat(l.rel||[]);
@@ -145,18 +145,21 @@ const remember=()=>{try{history.replaceState({sel:selected,tab,idx},'')}catch{}}
 addEventListener('hashchange',async()=>{
   if(location.hash.slice(1)===hashOf())return;
   const st=history.state;if(st?.idx!=null){idx=st.idx;furthest=Math.max(furthest,idx)}
-  compareHtml=null;loadHash();await send();
   // Back and Forward bring back what was open on that page, not just the request.
-  if(st&&last){selected=st.sel;tab=st.tab;renderRows();renderTabs()}
-  updateNav();
+  if(st){nextSel=st.sel;nextTab=st.tab}
+  compareHtml=null;loadHash();await send();updateNav();
 });
 
 async function send(){
   const path=$('path').value.trim()||'/';
-  saveHash();selected=null;tab=nextTab||'Preview';nextTab=null;
-  $('status').replaceChildren(el('span','stat','Loading\u2026'));
-  try{last=await call(path,$('client').value);}
-  catch(e){last=null;const p=el('span','pill err','Error');$('status').replaceChildren(p,el('span','stat',e.message));$('rows').replaceChildren(errorBox(e));$('count').textContent='Results';$('paging').textContent='';$('pager').replaceChildren();renderTabs();return}
+  saveHash();selected=nextSel;nextSel=null;tab=nextTab||'Preview';nextTab=null;
+  document.body.classList.add('busy');
+  try{last=await call(path,$('client').value)}
+  catch(e){
+    last=null;$('status').replaceChildren(el('span','pill err','Error'),el('span','stat',e.message));
+    $('rows').replaceChildren(errorBox(e));$('count').textContent='Results';$('paging').textContent='';$('pager').replaceChildren();renderTabs();
+    return;
+  }finally{document.body.classList.remove('busy')}
   render();
 }
 
