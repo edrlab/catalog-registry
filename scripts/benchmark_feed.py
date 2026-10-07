@@ -1,10 +1,23 @@
-"""Measure `GET /` as the recommended set grows, with a different header per request.
+"""Measure `GET /` and `GET /search` as the catalog set grows.
 
     make bench              # 10, 100, 1000 catalogs
     make bench N="10 5000"  # any sizes
 
-Asserts nothing and cannot fail the build: no latency target has ever been agreed, and an
-invented threshold produces flaky builds and no information.
+`GET /` is timed with a different `Accept-Language` per request. `GET /search` is timed with a
+rotating mix of queries (a title word, a place name in another language, a typo, a phrase, a
+negation) over synthetic catalogs that have a country and varied titles, so each query matches a
+realistic share of them rather than all.
+
+**These numbers are local.** The database is on this machine, so the trip between the app and
+Postgres costs about nothing, and the client is on the same machine too. What is left is the
+application's own work. In production add the distance: one search makes **1** round trip to the
+database (docs/performance.md), at about 2 to 4 ms each across regions, plus the client's trip.
+For a deployed instance read the Cloud Run metrics tab: `request_latencies` is the time inside the
+container, `e2e_latencies` adds Google's network in front; the difference from what a client sees is
+its own distance. `make search-score ARGS="--url https://..."` runs the search cases against it.
+
+Hadrien's target for search is under 100 ms warm from Europe, 150 ms acceptable; the script prints
+it beside the numbers and still asserts nothing: an invented threshold produces flaky builds.
 
 **It writes.** Synthetic rows are titled `ZZ Bench …` and deleted in a `finally`; point
 `REGISTRY_DATABASE_URL` at a throwaway database.
@@ -18,10 +31,12 @@ import statistics
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from registry.core.config import Settings
 from registry.db.session import create_database_engine
@@ -74,8 +89,32 @@ HEADERS = [
 
 WARMUP, RUNS = 20, 120
 
+#: Title words and countries cycled over the synthetic catalogs, so a search term matches a
+#: share of them instead of every row. Coprime lengths (23, 7) spread the combinations.
+TITLE_WORDS = [
+    "Alder", "Birch", "Cedar", "Dune", "Elm", "Fjord", "Glade", "Heath", "Isle", "Juniper",
+    "Kestrel", "Lagoon", "Meadow", "Nettle", "Orchard", "Pine", "Quarry", "Ridge", "Spruce",
+    "Thistle", "Upland", "Valley", "Willow",
+]  # fmt: skip
+COUNTRIES = ["FR", "BE", "CH", "CA", "DE", "IT", "ES"]
 
-async def populate(engine, count: int) -> None:
+#: What a reader plausibly types. Each is (label, query).
+SEARCH_QUERIES = [
+    ("title word", "willow"),
+    ("two words", "alder valley"),
+    ("place, other language", "belgique"),
+    ("place, German", "schweiz"),
+    ("typo, place name", "belgum"),
+    ("phrase", '"cedar fjord"'),
+    ("negation", "pine -france"),
+    ("no match", "zzzzqqq"),
+]
+
+#: Hadrien, 1 October: under 100 ms warm from Europe, 150 ms acceptable.
+TARGET_MS = 100
+
+
+async def populate(engine: AsyncEngine, count: int) -> None:
     """Replace the synthetic rows with *count* fresh ones. Real rows are untouched."""
     async with engine.begin() as connection:
         await remove(connection)
@@ -83,10 +122,18 @@ async def populate(engine, count: int) -> None:
             catalog_id = uuid.uuid4()
             await connection.execute(
                 text(
-                    "INSERT INTO catalogs (id, status, recommended, title, color, published_at)"
-                    " VALUES (:id, 'active', true, :title, 'gray', now())"
+                    "INSERT INTO catalogs"
+                    " (id, status, recommended, title, color, country_code, published_at)"
+                    " VALUES (:id, 'active', true, :title, 'gray', :country, now())"
                 ),
-                {"id": catalog_id, "title": f"{MARKER} {index:05}"},
+                {
+                    "id": catalog_id,
+                    "title": (
+                        f"{MARKER} {TITLE_WORDS[index % len(TITLE_WORDS)]} "
+                        f"{TITLE_WORDS[(index // len(TITLE_WORDS)) % len(TITLE_WORDS)]} {index:05}"
+                    ),
+                    "country": COUNTRIES[index % len(COUNTRIES)],
+                },
             )
             await connection.execute(
                 text("INSERT INTO catalog_kinds VALUES (:id, 'open')"), {"id": catalog_id}
@@ -114,7 +161,13 @@ async def populate(engine, count: int) -> None:
                 )
 
 
-async def remove(connection) -> None:
+async def analyse(engine: AsyncEngine) -> None:
+    """What `VACUUM ANALYZE catalog_search` is for after a bulk import (docs/search.md)."""
+    async with engine.begin() as connection:
+        await connection.execute(text("ANALYZE catalog_search"))
+
+
+async def remove(connection: AsyncConnection) -> None:
     await connection.execute(
         text("DELETE FROM catalogs WHERE title LIKE :marker"), {"marker": f"{MARKER}%"}
     )
@@ -138,6 +191,33 @@ def measure(base_url: str, header: str | None) -> tuple[float, int, int]:
     return elapsed, len(body), decoded
 
 
+def measure_search(base_url: str, query: str) -> tuple[float, int]:
+    """One search over real HTTP. Returns (milliseconds, `numberOfItems`)."""
+    url = f"{base_url}search?{urllib.parse.urlencode({'query': query})}"
+    request = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
+    started = time.perf_counter()
+    with urllib.request.urlopen(request) as response:
+        body = response.read()
+        if response.headers.get("Content-Encoding") == "gzip":
+            body = gzip.decompress(body)
+    elapsed = (time.perf_counter() - started) * 1000
+    return elapsed, json.loads(body)["metadata"]["numberOfItems"]
+
+
+def report_search(base_url: str, count: int) -> None:
+    print(f"\n  /search at {count} synthetic catalogs (target p95 under {TARGET_MS} ms, locally)")
+    print(f"  {'query':<24} {'p50':>9} {'p95':>9} {'matches':>9}")
+    for label, query in SEARCH_QUERIES:
+        for _ in range(WARMUP):
+            measure_search(base_url, query)
+        samples, matches = [], 0
+        for _ in range(RUNS):
+            elapsed, matches = measure_search(base_url, query)
+            samples.append(elapsed)
+        cuts = statistics.quantiles(samples, n=100, method="inclusive")
+        print(f"  {label:<24} {statistics.median(samples):8.1f}ms {cuts[94]:8.1f}ms {matches:>9}")
+
+
 async def main(argv: list[str]) -> int:
     sizes = [int(value) for value in argv] or [10, 100, 1000]
     settings = Settings()
@@ -157,6 +237,7 @@ async def main(argv: list[str]) -> int:
     try:
         for count in sizes:
             await populate(engine, count)
+            await analyse(engine)
             headers = itertools.cycle(HEADERS)
             for _ in range(WARMUP):
                 measure(base_url, next(headers))
@@ -178,6 +259,7 @@ async def main(argv: list[str]) -> int:
                 f"{returned:>9} {statistics.median(wire) / 1024:7.1f}K "
                 f"{statistics.median(raw) / 1024:7.1f}K"
             )
+            report_search(base_url, count)
     finally:
         async with engine.begin() as connection:
             await remove(connection)

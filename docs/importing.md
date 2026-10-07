@@ -131,6 +131,13 @@ reachable by readers, so `localhost`, `10.x`, `192.168.x` and `169.254.x` are al
 every redirect hop is checked again because a public host is free to redirect to a private one.
 That does mean you cannot import from a feed served on your own machine.
 
+## Search updates itself
+
+A catalog's search row is rebuilt by database triggers in the same transaction as the import, so
+`make add`, `make seed` and `make seed-libraries` need no extra step and a search finds the new
+or changed catalog straight away, including a changed `city`. After a **bulk** import of many
+catalogs run `VACUUM ANALYZE catalog_search;`. See [`search.md`](search.md).
+
 ## Where it writes
 
 Directly to Postgres, using `REGISTRY_DATABASE_URL`. It is a database client, like `psql`, it

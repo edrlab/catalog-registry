@@ -1,11 +1,10 @@
--- Local and CI only. Checked against the Cloud SQL instance on 2026-09-24: production has
--- `plpgsql` and nothing else, so neither line here describes it.
---
--- `gen_random_uuid()` is built into PostgreSQL 13+, so `catalogs.id` does not need pgcrypto
--- on either side; this keeps the extension present locally rather than relying on that.
+-- Local and CI only. `gen_random_uuid()` is built into PostgreSQL 13+, so `catalogs.id` does not
+-- need pgcrypto on either side; this keeps the extension present locally rather than relying on that.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- v0.2 search. Created here so the search work has it locally from the start. It is NOT in
--- production, and nothing creates it there: whoever ships search runs `CREATE EXTENSION
--- pg_trgm` against Cloud SQL as part of that change, or it fails on the first query.
+-- v0.2 search. The search migration (`847ef861dbdb`) runs `CREATE EXTENSION IF NOT EXISTS` for
+-- both itself, so production gets them from `alembic upgrade head`, provided the migration user has
+-- the `cloudsqlsuperuser` role. They are created here as well so a local database has them before
+-- any migration runs.
+CREATE EXTENSION IF NOT EXISTS unaccent;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;

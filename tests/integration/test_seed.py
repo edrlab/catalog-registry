@@ -108,7 +108,7 @@ async def test_undeclared_coverage_is_stored_as_null(db_session: AsyncSession) -
     await db_session.commit()
 
     rows = (await db_session.execute(select(Catalog.title, Catalog.coverage))).all()
-    by_title = dict(rows)
+    by_title = {row[0]: row[1] for row in rows}
     assert by_title["Declares Coverage"] == CoverageScope.COUNTRY
     assert by_title["Project Gutenberg"] is None
     assert sum(value is None for value in by_title.values()) == SEED_CATALOG_COUNT
@@ -680,8 +680,13 @@ async def test_the_real_libraries_file_imports(db_session: AsyncSession) -> None
     assert await repository.fetch_recommended_catalogs() == []
     for entry in document["catalogs"]:
         href = next(link["href"] for link in entry["links"] if link["rel"] == "catalog")
-        stored = await repository.fetch_catalog_by_id(uuid.uuid5(uuid.NAMESPACE_URL, href))
-        assert stored is not None, entry["metadata"]["title"]
+        catalog_id = uuid.uuid5(uuid.NAMESPACE_URL, href)
+        # The public read is a snapshot of what is rendered; it does not carry `recommended` or
+        # `status` (R3). Those are the importer's business, so the importer's lookup shows them.
+        public = await repository.fetch_catalog_by_id(catalog_id)
+        assert public is not None, entry["metadata"]["title"]
+        stored = await repository.fetch_catalog_by_identity_id(catalog_id)
+        assert stored is not None
         assert stored.recommended is False
         assert stored.status is CatalogStatus.ACTIVE
 
@@ -804,7 +809,8 @@ async def test_a_catalog_removed_from_the_file_stays_recommended(
     await seed_catalogs(db_session, shortened)
     await db_session.commit()
 
-    rows = dict((await db_session.execute(select(Catalog.title, Catalog.recommended))).all())
+    result = await db_session.execute(select(Catalog.title, Catalog.recommended))
+    rows = {row[0]: row[1] for row in result.all()}
     assert rows[dropped] is True, "unrecommending needs provenance; see seed_catalogs"
 
 

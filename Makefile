@@ -19,7 +19,7 @@ export DB_PORT
 .DEFAULT_GOAL := help
 
 .PHONY: help setup env enums seed-schema up down clean run seed seed-libraries seed-sample add migrate revision psql \
-        test lint fmt bench check-db schema-check docker-build docker-run logs stop
+        test lint fmt bench check-db schema-check reference-data search-score search-cases live-check docker-build docker-run logs stop
 
 # Self-documenting: a target appears here when its line carries a `## ` description, and
 # `##@ ` starts a section. Nothing to keep in step, add a target with `## what it does`
@@ -126,10 +126,10 @@ psql:  ## Open a psql shell on the development database
 test:  ## Run the test suite against a throwaway Postgres container
 	uv run pytest
 
-lint:  ## ruff check, ruff format --check, mypy --strict
+lint:  ## ruff check, ruff format --check, mypy --strict on src, tests and scripts
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy src/
+	uv run mypy src tests scripts
 
 fmt:  ## Apply ruff fixes and formatting
 	uv run ruff check --fix .
@@ -139,11 +139,31 @@ schema-check:  ## Validate schema/ and every fixture under demo/ and data/
 	uv run python scripts/validate_schemas.py
 	uv run python scripts/validate_fixtures.py demo
 
+# Not run by `migrate`: the migration carries the rows as literals. Run this to review a CLDR or
+# pycountry bump; CSVs land in .cache/reference-data/out, and `PY=1` also prints the literals.
+reference-data:  ## Regenerate search reference data from pinned CLDR/ISO sources (offline-cached)
+	uv run --with pycountry==26.2.16 python scripts/generate_reference_data.py $(if $(PY),--python)
+
+# One number for how good search is, against the plan's ideal answers (docs/search-test-cases.md).
+# Read-only. `make search-score ARGS="--save before.json"`, tweak, then `ARGS="--baseline before.json"`.
+search-score:  ## Score the running server's search: make search-score ARGS="--url http://... -v"
+	uv run python scripts/score_search.py $(ARGS)
+
+# Pass or fail against a running or deployed registry: the plumbing, then every documented search
+# (presence and position). Read-only. `make live-check URL=https://registry.thoriumreader.com`.
+URL ?= http://localhost:8000
+live-check:  ## Check a running or deployed registry end to end: make live-check URL=https://...
+	uv run python scripts/live_check.py --url $(URL) $(ARGS)
+
+# The page for Hadrien comes from the same data as the tests; a test fails when it is stale.
+search-cases:  ## Regenerate docs/search-test-cases.md from tests/search_cases.py
+	uv run python scripts/write_search_cases_doc.py
+
 # Confirm a database is usable before anything depends on it, point REGISTRY_DATABASE_URL
 # at Cloud SQL through the Auth Proxy and run this. See README, "The Cloud SQL sandbox".
 # No latency target has ever been agreed, so this asserts nothing. It answers "what
 # happens at n" on demand, and gives any future optimisation a measured before.
-bench:  ## Measure GET / as the recommended set grows: make bench N="10 1000"
+bench:  ## Measure GET / and GET /search as the catalog set grows: make bench N="10 1000"
 	uv run python scripts/benchmark_feed.py $(N)
 
 check-db:  ## Report a database's version and extension availability

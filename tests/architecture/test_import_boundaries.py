@@ -6,6 +6,7 @@ good local reason.
 """
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
@@ -66,3 +67,68 @@ def test_no_module_imports_across_a_forbidden_boundary() -> None:
                         violations.append(f"{module} imports {imported}")
 
     assert not violations, "forbidden imports: " + ", ".join(sorted(violations))
+
+
+def _imports_of(relative: str) -> set[str]:
+    return _imported_modules(SOURCE_ROOT / relative)
+
+
+def test_the_search_query_parser_imports_only_the_standard_library() -> None:
+    """`domain/search_query.py` is pure (ADR-059): no framework, no database, no registry."""
+    imported = _imports_of("domain/search_query.py")
+
+    assert imported, "the parser imports nothing at all? the scan is broken"
+    outside = {name for name in imported if name.split(".")[0] not in sys.stdlib_module_names}
+    assert not outside, f"non-stdlib imports in domain/search_query.py: {sorted(outside)}"
+
+
+def test_the_search_route_reaches_the_database_only_through_app_state() -> None:
+    imported = _imports_of("api/routes/search.py")
+
+    assert not {m for m in imported if _violates(m, "sqlalchemy")}
+    assert not {m for m in imported if _violates(m, "registry.repositories")}
+    assert not {m for m in imported if _violates(m, "registry.db")}
+    assert not {m for m in imported if _violates(m, "asyncpg")}
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "services/search_service.py",
+        "rendering/search_renderer.py",
+        "domain/search_query.py",
+        "api/routes/search.py",
+    ],
+)
+def test_the_search_modules_above_the_repository_import_no_sqlalchemy_or_asyncpg(
+    relative: str,
+) -> None:
+    imported = _imports_of(relative)
+
+    assert not {m for m in imported if _violates(m, "sqlalchemy") or _violates(m, "asyncpg")}
+
+
+def test_only_the_composition_root_imports_the_search_repository() -> None:
+    importers = [
+        _module_name(path)
+        for path in sorted(SOURCE_ROOT.rglob("*.py"))
+        if any(
+            _violates(m, "registry.repositories.search_repository") for m in _imported_modules(path)
+        )
+    ]
+
+    assert importers == ["registry.main"]
+
+
+def test_the_search_service_depends_on_the_protocol_not_the_repository() -> None:
+    imported = _imports_of("services/search_service.py")
+
+    assert "registry.repositories.protocols" in imported
+    assert not {m for m in imported if _violates(m, "registry.repositories.search_repository")}
+
+
+def test_the_search_renderer_imports_no_database_models() -> None:
+    """It renders a `SearchPage` through `render_catalog`; it never builds its own query."""
+    imported = _imports_of("rendering/search_renderer.py")
+
+    assert not {m for m in imported if _violates(m, "registry.db")}

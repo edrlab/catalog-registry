@@ -7,7 +7,7 @@ database.
 from collections.abc import Sequence
 from typing import Any
 
-from registry.db.models.catalog import Catalog
+from registry.domain.catalog_view import CatalogLike
 from registry.domain.language import LanguageRange, parse_accept_language, rank_language_match
 from registry.rendering.feed_renderer import render_feed
 from registry.repositories.protocols import CatalogReader
@@ -18,7 +18,9 @@ from registry.repositories.protocols import CatalogReader
 _MATCHED, _UNSCOPED = 0, 1
 
 
-def _rank(catalog: Catalog, ranges: Sequence[LanguageRange]) -> tuple[int, int, int, float] | None:
+def _rank(
+    catalog: CatalogLike, ranges: Sequence[LanguageRange]
+) -> tuple[int, int, int, float] | None:
     """Sort key for *catalog*, or ``None`` when the request excludes it.
 
     A catalog declaring no languages is never excluded, since it has made no claim to

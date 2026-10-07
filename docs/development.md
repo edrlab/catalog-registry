@@ -46,7 +46,8 @@ make up
 
 1. builds the image and starts Postgres and the API under Docker Compose
 2. checks the database container is actually reachable on the compose network
-3. runs `alembic upgrade head`. Eight tables, two migrations, 249 countries
+3. runs `alembic upgrade head`. Thirteen tables (eight for catalogs, five for search), four
+   migrations, 249 countries, and the search reference data
 
 It does **not** seed. `make up` is run many times a day, and a command you run that often
 must not keep reinstating rows you deleted on purpose. A fresh database serves an empty feed:
@@ -83,8 +84,12 @@ The containers talk to each other over the compose network and ignore it.
 ```
 make run        # local uvicorn, hot reload, against the compose database
 make test       # full suite
-make lint       # ruff check, ruff format --check, mypy --strict
+make lint       # ruff check, ruff format --check, mypy --strict on src, tests and scripts
 make fmt        # apply ruff fixes and formatting
+make search-score   # score the running server's search against the test cases (0 to 1)
+make live-check     # pass or fail: plumbing and every documented search, against URL=... (docs/search.md)
+make search-cases   # regenerate docs/search-test-cases.md from tests/search_cases.py
+make reference-data # review a CLDR / ISO update (writes .cache/reference-data/out/)
 ```
 
 `make up` can stay running the whole time; `make run` just talks to its database.
@@ -155,13 +160,17 @@ developers running migrations against the same schema and clobbering each other,
 migration testing becomes frightening, and test runs become slow and order-dependent. A
 container per developer and a fresh one per CI run removes all of it.
 
-Eight tables:
+Thirteen tables. Eight for the catalogs:
 
 ```
 catalogs ├── catalog_kinds ├── catalog_publication_types
          ├── catalog_languages ├── catalog_subdivisions → subdivisions → countries
          └── links
 ```
+
+and five for search (see [`search.md`](search.md)): `catalog_search`, which the database keeps
+current by triggers and the application never writes, and the reference tables `country_languages`,
+`country_names`, `subdivision_names` and `country_subdivision_types`, loaded by a data migration.
 
 Six native Postgres enums, generated from `schema/catalog.schema.json`. `make psql` opens a
 shell on the development database.
@@ -200,7 +209,7 @@ Rules:
 - `downgrade()` is implemented, or raises with a reason.
 - One logical change per migration; data migrations separate from schema migrations.
 
-`0001_initial_schema` is a squash of what were eight separate migrations, done once, before
+`c8e1b73f2d04_initial_schema` is a squash of what were eight separate migrations, done once, before
 anything was deployed — no environment held applied revision history to protect. That is the
 only case where rewriting merged migrations is safe; it does not happen again once something
 is deployed.
@@ -270,6 +279,43 @@ catalog reachable at `/catalogs/{id}` while staying out of `GET /`.
 
 ---
 
+## The dev console
+
+The console is at `/dev`: <http://localhost:8000/dev> locally (after `make up`) and
+<https://registry.thoriumreader.com/dev> in production. It tries the feed, search and
+a single catalog as each kind of reader would: Thorium, KOReader, iOS, Android, Windows, a browser,
+`requests` and `curl`. A browser cannot set `Accept-Encoding` or `User-Agent`, so the page asks the
+server to call its own app in-process with that client's real headers. It shows status, the encoding
+chosen, wire against decoded bytes, time and the raw JSON, and "Compare all clients" lays them side by
+side. Results follow the OPDS `next` / `previous` links.
+
+The **Search** view (top bar) is a search page on `/search`: results update as you type, matches are
+highlighted (accent-blind), a result that matched only by typo tolerance is badged "fuzzy match", more
+results load as you scroll, and the arrow keys move through them. Pick a client and language to see
+how each reader would be answered.
+
+On a local console, clicking "Browse the catalog" (or pasting a library's feed URL into the path box)
+reads that feed from the library's own server and shows it the same way: navigation, publications with covers, and
+the next/previous links. Only public `http(s)` hosts are fetched (loopback, private and metadata
+addresses are refused, every redirect hop is checked, 2 MB and 10 s caps). A feed that is OPDS 1
+(Atom) or not JSON shows as raw text.
+
+**What exists where.** The page, the client list and the simulator (`/dev`, `/dev/clients`,
+`/dev/simulate`) are mounted in every environment. They read only what the registry already serves
+publicly, and one console request makes exactly one request to the app, so a visitor gains nothing they
+could not do without it. Only `/`, `/search` and `/catalogs/{id}` can be simulated, and the language
+value is limited to the characters an `Accept-Language` header is made of. The page is `no-store`,
+`noindex`, and has a closed content policy. Its traffic is not written to the client log, so it does not
+count as a reader.
+
+Reading a library's own feed (`/dev/fetch`) makes the server request a URL a visitor names, so it exists
+**only when `REGISTRY_ENVIRONMENT=local`**: the router is not even imported elsewhere, and production
+(which runs `staging`) answers 404. The page knows that: its library links open in a new tab and carry a
+↗, and pasting a library URL says so. Should it ever be mounted elsewhere it needs `X-Dev-Token` equal to
+`REGISTRY_DEV_FETCH_TOKEN` and reaches only hosts in a registered catalog's `catalog` link
+(`tests/e2e/test_dev_console.py`, `test_dev_fetch_guards.py`). `make live-check ... ARGS="--deployed"`
+verifies on a deployed service that it is not there.
+
 ## Generated files
 
 Three files are generated and committed. Each is diffed by CI, so a stale copy fails the build
@@ -295,7 +341,7 @@ the source and the generated file in the same change.
 make test
 ```
 
-100 tests, five layers:
+About 1,100 tests, five layers:
 
 | Layer | Database | Proves |
 |---|---|---|
@@ -324,7 +370,7 @@ code calling `commit()` releases a savepoint and the outer rollback still undoes
 
 ---
 
-## Measuring the feed
+## Measuring the feed and search
 
 ```
 make bench                 # 10, 100, 1000 recommended catalogs
@@ -335,13 +381,14 @@ It inserts synthetic catalogs titled `ZZ Bench …`, issues 120 real HTTP reques
 a different `Accept-Language` each time, and deletes its rows in a `finally` block. **Point it
 at a throwaway database**, it writes.
 
-It asserts nothing and cannot fail the build. No latency target has ever been
-stated, and an invented threshold produces flaky builds and no information
- It exists to answer "what happens at n" and to give a change a
-measured before.
+It asserts nothing and cannot fail the build: an invented threshold produces flaky builds and no
+information. It exists to answer "what happens at n" and to give a change a measured before. It is
+**local**: no network between the app and the database, so it shows the application's own work.
+Hadrien's target for search (under 100 ms warm from Europe) is judged with the numbers in
+[`performance.md`](performance.md) and the Cloud Run metrics tab, not with this script alone.
 
-Latency is linear in the number of recommended catalogs, roughly 0.1 ms each, with no knee.
-The query count stays flat at 6 until ~500 and then steps as `selectinload` chunks its `IN`
-list. Batching, not N+1. What the decomposition shows, and the order to optimise in when
-there is a reason to, is recorded in the plan.
+The feed is one database statement (ADR-062), so the time it takes grows with the number of
+recommended catalogs only through the work of rendering them: roughly 0.04 ms each on one machine,
+with no knee. Production has about a dozen. Search is one statement too, and its time follows the
+number of matches, not the size of the table (`performance.md`).
 

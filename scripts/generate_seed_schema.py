@@ -52,7 +52,7 @@ BANNER = (
 
 def relax_catalog(catalog_schema: dict[str, Any]) -> dict[str, Any]:
     """Drop the `self` and `metadata.identifier` requirements. Patterns are left untouched."""
-    relaxed = json.loads(json.dumps(catalog_schema))
+    relaxed: dict[str, Any] = json.loads(json.dumps(catalog_schema))
     relaxed.pop("$id", None)
     relaxed["properties"]["links"].pop("contains", None)
 
@@ -65,7 +65,7 @@ def build_seed_schema() -> dict[str, Any]:
     feed = load_schema_document(SCHEMA_DIR / "feed.schema.json")
     catalog = load_schema_document(SCHEMA_DIR / "catalog.schema.json")
 
-    seed = json.loads(json.dumps(feed))
+    seed: dict[str, Any] = json.loads(json.dumps(feed))
     seed["$id"] = (
         "https://edrlab.github.io/catalog-registry/schema/generated/seed-input.schema.json"
     )

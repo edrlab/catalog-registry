@@ -170,6 +170,8 @@ class CatalogSubdivisionRow(Base):
             "subdivision_code = upper(subdivision_code)", name="subdivision_code_uppercase"
         ),
         Index("ix_catalog_subdivisions_catalog_id", "catalog_id"),
+        #: Reverse lookup, "which catalogs use this subdivision": name reloads, future filters.
+        Index("ix_catalog_subdivisions_subdivision_code", "subdivision_code"),
     )
 
     catalog_id: Mapped[uuid.UUID] = mapped_column(

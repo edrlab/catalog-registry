@@ -25,7 +25,7 @@ from urllib.parse import urlsplit
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import event
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncSession,
@@ -36,9 +36,11 @@ from sqlalchemy.ext.asyncio import (
 from registry.cli.seed import seed_catalogs
 from registry.core.config import Settings
 from registry.main import create_app
+from registry.repositories.search_repository import WORD_SIMILARITY_THRESHOLD
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_FILE = REPO_ROOT / "data" / "recommended.json"
+LIBRARIES_FILE = REPO_ROOT / "data" / "libraries.json"
 
 #: Derived, never hardcoded. Hadrien extends `data/recommended.json`; a test that spells the
 #: count out fails on his commit rather than on a defect.
@@ -169,13 +171,37 @@ async def seeded_catalogs(db_session: AsyncSession) -> int:
 
 
 @pytest.fixture
+async def searchable_catalogs(db_session: AsyncSession) -> None:
+    """Both data sets (recommended.json and libraries.json), imported through the real seed
+    path. The triggers build the `catalog_search` rows; nothing here touches that table."""
+    await seed_catalogs(db_session, SEED_FILE)
+    await seed_catalogs(db_session, LIBRARIES_FILE, recommended=False)
+    await db_session.commit()
+
+
+@pytest.fixture
 async def app(
-    settings: Settings, session_factory: async_sessionmaker[AsyncSession]
+    settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    db_connection: AsyncConnection,
 ) -> AsyncIterator[FastAPI]:
-    """The real app, with its session factory rebound to the test's transaction."""
+    """The real app, with the feed/catalog and search session factories rebound to the test's
+    transaction.
+
+    The read pools' own settings (timeouts, read-only mode, the typo threshold) are NOT exercised
+    here; the tests that prove them build a real app and engine instead (`test_read_pool*`,
+    `test_search_timeout*`, `test_search_engine`).
+    """
     built = create_app(settings)
     async with built.router.lifespan_context(built):
         built.state.session_factory = session_factory
+        built.state.search_session_factory = session_factory
+        # The production search pool carries the typo threshold as a connection setting
+        # (`build_read_engine`). The test connection is not that pool, so it gets the same
+        # value for the length of the test's transaction (`SET LOCAL` ends with it).
+        await db_connection.execute(
+            text(f"SET LOCAL pg_trgm.word_similarity_threshold = {WORD_SIMILARITY_THRESHOLD}")
+        )
         yield built
 
 
@@ -186,21 +212,3 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as async_client:
         yield async_client
-
-
-class QueryCounter:
-    """Counts ORM statements. That is a rule; this is what makes it a failing test."""
-
-    def __init__(self) -> None:
-        self.count = 0
-
-    def __call__(self, *_args: object, **_kwargs: object) -> None:
-        self.count += 1
-
-
-@pytest.fixture
-def query_counter(db_session: AsyncSession) -> Iterator[QueryCounter]:
-    counter = QueryCounter()
-    event.listen(db_session.sync_session, "do_orm_execute", counter)
-    yield counter
-    event.remove(db_session.sync_session, "do_orm_execute", counter)

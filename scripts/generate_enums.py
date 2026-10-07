@@ -12,6 +12,7 @@ and which are transcribed matters when one of them drifts.
 
 import sys
 from pathlib import Path
+from typing import Any
 
 from registry.core.schema_validation import SCHEMA_DIR, load_schema_document
 
@@ -53,7 +54,7 @@ from enum import StrEnum
 '''
 
 
-def extract_values(document: dict, path: tuple[str, ...]) -> list[str]:
+def extract_values(document: dict[str, Any], path: tuple[str, ...]) -> list[str]:
     """Read an ``enum`` list from the schema, whether the node is a scalar or an array."""
     node = document["properties"]
     for key in path[:-1]:

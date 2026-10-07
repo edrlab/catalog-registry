@@ -12,6 +12,8 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.52,<2.1",
     "asyncpg>=0.31.0,<0.32",
     "alembic>=1.19.1,<2",
+    "brotli>=1.1,<2",
+    "zstandard>=0.25,<0.26",
 ]
 
 [dependency-groups]
@@ -96,6 +98,17 @@ plugins = ["pydantic.mypy"]
 # No __init__.py anywhere: registry is an implicit namespace package (PEP 420), so mypy
 # needs to be told where the package root is or it maps src/registry/core/x.py to both
 # "x" and "registry.core.x".
-mypy_path = "src"
+mypy_path = "src:scripts:."
 explicit_package_bases = true
 namespace_packages = true
+
+# Only the generator imports it, and only when run through `make reference-data`
+# (`uv run --with pycountry`), so it is not a dependency and has no stubs here.
+[[tool.mypy.overrides]]
+module = "pycountry"
+ignore_missing_imports = true
+
+# No stubs published; the one call is typed at its use.
+[[tool.mypy.overrides]]
+module = "brotli"
+ignore_missing_imports = true

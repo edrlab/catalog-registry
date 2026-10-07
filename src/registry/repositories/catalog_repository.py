@@ -1,22 +1,77 @@
 """Catalog persistence. The only module that writes SQL for catalogs.
 
-Every query returning catalogs eager-loads all five collections in the same round trip.
-`selectinload` costs one line per relationship; retrofitting it means revisiting every query,
-and `lazy="raise_on_sql"` on the models turns a forgotten one into a loud failure rather than
-an N+1 nobody notices until the dataset grows.
+Two kinds of read, deliberately different:
+
+* **The public reads** (the top-level feed, one catalog) are one statement each (ADR-062): the
+  catalogs and every child in a single round trip, mapped to the plain `CatalogView` the renderer
+  reads. They run on the read pool, which carries a timeout and read-only mode on the connection.
+* **The importers' lookups** (`fetch_catalog_by_identity_*`) load attached ORM objects with
+  `selectinload`, because the import then changes them. `lazy="raise_on_sql"` on the models turns a
+  forgotten eager load into a loud failure rather than an N+1 nobody notices.
 """
 
 import uuid
 from collections.abc import Sequence
+from typing import Final
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from registry.core.errors import NotFoundError
 from registry.db.models.catalog import Catalog
-from registry.domain.enums import CatalogStatus
+from registry.domain.catalog_view import CatalogView
 from registry.domain.links import IDENTITY_RELS
+from registry.repositories.catalog_rows import (
+    CATALOG_COLUMNS,
+    build_catalog_from_row,
+    fetch_rows,
+)
+
+#: The feed and a single catalog may take a moment on a big registry, but not forever: a read that
+#: runs past this is cancelled and answered with a 503 (ADR-062). Search has its own, much shorter.
+READ_STATEMENT_TIMEOUT_MS: Final = 10_000
+
+#: Sent once per connection to the read pool (`build_read_engine`). Read-only because these
+#: endpoints must never write.
+READ_CONNECTION_SETTINGS: Final = {
+    "statement_timeout": str(READ_STATEMENT_TIMEOUT_MS),
+    "default_transaction_read_only": "on",
+}
+
+#: The top-level feed's only query. Hits `ix_catalogs_recommended`. Newest first, then title, then
+#: id. The seed writes `created_at` staggered by position in the file (the feed's order), title
+#: breaks a tie between rows inserted in one transaction, and id breaks the rest, because a title
+#: is not unique. Without a last, total tie-break two such rows could swap places between runs.
+_RECOMMENDED = text(
+    f"""
+SELECT {CATALOG_COLUMNS}
+  FROM catalogs c
+ WHERE c.recommended AND c.status = 'active'
+ ORDER BY c.created_at DESC, c.title, c.id
+"""
+)
+
+#: `status` is filtered because `GET /catalogs/{id}` is unauthenticated: a suggested catalog is
+#: somebody's unreviewed submission, and an id is not an access control. `recommended` is not: an
+#: active catalog that is simply not recommended is a real, published catalog.
+_ACTIVE_BY_ID = text(
+    f"""
+SELECT {CATALOG_COLUMNS}
+  FROM catalogs c
+ WHERE c.id = :catalog_id AND c.status = 'active'
+"""
+)
+
+#: The hosts of the feeds the registry lists, for the dev console's deployed `/dev/fetch` (ADR-063).
+#: The host is what sits between `://` and the path of a `catalog` link.
+_REGISTERED_HOSTS = text(
+    r"""
+SELECT DISTINCT lower(substring(href FROM '^https?://([^/:?#@]+)')) AS host
+  FROM links
+ WHERE rel::text = 'catalog'
+"""
+)
 
 EAGER_COLLECTIONS = (
     selectinload(Catalog.kinds),
@@ -34,40 +89,24 @@ class CatalogRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def fetch_recommended_catalogs(self) -> Sequence[Catalog]:
-        """The top-level feed's only query. Hits `ix_catalogs_recommended`.
+    async def fetch_recommended_catalogs(self) -> Sequence[CatalogView]:
+        """The top-level feed's only query, in one statement. The service applies the primary,
+        language-based sort on top of this order."""
+        rows = await fetch_rows(self._session, _RECOMMENDED, {})
+        return [build_catalog_from_row(row) for row in rows]
 
-        Ordered newest-first by `created_at`, the feed's secondary sort key (the service
-        applies the primary, language-based sort on top of this). Title is a second `ORDER BY`
-        term purely for determinism: seed rows are inserted in one transaction and share a
-        single `created_at` under Postgres `now()` semantics, so without a tiebreaker their
-        relative order would be unspecified and two identical requests could disagree.
-        """
-        statement = (
-            select(Catalog)
-            .where(Catalog.recommended.is_(True), Catalog.status == CatalogStatus.ACTIVE)
-            .options(*EAGER_COLLECTIONS)
-            .order_by(Catalog.created_at.desc(), Catalog.title)
-        )
-        return (await self._session.scalars(statement)).all()
+    async def fetch_catalog_by_id(self, catalog_id: uuid.UUID) -> CatalogView | None:
+        """Read one published catalog in one statement. None when it does not exist, or is not
+        public."""
+        rows = await fetch_rows(self._session, _ACTIVE_BY_ID, {"catalog_id": catalog_id})
+        return build_catalog_from_row(rows[0]) if rows else None
 
-    async def fetch_catalog_by_id(self, catalog_id: uuid.UUID) -> Catalog | None:
-        """Read one published catalog. Returns None when it does not exist, or is not public.
+    async def fetch_registered_hosts(self) -> frozenset[str]:
+        """Every host that appears in a `catalog` link, lowercased."""
+        rows = await fetch_rows(self._session, _REGISTERED_HOSTS, {})
+        return frozenset(row["host"] for row in rows if row["host"])
 
-        `GET /catalogs/{id}` is unauthenticated, so this filters on `status` for the same
-        reason the feed does. A suggested catalog is somebody's unreviewed submission, and an
-        id is not an access control. `recommended` is deliberately *not* filtered: an active
-        catalog that is simply not recommended is still a real, published catalog, and the
-        back office will need to link to one.
-        """
-        statement = (
-            select(Catalog)
-            .where(Catalog.id == catalog_id, Catalog.status == CatalogStatus.ACTIVE)
-            .options(*EAGER_COLLECTIONS)
-        )
-        return (await self._session.scalars(statement)).unique().first()
-
-    async def load_catalog_by_id(self, catalog_id: uuid.UUID) -> Catalog:
+    async def load_catalog_by_id(self, catalog_id: uuid.UUID) -> CatalogView:
         """Read one catalog, raising if it is absent. `load_` raises where `fetch_` returns
         None."""
         catalog = await self.fetch_catalog_by_id(catalog_id)

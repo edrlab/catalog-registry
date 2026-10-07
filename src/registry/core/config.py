@@ -8,7 +8,7 @@ developer has to set.
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +31,13 @@ class Settings(BaseSettings):
         description="Feed-shaped document the seed command imports.",
     )
     environment: Literal["local", "test", "staging", "production"] = "local"
+    dev_fetch_token: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Shared secret for the dev console's /dev/fetch route outside local. Unset means the "
+            "route does not exist there. Set it from a secret store, never in a file."
+        ),
+    )
     base_url: str = Field(
         default="http://localhost:8000",
         description="Origin used to build the feed's absolute self link.",

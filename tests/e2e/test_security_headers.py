@@ -1,6 +1,7 @@
 """Headers and error shape on the public surface."""
 
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from registry.api.middleware import SECURITY_HEADERS
@@ -42,7 +43,7 @@ async def test_writes_are_not_advertised_cross_origin(client: AsyncClient) -> No
     assert "POST" not in response.headers.get("access-control-allow-methods", "")
 
 
-async def test_an_unexpected_error_is_a_problem_document_and_leaks_nothing(app) -> None:
+async def test_an_unexpected_error_is_a_problem_document_and_leaks_nothing(app: FastAPI) -> None:
     """The detail must never be `str(exc)`, this is a public, unauthenticated endpoint."""
     secret = "postgresql://user:hunter2@db/registry"
 
