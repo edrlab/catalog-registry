@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Registry dev console</title>
+<title>Catalog Registry</title>
 <style>
 :root{color-scheme:light;--fg:#18181b;--mut:#71717a;--line:#e4e4e7;--soft:#f4f4f5;--acc:#2563eb;--tint:#eff6ff;--ok:#15803d;--okbg:#dcfce7;--bad:#b91c1c;--badbg:#fee2e2;--warn:#a16207;--warnbg:#fef9c3;
 --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
 *{box-sizing:border-box}[hidden]{display:none!important}
 body{margin:0;background:#fff;color:var(--fg);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 .top{display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--line)}
-.top b{font-size:15px;letter-spacing:-.01em}.badge{font-size:11px;font-weight:600;color:var(--warn);background:var(--warnbg);border-radius:6px;padding:1px 7px}
+.top b{font-size:15px;letter-spacing:-.01em}
 .top .sp{flex:1}.kbd{font:11px var(--mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--mut)}
 .bar{padding:14px 20px 0;display:grid;gap:10px}
 .navrow{display:flex;gap:8px}.nb{font-weight:600;padding:5px 14px}.nb:disabled{opacity:.35;cursor:default}.nb:disabled:hover{background:#fff}
@@ -97,7 +97,7 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 </head>
 <body>
 <div id="prog" role="progressbar" aria-label="Loading"></div>
-<div class="top"><b>Registry dev console</b><span class="badge" id="envbadge">LOCAL ONLY</span><div class="views"><button data-view="explorer" class="on">Explorer</button><button data-view="search">Search</button></div><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
+<div class="top"><b>Catalog Registry</b><div class="views"><button data-view="explorer" class="on">Explorer</button><button data-view="search">Search</button></div><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
 <section id="sv" hidden>
   <div class="sbar">
     <div class="sbox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="sq" type="text" placeholder="Search libraries, places, languages" autocomplete="off" spellcheck="false" enterkeyhint="search"><button id="sclear" hidden title="Clear (Esc)">&times;</button></div>
@@ -524,8 +524,6 @@ function sFill(){if(sNext&&!sBusy&&!$('sv').hidden&&$('smore').getBoundingClient
 const sSchedule=()=>{$('sclear').hidden=!$('sq').value;clearTimeout(sTimer);sTimer=setTimeout(()=>sSearch(false),250)};
 
 (async()=>{
-  const label=DEV.environment==='local'?'LOCAL ONLY':DEV.environment.toUpperCase();
-  $('envbadge').textContent=label;
   if(!DEV.fetch)$('path').placeholder='/search?query=paris';
   clients=await(await fetch('/dev/clients')).json();
   for(const[k,c]of Object.entries(clients)){const o=el('option',null,`${c.label} \u00b7 ${c.source}`);o.value=k;$('client').append(o)}

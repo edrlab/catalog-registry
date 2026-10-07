@@ -300,7 +300,7 @@ addresses are refused, every redirect hop is checked, 2 MB and 10 s caps). A fee
 (Atom) or not JSON shows as raw text.
 
 Reading a library's own feed (`/dev/fetch`) exists only on a local console. Anywhere else the page
-knows that: the library links open in a new tab and carry a ↗, and the badge shows the environment.
+knows that: the library links open in a new tab and carry a ↗.
 If it is ever mounted elsewhere it needs `X-Dev-Token` equal to `REGISTRY_DEV_FETCH_TOKEN`, and reaches
 only hosts that appear in a registered catalog's `catalog` link.
 
