@@ -6,9 +6,10 @@ and subdivisions as arrays, and its links as one JSON array. One statement is on
 database whatever the page size, which is what keeps search under 100 ms when the database is a
 region away (docs/search.md). It is still no N+1 (R4): there is no per-row query at all.
 
-Rows become the same `Catalog` objects `render_catalog` already reads, so the renderer, and with it
-the whitelist projection (R3), is untouched. Parameters are bound with explicit array types because
-asyncpg will not infer them, and the `CAST`s make the same types explicit to PostgreSQL.
+Rows become plain `CatalogView` values with the attribute names `render_catalog` already
+reads, so the renderer, and with it the whitelist projection (R3), is untouched. Parameters are
+bound with explicit array types because asyncpg will not infer them, and the `CAST`s make the
+same types explicit to PostgreSQL.
 """
 
 from typing import Final

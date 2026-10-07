@@ -20,9 +20,23 @@ Median, real app, warm, through a proxy that adds the delay to the database
 | 0 ms (same machine) | 22 ms | **15 ms** | 17 ms | **5 ms** | 15 ms | **4 ms** |
 | 10 ms (a region away) | 227 ms | **36 ms** | 143 ms | **20 ms** | 134 ms | **19 ms** |
 
-Search: 1,012 catalogs, a page of 50. Feed and catalog: 12 catalogs, the size of production. A
-feed of 1,000 catalogs goes from 19 messages to 1 (487 ms to 191 ms at 10 ms) but stays near
-120 ms on one machine: that part is Python rendering the page.
+Search: 1,012 catalogs, a page of 50. Feed and catalog: 12 catalogs, the size of production.
+
+**What is left is Python.** A feed of 1,000 catalogs went from 19 messages to 1 (487 ms to 191 ms at
+10 ms) but still took about 125 ms on one machine. A profiler showed why: building one SQLAlchemy
+object per catalog and per kind, language and link, each with change tracking nobody uses on a read,
+was nine tenths of the Python time. The reads now build plain slotted values (`CatalogView`, with
+`NamedTuple` rows) with the same attribute names, so the renderer is unchanged:
+
+| 1,012 recommended catalogs | Before | After |
+|---|---|---|
+| Feed, one machine | 124 ms | **45 ms** |
+| Feed, 10 ms to the database | 191 ms | **119 ms** |
+| Search page of 50, one machine | 11.7 ms | **8.1 ms** |
+| Feed at production size (12) | 5.7 ms | 4.4 ms |
+
+What remains in a 1,000 catalog feed, by profile: the database round trip, validating and
+serialising the response model (about 20%, kept: it is the whitelist, R3), compression and JSON.
 
 Tests count the messages on the wire (they would have caught the 14). Still no N+1 (R4): there is
 no per-row query at all. Decisions: ADR-060, ADR-062, ADR-058 (amended).

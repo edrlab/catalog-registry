@@ -13,13 +13,12 @@ import uuid
 from typing import Any
 
 from registry.core.constants import OPDS_CATALOG_MEDIA_TYPE
-from registry.db.models.catalog import Catalog
-from registry.db.models.link import Link
+from registry.domain.catalog_view import CatalogLike, LinkLike
 from registry.domain.enums import LinkRel
 from registry.domain.links import order_links
 
 
-def render_link(link: Link) -> dict[str, Any]:
+def render_link(link: LinkLike) -> dict[str, Any]:
     """Key order matches `LinkResponse`, so a stored link and a synthesised one look alike."""
     document: dict[str, Any] = {"href": link.href}
     if link.media_type:
@@ -45,7 +44,7 @@ def build_catalog_self_link(catalog_id: uuid.UUID, *, base_url: str) -> dict[str
     }
 
 
-def render_catalog(catalog: Catalog, *, base_url: str) -> dict[str, Any]:
+def render_catalog(catalog: CatalogLike, *, base_url: str) -> dict[str, Any]:
     """Every collection is sorted before emission, so the output is deterministic."""
     metadata: dict[str, Any] = {
         "title": catalog.title,

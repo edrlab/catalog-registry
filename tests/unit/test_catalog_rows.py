@@ -8,13 +8,13 @@ No database: a row is any mapping, and asyncpg hands `jsonb` back as text, so bo
 
 import json
 import uuid
+from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from sqlalchemy import inspect
 
-from registry.db.models.catalog import Catalog
+from registry.domain.catalog_view import CatalogView
 from registry.domain.enums import (
     CatalogColor,
     CatalogKind,
@@ -248,14 +248,19 @@ def test_scalars_and_children_are_mapped_field_by_field() -> None:
     }
 
 
-def test_the_mapped_object_is_transient_and_attached_to_no_session() -> None:
+def test_the_mapped_value_is_plain_frozen_and_carries_no_orm_state() -> None:
+    """The point of `CatalogView` (measured: ORM instances were nine tenths of a feed's Python
+    time): nothing instrumented, nothing to track, nothing that can be changed by accident."""
     catalog = build_catalog_from_row(make_row(links=[link()], languages=["fr"]))
 
-    assert isinstance(catalog, Catalog)
-    state = inspect(catalog)
-    assert state.transient
-    assert state.session is None
-    assert all(inspect(child).session is None for child in (*catalog.links, *catalog.languages))
+    assert isinstance(catalog, CatalogView)
+    assert not hasattr(catalog, "_sa_instance_state")
+    assert not hasattr(catalog, "__dict__"), "slots: no per-instance dict"
+    with pytest.raises(FrozenInstanceError):
+        catalog.title = "changed"  # type: ignore[misc]
+    for child in (*catalog.links, *catalog.languages, *catalog.kinds):
+        assert isinstance(child, tuple), "a NamedTuple: immutable and cheap"
+        assert not hasattr(child, "_sa_instance_state")
 
 
 def test_created_at_is_set_because_the_feed_sorts_on_it_but_is_never_rendered() -> None:
@@ -267,29 +272,33 @@ def test_created_at_is_set_because_the_feed_sorts_on_it_but_is_never_rendered() 
     assert str(CREATED_AT.year) not in json.dumps(document)
 
 
-def test_internal_columns_are_not_set_on_the_mapped_object() -> None:
+INTERNAL = (
+    "submitter_email",
+    "submitter_name",
+    "recommended",
+    "status",
+    "updated_at",
+    "published_at",
+)
+
+
+@pytest.mark.parametrize("name", INTERNAL)
+def test_internal_columns_do_not_exist_on_the_mapped_value(name: str) -> None:
     """R3: only what the renderer projects, and `created_at` for the feed's order, is copied;
     nothing else internal rides along."""
-    catalog = build_catalog_from_row(make_row())
-
-    assert catalog.submitter_email is None
-    assert catalog.submitter_name is None
-    assert catalog.recommended is None
-    assert catalog.status is None
-    assert catalog.updated_at is None
-    assert catalog.published_at is None
+    assert not hasattr(build_catalog_from_row(make_row()), name)
 
 
-def test_an_extra_column_in_the_row_does_not_reach_the_object() -> None:
+def test_an_extra_column_in_the_row_does_not_reach_the_value() -> None:
     """A new column added to the SELECT list cannot leak by accident: the mapper copies named
     fields, not the row's keys (R3)."""
     catalog = build_catalog_from_row(
         make_row(status="suggested", recommended=True, submitter_email="a@b.example")
     )
 
-    assert catalog.status is None
-    assert catalog.recommended is None
-    assert catalog.submitter_email is None
+    for name in ("status", "recommended", "submitter_email"):
+        assert not hasattr(catalog, name)
+    assert "a@b.example" not in repr(catalog)
 
 
 def test_the_mapper_is_importable_from_the_search_repository_too() -> None:

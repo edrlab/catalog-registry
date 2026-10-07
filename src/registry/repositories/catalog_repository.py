@@ -3,8 +3,8 @@
 Two kinds of read, deliberately different:
 
 * **The public reads** (the top-level feed, one catalog) are one statement each (ADR-062): the
-  catalogs and every child in a single round trip, mapped to the `Catalog` the renderer reads. They
-  run on the read pool, which carries a timeout and read-only mode on the connection.
+  catalogs and every child in a single round trip, mapped to the plain `CatalogView` the renderer
+  reads. They run on the read pool, which carries a timeout and read-only mode on the connection.
 * **The importers' lookups** (`fetch_catalog_by_identity_*`) load attached ORM objects with
   `selectinload`, because the import then changes them. `lazy="raise_on_sql"` on the models turns a
   forgotten eager load into a loud failure rather than an N+1 nobody notices.
@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 
 from registry.core.errors import NotFoundError
 from registry.db.models.catalog import Catalog
+from registry.domain.catalog_view import CatalogView
 from registry.domain.links import IDENTITY_RELS
 from registry.repositories.catalog_rows import (
     CATALOG_COLUMNS,
@@ -77,19 +78,19 @@ class CatalogRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def fetch_recommended_catalogs(self) -> Sequence[Catalog]:
+    async def fetch_recommended_catalogs(self) -> Sequence[CatalogView]:
         """The top-level feed's only query, in one statement. The service applies the primary,
         language-based sort on top of this order."""
         rows = await fetch_rows(self._session, _RECOMMENDED, {})
         return [build_catalog_from_row(row) for row in rows]
 
-    async def fetch_catalog_by_id(self, catalog_id: uuid.UUID) -> Catalog | None:
+    async def fetch_catalog_by_id(self, catalog_id: uuid.UUID) -> CatalogView | None:
         """Read one published catalog in one statement. None when it does not exist, or is not
         public."""
         rows = await fetch_rows(self._session, _ACTIVE_BY_ID, {"catalog_id": catalog_id})
         return build_catalog_from_row(rows[0]) if rows else None
 
-    async def load_catalog_by_id(self, catalog_id: uuid.UUID) -> Catalog:
+    async def load_catalog_by_id(self, catalog_id: uuid.UUID) -> CatalogView:
         """Read one catalog, raising if it is absent. `load_` raises where `fetch_` returns
         None."""
         catalog = await self.fetch_catalog_by_id(catalog_id)

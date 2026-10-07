@@ -1,6 +1,6 @@
 """What every public read shares: the columns of a catalog and its children in one SELECT list, the
-mapping from such a row to the `Catalog` the renderer reads, and the one place a read statement is
-run (ADR-060, ADR-062).
+mapping from such a row to the `CatalogView` the renderer reads, and the one place a read statement
+is run (ADR-060, ADR-062).
 
 A catalog's kinds, publication types, languages and subdivisions come back as arrays and its links
 as one JSON array, each from a correlated sub-select on an indexed `catalog_id`. So a page of
@@ -16,14 +16,14 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.core.errors import ReadTimeoutError
-from registry.db.models.catalog import (
-    Catalog,
-    CatalogKindRow,
-    CatalogLanguageRow,
-    CatalogPublicationTypeRow,
-    CatalogSubdivisionRow,
+from registry.domain.catalog_view import (
+    CatalogView,
+    KindRow,
+    LanguageRow,
+    LinkRow,
+    PublicationTypeRow,
+    SubdivisionRow,
 )
-from registry.db.models.link import Link
 from registry.domain.enums import (
     CatalogColor,
     CatalogKind,
@@ -52,8 +52,8 @@ CATALOG_COLUMNS: Final = """c.id AS catalog_id, c.created_at, c.title, c.descrip
 _QUERY_CANCELED: Final = "57014"
 
 
-def build_catalog_from_row(row: Any) -> Catalog:
-    """A row with `CATALOG_COLUMNS` as the `Catalog` the renderer reads. Not attached to a session.
+def build_catalog_from_row(row: Any) -> CatalogView:
+    """A row with `CATALOG_COLUMNS` as the plain `CatalogView` the renderer reads.
 
     Only what `render_catalog` projects, and `created_at` for the feed's ordering, is set. A link's
     `rel` is a database enum, hence `LinkRel`.
@@ -61,7 +61,7 @@ def build_catalog_from_row(row: Any) -> Catalog:
     links = row["links"]
     if isinstance(links, str):  # asyncpg hands jsonb back as text
         links = json.loads(links)
-    return Catalog(
+    return CatalogView(
         id=row["catalog_id"],
         # Not rendered (the renderer is a whitelist, R3): the feed's language sort ties on it.
         created_at=row["created_at"],
@@ -71,20 +71,19 @@ def build_catalog_from_row(row: Any) -> Catalog:
         country_code=row["country_code"],
         city=row["city"],
         coverage=CoverageScope(row["coverage"]) if row["coverage"] else None,
-        kinds=[CatalogKindRow(kind=CatalogKind(value)) for value in row["kinds"]],
+        kinds=[KindRow(CatalogKind(value)) for value in row["kinds"]],
         publication_types=[
-            CatalogPublicationTypeRow(publication_type=PublicationType(value))
-            for value in row["publication_types"]
+            PublicationTypeRow(PublicationType(v)) for v in row["publication_types"]
         ],
-        languages=[CatalogLanguageRow(language_tag=value) for value in row["languages"]],
-        subdivisions=[CatalogSubdivisionRow(subdivision_code=v) for v in row["subdivisions"]],
+        languages=[LanguageRow(value) for value in row["languages"]],
+        subdivisions=[SubdivisionRow(value) for value in row["subdivisions"]],
         links=[
-            Link(
-                href=link["href"],
-                media_type=link["type"],
-                rel=LinkRel(link["rel"]),
-                templated=bool(link["templated"]),
-                title=link["title"],
+            LinkRow(
+                link["href"],
+                link["type"],
+                LinkRel(link["rel"]),
+                bool(link["templated"]),
+                link["title"],
             )
             for link in links
         ],

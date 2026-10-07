@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.cli.seed import import_catalog_document
 from registry.db.models.catalog import Catalog
+from registry.domain.catalog_view import CatalogLike
 from registry.domain.enums import CatalogStatus
 from registry.rendering.catalog_renderer import render_catalog
 from registry.repositories.catalog_repository import EAGER_COLLECTIONS, CatalogRepository
@@ -43,7 +44,7 @@ LANGUAGES = [f"x{a}{b}" for a in "abcdef" for b in "abcde"]  # 30 distinct lower
 SUBDIVISION_CODES = [f"FR-Q{n:02d}" for n in range(30)]
 
 
-def as_text(catalog: Catalog) -> str:
+def as_text(catalog: CatalogLike) -> str:
     """Key order included: compared as text, not as dicts."""
     return json.dumps(render_catalog(catalog, base_url=BASE), ensure_ascii=False)
 
@@ -128,8 +129,8 @@ async def test_the_one_statement_read_is_a_fresh_snapshot_not_the_attached_objec
 
     assert first is not None and second is not None
     assert first is not second
-    assert first is not attached
-    assert first not in db_session
+    assert first is not attached  # type: ignore[comparison-overlap]
+    assert not hasattr(first, "_sa_instance_state"), "a plain value, not an ORM object"
     assert as_text(first) == as_text(second) == as_text(attached)
 
 

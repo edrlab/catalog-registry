@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.cli.seed import import_catalog_document
 from registry.db.models.catalog import Catalog
+from registry.domain.catalog_view import CatalogLike
 from registry.domain.search_query import parse_search_query
 from registry.rendering.catalog_renderer import render_catalog
 from registry.repositories.catalog_repository import CatalogRepository
@@ -35,12 +36,12 @@ LANGUAGES = [f"x{a}{b}" for a in "abcdef" for b in "abcde"]  # 30 distinct lower
 SUBDIVISION_CODES = [f"FR-Q{n:02d}" for n in range(30)]
 
 
-def rendered_json(catalog: Catalog) -> str:
+def rendered_json(catalog: CatalogLike) -> str:
     """Key order included: compared as text, not as dicts."""
     return json.dumps(render_catalog(catalog, base_url=BASE), ensure_ascii=False)
 
 
-def rendered_up_to_link_order(catalog: Catalog) -> str:
+def rendered_up_to_link_order(catalog: CatalogLike) -> str:
     """Like `rendered_json`, but links that share a rel are put in href order first. The renderer
     now orders them itself (`order_links(..., then_by=href)`), so this is belt and braces for the
     tests about something else; the one about order is the last in the file."""
@@ -51,7 +52,7 @@ def rendered_up_to_link_order(catalog: Catalog) -> str:
 
 async def search(
     session: AsyncSession, query: str, *, limit: int = 50, offset: int = 0
-) -> tuple[int, list[Catalog]]:
+) -> tuple[int, list[CatalogLike]]:
     page = await CatalogSearchRepository(session).search_catalogs(
         parse_search_query(query), limit=limit, offset=offset
     )

@@ -102,7 +102,6 @@ async def test_a_returned_snapshot_is_not_changed_by_a_later_change_to_the_row(
     await db_session.commit()
 
     assert snapshot.title == title
-    assert snapshot not in db_session
     renamed = await repository.fetch_catalog_by_id(snapshot.id)
     assert renamed is not None and renamed.title == "Renamed"
 
