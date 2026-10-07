@@ -64,7 +64,7 @@ CLIENTS: Final[dict[str, dict[str, Any]]] = {
 }
 
 #: Only the public reads. No `/dev` (no recursion), no health, no docs.
-_PATH: Final = r"^/(search\?[^#\s]*|catalogs/[0-9a-fA-F-]{36})?$"
+_PATH: Final = r"^/(search(\?[^#\s]*)?|catalogs/[0-9a-fA-F-]{36})?$"
 
 _HTML: Final = Path(__file__).resolve().parents[1] / "dev_console.html"
 

@@ -102,3 +102,11 @@ async def test_an_unknown_client_is_rejected(local_client: AsyncClient) -> None:
     response = await local_client.get(SIMULATE, params={"path": "/", "client": "nope"})
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize("path", ["/search", "/search?query=paris", "/"])
+async def test_a_bare_search_path_is_allowed(local_client: AsyncClient, path: str) -> None:
+    response = await local_client.get(SIMULATE, params={"path": path, "client": "curl"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == 200

@@ -100,7 +100,7 @@ async function send(){
   const path=$('path').value.trim()||'/';
   saveHash();selected=null;
   try{last=await sim(path,$('client').value);}
-  catch(e){last=null;$('status').replaceChildren(el('span','err',e.message));$('rows').replaceChildren(el('div','empty err','Path must be /, /search?… or /catalogs/<uuid>'));return}
+  catch(e){last=null;$('status').replaceChildren(el('span','err',e.message));$('rows').replaceChildren(el('div','empty err','Path must be /, /search[?…] or /catalogs/<uuid>'));return}
   render();
 }
 
