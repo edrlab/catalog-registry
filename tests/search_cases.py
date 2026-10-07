@@ -73,7 +73,14 @@ NO_COUNTRY = "Catalogs without a country"
 #: Every scored search of the plan, in the order of the plan. Ids are not spelled out: titles are
 #: unique in the data.
 QUALITY_CASES: list[Case] = [
-    c(PLACES, "Paris", "Title word", (PARIS,), words(PARIS)),
+    c(
+        PLACES,
+        "Paris",
+        "Title word, and since the city was filled in also the city",
+        (PARIS,),
+        words(PARIS),
+        "The city (`Paris`, label C) adds to the title match: the score went from 0.608 to 0.638.",
+    ),
     c(PLACES, "ile-de-france", "Region name with hyphens", (PARIS,), words(PARIS)),
     c(
         PLACES,
@@ -524,6 +531,37 @@ REALISTIC_TYPOS: list[Case] = [
 #: The realistic typos sit right after the hand-picked ones, before the query syntax.
 _AT = next(i for i, case in enumerate(QUALITY_CASES) if case.section == SYNTAX_SECTION)
 QUALITY_CASES[_AT:_AT] = REALISTIC_TYPOS
+
+
+@dataclass(frozen=True)
+class PageCase:
+    """A search walked page by page. The real page size is 50, which twelve catalogs cannot fill,
+    so the same query is read with a smaller page: the pages must add up to the whole list with
+    nothing repeated or skipped, in the same order every time."""
+
+    query: str
+    size: int
+    pages: tuple[tuple[str, ...], ...]
+    checks: str
+    note: str = ""
+
+
+PAGE_CASES: list[PageCase] = [
+    PageCase(
+        "bibliothèque de Paris",
+        2,
+        ((PARIS, OPENBARE), (ROMANDE, RUSSE), (LIRTUEL,)),
+        "Pages add up to the full list, nothing repeated or skipped",
+    ),
+    PageCase(
+        "Belgique",
+        1,
+        ((LIRTUEL,), (OPENBARE,)),
+        "Two catalogs with the same score keep the same order, run after run",
+        "Both have exactly the same score. The order comes from the tie-breaker (import date, then "
+        "id), which the query has to keep.",
+    ),
+]
 
 #: The exact-result regression tests read these. (query, [(title, tier)])
 CASES = [(case.query, case.today) for case in QUALITY_CASES]

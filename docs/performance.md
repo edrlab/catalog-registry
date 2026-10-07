@@ -27,6 +27,18 @@ feed of 1,000 catalogs goes from 19 messages to 1 (487 ms to 191 ms at 10 ms) bu
 Tests count the messages on the wire (they would have caught the 14). Still no N+1 (R4): there is
 no per-row query at all. Decisions: ADR-060, ADR-062, ADR-058 (amended).
 
+## Three connection pools
+
+| Pool | Used by | Settings on the connection |
+|---|---|---|
+| search | `/search` | read-only, stops a statement after 1 s, typo threshold 0.5 |
+| read | `/`, `/catalogs/{id}` | read-only, stops a statement after 10 s |
+| main | the importers and `/health/ready` | none (can write) |
+
+The limits are sent once when a connection opens, not on every request, so a read costs one message.
+A read that runs past its limit answers `503` as a problem document. A connection the database dropped
+while it sat idle is retried once. With up to 5 instances, that is at most about 225 connections.
+
 ## Where it runs, and what it costs
 
 Cloud Run `thorium-catalog-registry` is in **europe-west1** (Belgium); Cloud SQL

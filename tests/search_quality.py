@@ -16,7 +16,15 @@ same code scores `today` (what the tests pin), a local run and a deployed instan
 import math
 from dataclasses import dataclass
 
-from tests.search_cases import OPENBARE, PARIS, QUALITY_CASES, ROMANDE, RUSSE, Case
+from tests.search_cases import (
+    OPENBARE,
+    PAGE_CASES,
+    PARIS,
+    QUALITY_CASES,
+    ROMANDE,
+    RUSSE,
+    Case,
+)
 
 NDCG_DEPTH = 10
 
@@ -135,6 +143,10 @@ def _today_text(case: Case) -> str:
     )
 
 
+def _pages_text(pages: tuple[tuple[str, ...], ...]) -> str:
+    return " / ".join(", ".join(_name(title) for title in page) for page in pages)
+
+
 def _cell(text: str) -> str:
     return text.replace("|", "\\|") or "(empty)"
 
@@ -229,17 +241,38 @@ def render_cases_markdown() -> str:
     lines += [
         "## Pages",
         "",
-        "The real page size is 50. With 12 catalogs a page cannot be filled, so the same query is "
-        "tested with smaller pages: pages add up to the full list with nothing repeated or "
-        "skipped, and two catalogs with the same score keep the same order (import date, then "
-        "id). See [`tests/e2e/test_search_pagination.py`](../tests/e2e/test_search_pagination.py) "
-        "and [`tests/integration/test_search_table.py`]"
+        "The real page size is 50. Twelve catalogs cannot fill a page, so the same query is read "
+        "with a smaller page. Each page is listed between the slashes.",
+        "",
+        "| Search | What it checks | Expected | Today | Note |",
+        "| --- | --- | --- | --- | --- |",
+        *[
+            f"| `{p.query}`, {p.size} per page, pages 1 to {len(p.pages)} | {_cell(p.checks)} | "
+            f"{_cell(_pages_text(p.pages))} | {_cell(_pages_text(p.pages))} | {_cell(p.note)} |"
+            for p in PAGE_CASES
+        ],
+        "",
+        "More paging checks (page past the end, links, the 1,000 page limit, 120 catalogs over "
+        "three pages) are in "
+        "[`tests/e2e/test_search_pagination.py`](../tests/e2e/test_search_pagination.py) and "
+        "[`tests/integration/test_search_table.py`](../tests/integration/test_search_table.py).",
+        "",
+        "## French overseas places",
+        "",
+        "Synthetic catalogs stand in for libraries that do not exist yet: one covering New "
+        "Caledonia (FR-NC), one Guyane (FR-973), both with country `FR`. `Nouvelle-Calédonie`, "
+        "`New Caledonia`, `nouvelle caledonie`, `Guyane`, `French Guiana` and the typo `guyanne` "
+        "find them, and `France` finds the Paris library and both. See "
+        "[`tests/integration/test_search_table.py`]"
         "(../tests/integration/test_search_table.py).",
         "",
-        "## French overseas places and city names",
+        "## City names",
         "",
-        "Synthetic catalogs stand in for libraries that do not exist yet (New Caledonia, Guyane); "
-        "the Paris library carries `city: Paris`. Covered by "
+        "A city goes into the search with the same weight as a subdivision (label C), below the "
+        "country. The Paris library now carries `city: Paris`, but its title also says Paris, so "
+        "no seed search can show the city alone. That is tested with synthetic catalogs: a "
+        "city-only match is found, a title match outranks a country match which outranks a city "
+        "match, and changing or removing the city re-indexes the row. See "
         "[`tests/integration/test_search_table.py`](../tests/integration/test_search_table.py) "
         "and [`tests/integration/test_search_lifecycle.py`]"
         "(../tests/integration/test_search_lifecycle.py).",

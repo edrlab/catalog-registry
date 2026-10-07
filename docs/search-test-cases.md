@@ -32,7 +32,7 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 
 | Search | What it checks | Expected | Today | Score | Note |
 | --- | --- | --- | --- | --- | --- |
-| `Paris` | Title word | BnParis | BnParis | 1.00 |  |
+| `Paris` | Title word, and since the city was filled in also the city | BnParis | BnParis | 1.00 | The city (`Paris`, label C) adds to the title match: the score went from 0.608 to 0.638. |
 | `ile-de-france` | Region name with hyphens | BnParis | BnParis | 1.00 |  |
 | `Île de France` | Same name typed without hyphens | BnParis first | BnParis, De Openbare, Lirtuel | 0.33 | Both Belgian libraries come back because of 'de' (Région de Bruxelles-Capitale, De Openbare). Accepted for now (Q5): there are no stop words. |
 | `France` | Country name, weight B | BnParis | BnParis | 1.00 |  |
@@ -161,11 +161,22 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 
 ## Pages
 
-The real page size is 50. With 12 catalogs a page cannot be filled, so the same query is tested with smaller pages: pages add up to the full list with nothing repeated or skipped, and two catalogs with the same score keep the same order (import date, then id). See [`tests/e2e/test_search_pagination.py`](../tests/e2e/test_search_pagination.py) and [`tests/integration/test_search_table.py`](../tests/integration/test_search_table.py).
+The real page size is 50. Twelve catalogs cannot fill a page, so the same query is read with a smaller page. Each page is listed between the slashes.
 
-## French overseas places and city names
+| Search | What it checks | Expected | Today | Note |
+| --- | --- | --- | --- | --- |
+| `bibliothèque de Paris`, 2 per page, pages 1 to 3 | Pages add up to the full list, nothing repeated or skipped | BnParis, De Openbare / BN Romande, Bibliothèque russe et slave / Lirtuel | BnParis, De Openbare / BN Romande, Bibliothèque russe et slave / Lirtuel | (empty) |
+| `Belgique`, 1 per page, pages 1 to 2 | Two catalogs with the same score keep the same order, run after run | Lirtuel / De Openbare | Lirtuel / De Openbare | Both have exactly the same score. The order comes from the tie-breaker (import date, then id), which the query has to keep. |
 
-Synthetic catalogs stand in for libraries that do not exist yet (New Caledonia, Guyane); the Paris library carries `city: Paris`. Covered by [`tests/integration/test_search_table.py`](../tests/integration/test_search_table.py) and [`tests/integration/test_search_lifecycle.py`](../tests/integration/test_search_lifecycle.py).
+More paging checks (page past the end, links, the 1,000 page limit, 120 catalogs over three pages) are in [`tests/e2e/test_search_pagination.py`](../tests/e2e/test_search_pagination.py) and [`tests/integration/test_search_table.py`](../tests/integration/test_search_table.py).
+
+## French overseas places
+
+Synthetic catalogs stand in for libraries that do not exist yet: one covering New Caledonia (FR-NC), one Guyane (FR-973), both with country `FR`. `Nouvelle-Calédonie`, `New Caledonia`, `nouvelle caledonie`, `Guyane`, `French Guiana` and the typo `guyanne` find them, and `France` finds the Paris library and both. See [`tests/integration/test_search_table.py`](../tests/integration/test_search_table.py).
+
+## City names
+
+A city goes into the search with the same weight as a subdivision (label C), below the country. The Paris library now carries `city: Paris`, but its title also says Paris, so no seed search can show the city alone. That is tested with synthetic catalogs: a city-only match is found, a title match outranks a country match which outranks a city match, and changing or removing the city re-indexes the row. See [`tests/integration/test_search_table.py`](../tests/integration/test_search_table.py) and [`tests/integration/test_search_lifecycle.py`](../tests/integration/test_search_lifecycle.py).
 
 ## What this tells us so far
 

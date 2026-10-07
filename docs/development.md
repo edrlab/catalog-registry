@@ -46,7 +46,8 @@ make up
 
 1. builds the image and starts Postgres and the API under Docker Compose
 2. checks the database container is actually reachable on the compose network
-3. runs `alembic upgrade head`. Eight tables, two migrations, 249 countries
+3. runs `alembic upgrade head`. Thirteen tables (eight for catalogs, five for search), four
+   migrations, 249 countries, and the search reference data
 
 It does **not** seed. `make up` is run many times a day, and a command you run that often
 must not keep reinstating rows you deleted on purpose. A fresh database serves an empty feed:
@@ -85,6 +86,9 @@ make run        # local uvicorn, hot reload, against the compose database
 make test       # full suite
 make lint       # ruff check, ruff format --check, mypy --strict on src, tests and scripts
 make fmt        # apply ruff fixes and formatting
+make search-score   # score the running server's search against the test cases (0 to 1)
+make search-cases   # regenerate docs/search-test-cases.md from tests/search_cases.py
+make reference-data # review a CLDR / ISO update (writes .cache/reference-data/out/)
 ```
 
 `make up` can stay running the whole time; `make run` just talks to its database.
@@ -155,13 +159,17 @@ developers running migrations against the same schema and clobbering each other,
 migration testing becomes frightening, and test runs become slow and order-dependent. A
 container per developer and a fresh one per CI run removes all of it.
 
-Eight tables:
+Thirteen tables. Eight for the catalogs:
 
 ```
 catalogs ├── catalog_kinds ├── catalog_publication_types
          ├── catalog_languages ├── catalog_subdivisions → subdivisions → countries
          └── links
 ```
+
+and five for search (see [`search.md`](search.md)): `catalog_search`, which the database keeps
+current by triggers and the application never writes, and the reference tables `country_languages`,
+`country_names`, `subdivision_names` and `country_subdivision_types`, loaded by a data migration.
 
 Six native Postgres enums, generated from `schema/catalog.schema.json`. `make psql` opens a
 shell on the development database.
@@ -200,7 +208,7 @@ Rules:
 - `downgrade()` is implemented, or raises with a reason.
 - One logical change per migration; data migrations separate from schema migrations.
 
-`0001_initial_schema` is a squash of what were eight separate migrations, done once, before
+`c8e1b73f2d04_initial_schema` is a squash of what were eight separate migrations, done once, before
 anything was deployed — no environment held applied revision history to protect. That is the
 only case where rewriting merged migrations is safe; it does not happen again once something
 is deployed.
@@ -324,7 +332,7 @@ code calling `commit()` releases a savepoint and the outer rollback still undoes
 
 ---
 
-## Measuring the feed
+## Measuring the feed and search
 
 ```
 make bench                 # 10, 100, 1000 recommended catalogs
@@ -341,8 +349,8 @@ information. It exists to answer "what happens at n" and to give a change a meas
 Hadrien's target for search (under 100 ms warm from Europe) is judged with the numbers in
 [`performance.md`](performance.md) and the Cloud Run metrics tab, not with this script alone.
 
-Latency is linear in the number of recommended catalogs, roughly 0.1 ms each, with no knee.
-The query count stays flat at 6 until ~500 and then steps as `selectinload` chunks its `IN`
-list. Batching, not N+1. What the decomposition shows, and the order to optimise in when
-there is a reason to, is recorded in the plan.
+The feed is one database statement (ADR-062), so the time it takes grows with the number of
+recommended catalogs only through the work of rendering them: roughly 0.1 ms each on one machine,
+with no knee. Production has about a dozen. Search is one statement too, and its time follows the
+number of matches, not the size of the table (`performance.md`).
 

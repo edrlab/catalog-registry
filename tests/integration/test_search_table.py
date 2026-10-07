@@ -19,7 +19,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from registry.cli.seed import import_catalog_document
 from registry.domain.search_query import parse_search_query
 from registry.repositories.search_repository import CatalogSearchRepository
-from tests.search_cases import CASES, LIRTUEL, OPENBARE, PARIS, trigrams, words
+from tests.search_cases import (
+    CASES,
+    LIRTUEL,
+    OPENBARE,
+    PAGE_CASES,
+    PARIS,
+    PageCase,
+    trigrams,
+    words,
+)
 from tests.search_helpers import ALL_TITLES, search_rows
 
 pytestmark = pytest.mark.integration
@@ -214,3 +223,32 @@ async def test_a_title_match_outranks_a_country_match_which_outranks_a_city_matc
     scores = [score for _, _, score in rows]
     assert scores == sorted(scores, reverse=True)
     assert scores[0] > scores[1] > scores[2]
+
+
+@pytest.mark.parametrize("case", PAGE_CASES, ids=lambda case: f"{case.query} x{case.size}")
+async def test_each_page_of_a_walk_is_what_the_test_case_page_says(
+    db_session: AsyncSession, searchable_catalogs: None, case: PageCase
+) -> None:
+    """The rows of the "Pages" table on docs/search-test-cases.md, read page by page. A walk of
+    the same search twice gives the same pages: ties keep their order."""
+    query = parse_search_query(case.query)
+    repository = CatalogSearchRepository(db_session)
+
+    async def walk() -> list[tuple[str, ...]]:
+        pages: list[tuple[str, ...]] = []
+        for number in range(len(case.pages) + 1):
+            page = await repository.search_catalogs(
+                query, limit=case.size, offset=number * case.size
+            )
+            titles = tuple(catalog.title for catalog in page.catalogs)
+            if not titles:
+                break
+            pages.append(titles)
+        return pages
+
+    first = await walk()
+
+    assert first == [tuple(page) for page in case.pages]
+    assert await walk() == first
+    flat = [title for page in first for title in page]
+    assert len(flat) == len(set(flat)), "nothing repeated"
