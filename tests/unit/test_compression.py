@@ -37,7 +37,8 @@ def test_the_header_is_read_leniently_but_never_guessed_at(
         ("gzip, deflate, br", "br"),  # Thorium Reader (node-fetch), browsers
         ("gzip, deflate", "gzip"),  # URLSession, Node fetch, requests, httpx, OkHttp
         ("gzip", "gzip"),  # Android HttpURLConnection
-        ("gzip, deflate, br, zstd", "br"),  # recent browsers: zstd is not offered
+        ("gzip, deflate, br, zstd", "zstd"),  # recent browsers: it names zstd, so it gets it
+        ("gzip, deflate, br", "br"),
         ("deflate, gzip", "gzip"),  # curl --compressed
         ("gzip;q=1.0,deflate;q=0.6,identity;q=0.3", "gzip"),  # Ruby Net::HTTP
         ("identity", None),  # KOReader, Python urllib: the body as it is
@@ -49,11 +50,16 @@ def test_the_header_is_read_leniently_but_never_guessed_at(
         ("gzip;q=0.5, br;q=0.5", "br"),  # a tie goes to the server's order
         ("br;q=0, gzip", "gzip"),  # q=0 refuses a coding
         ("br;q=0, gzip;q=0", None),
-        ("*", "br"),  # anything goes: our first choice
+        ("*", "br"),  # anything goes: our first choice, but never zstd, which must be named
+        ("zstd", "zstd"),
+        ("zstd;q=0, br", "br"),  # q=0 refuses it
+        ("zstd;q=0.5, br", "br"),  # the client prefers br
+        ("zstd;q=0.5, br;q=0.5", "zstd"),  # a tie goes to the server: the fastest first
+        ("*, zstd;q=0", "br"),
         ("*;q=0", None),
         ("*;q=0.1, gzip", "gzip"),  # named beats the wildcard
         ("*, br;q=0", "gzip"),
-        ("deflate, zstd, compress", None),  # only codings we do not offer
+        ("deflate, compress", None),  # only codings we do not offer
         ("x-gzip", None),
     ],
 )

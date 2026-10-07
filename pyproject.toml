@@ -13,6 +13,7 @@ dependencies = [
     "asyncpg>=0.31.0,<0.32",
     "alembic>=1.19.1,<2",
     "brotli>=1.1,<2",
+    "zstandard>=0.25,<0.26",
 ]
 
 [dependency-groups]

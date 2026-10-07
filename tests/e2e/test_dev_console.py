@@ -64,7 +64,7 @@ async def test_the_page_is_served_locally_with_a_closed_policy(local_client: Asy
     ("client", "encoding"),
     [
         ("thorium", "br"),
-        ("browser", "br"),
+        ("browser", "zstd"),
         ("urlsession", "gzip"),
         ("android", "gzip"),
         ("koreader", None),

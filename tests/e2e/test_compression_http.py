@@ -12,6 +12,7 @@ from collections.abc import Iterator
 
 import brotli
 import pytest
+import zstandard
 from httpx import AsyncClient
 
 from registry.api.compression import MINIMUM_SIZE
@@ -57,6 +58,26 @@ async def test_a_client_that_offers_brotli_gets_brotli(
     assert int(headers["content-length"]) == len(body)
 
 
+async def test_a_client_that_names_zstd_gets_zstd(
+    client: AsyncClient, seeded_catalogs: int
+) -> None:
+    expected = await plain_body(client, "/")
+
+    status, headers, body = await raw(client, "/", "gzip, deflate, br, zstd")
+
+    assert status == 200
+    assert headers["content-encoding"] == "zstd"
+    assert zstandard.ZstdDecompressor().decompress(body) == expected
+    assert len(body) < len(expected) / 3
+    assert int(headers["content-length"]) == len(body)
+
+
+async def test_a_wildcard_alone_never_gets_zstd(client: AsyncClient, seeded_catalogs: int) -> None:
+    _, headers, _ = await raw(client, "/", "*")
+
+    assert headers["content-encoding"] == "br"
+
+
 async def test_a_client_that_offers_only_gzip_gets_gzip(
     client: AsyncClient, seeded_catalogs: int
 ) -> None:
@@ -69,7 +90,7 @@ async def test_a_client_that_offers_only_gzip_gets_gzip(
     assert int(headers["content-length"]) == len(body)
 
 
-@pytest.mark.parametrize("offered", ["identity", None, "", "deflate, zstd", "br;q=0, gzip;q=0"])
+@pytest.mark.parametrize("offered", ["identity", None, "", "deflate, compress", "br;q=0, gzip;q=0"])
 async def test_a_client_that_refuses_or_names_nothing_we_offer_gets_the_body_as_it_is(
     client: AsyncClient, seeded_catalogs: int, offered: str | None
 ) -> None:

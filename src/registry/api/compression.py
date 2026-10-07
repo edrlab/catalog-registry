@@ -2,13 +2,13 @@
 
 The client says what it can decode in `Accept-Encoding` (RFC 9110 §12.5.3); this picks from what
 the server offers. Measured on real clients (docs/search.md): gzip is the only coding every client
-sends by default; Thorium Reader and browsers also offer `br`; KOReader sends `identity` and must
-get the body as it is. So: `br` when the client prefers it, `gzip` otherwise, nothing when it asks
-for nothing.
+sends by default; Thorium Reader and browsers also offer `br`; recent browsers add `zstd`; KOReader
+sends `identity` and must get the body as it is. So: `zstd` if the client names it, else `br`, else
+`gzip`, nothing when it asks for nothing.
 
-Levels are the measured sweet spot for a response made while the client waits: brotli 4 and gzip 6.
-Never brotli 11 (25 ms for a 27 KB page) or gzip 9. `zstd` is not offered: only recent browsers
-send it.
+Levels are the measured sweet spot for a response made while the client waits: zstd 3, brotli 4 and
+gzip 6. Never brotli 11 (25 ms for a 27 KB page) or gzip 9. zstd compresses about 5 to 10 times
+faster than brotli 4 at a similar size, and only a client that names it ever gets it (RFC 8878).
 """
 
 import gzip
@@ -18,19 +18,25 @@ import sys
 from typing import Final
 
 import brotli
+import zstandard
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 #: In the server's order of preference, used to break a tie between equal q-values.
-OFFERED: Final = ("br", "gzip")
+OFFERED: Final = ("zstd", "br", "gzip")
 
 #: Below this the header costs more than the compression saves.
 MINIMUM_SIZE: Final = 1024
 
 BROTLI_QUALITY: Final = 4
+ZSTD_LEVEL: Final = 3
 GZIP_LEVEL: Final = 6
 
 _USER_AGENT_LIMIT: Final = 200
+
+#: One compressor for every request: compression runs synchronously on the event loop, so two
+#: requests never use it at once.
+_ZSTD: Final = zstandard.ZstdCompressor(level=ZSTD_LEVEL)
 
 
 def parse_accept_encoding(header: str | None) -> dict[str, float]:
@@ -62,13 +68,14 @@ def choose_encoding(header: str | None) -> str | None:
 
     No header, `identity`, or only codings we do not offer all mean `None`: an absent header is read
     as identity (the safest reading; RFC 9110 allows more), and `identity` is what KOReader sends.
-    `*` stands for every coding not named. A coding with q=0 is refused.
+    `*` stands for every coding not named, except `zstd`: a client has to name it, because a
+    wildcard is no proof that it can decode a coding this new. A coding with q=0 is refused.
     """
     wanted = parse_accept_encoding(header)
     best: str | None = None
     best_quality = 0.0
     for coding in OFFERED:
-        quality = wanted.get(coding, wanted.get("*", 0.0))
+        quality = wanted.get(coding, 0.0 if coding == "zstd" else wanted.get("*", 0.0))
         if quality > best_quality:
             best, best_quality = coding, quality
     return best
@@ -98,6 +105,17 @@ def _add_vary(headers: MutableHeaders) -> None:
     headers.setdefault("vary", "Accept-Encoding")
     if "accept-encoding" not in headers["vary"].lower():
         headers["vary"] = f"{headers['vary']}, Accept-Encoding"
+
+
+def _compress(body: bytes, encoding: str) -> bytes:
+    compressed: bytes
+    if encoding == "zstd":
+        compressed = _ZSTD.compress(body)
+    elif encoding == "br":
+        compressed = brotli.compress(body, quality=BROTLI_QUALITY)
+    else:
+        compressed = gzip.compress(body, compresslevel=GZIP_LEVEL, mtime=0)
+    return compressed
 
 
 class CompressionMiddleware:
@@ -153,11 +171,7 @@ class CompressionMiddleware:
             ):
                 # gzip with mtime=0: the same body always gives the same bytes, so a cache can
                 # hold one copy.
-                body = (
-                    brotli.compress(body, quality=BROTLI_QUALITY)
-                    if encoding == "br"
-                    else gzip.compress(body, compresslevel=GZIP_LEVEL, mtime=0)
-                )
+                body = _compress(body, encoding)
                 headers["content-encoding"] = encoding
                 applied = encoding
             headers["content-length"] = str(len(body))

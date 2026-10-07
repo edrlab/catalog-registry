@@ -30,6 +30,7 @@ from urllib.parse import urljoin, urlsplit
 
 import brotli
 import httpx
+import zstandard
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.types import ASGIApp, Message
@@ -39,7 +40,7 @@ router = APIRouter(prefix="/dev", tags=["dev"], include_in_schema=False)
 #: What each reader sends. `source` is `measured` where the headers were read from the client's own
 #: source or captured from a real run (docs/performance.md), `typical` where they are the common
 #: defaults and not verified. The User-Agent strings are examples. The browser row adds `zstd`,
-#: which the server does not offer, so it must be ignored.
+#: so it is the one that exercises that coding.
 CLIENTS: Final[dict[str, dict[str, Any]]] = {
     "thorium": {
         "label": "Thorium Reader (Electron, node-fetch)",
@@ -153,6 +154,8 @@ def decode(body: bytes, encoding: str | None) -> bytes:
     if encoding == "br":
         decoded: bytes = brotli.decompress(body)
         return decoded
+    if encoding == "zstd":
+        return zstandard.ZstdDecompressor().decompress(body)
     if encoding == "gzip":
         return gzip.decompress(body)
     if encoding == "deflate":
