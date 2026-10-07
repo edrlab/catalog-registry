@@ -55,7 +55,7 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 .pv .bd{padding:12px 20px 20px}.pv .desc{color:#3f3f46;margin:0 0 14px}
 .pv dl{display:grid;grid-template-columns:130px 1fr;gap:6px 12px;margin:0 0 16px;font-size:13px}.pv dt{color:var(--mut)}.pv dd{margin:0;word-break:break-word}
 .pv .acts{display:flex;gap:8px;flex-wrap:wrap}.pv .acts a{display:inline-block;text-decoration:none;color:#fff;background:var(--c);border-radius:8px;padding:7px 14px;font-weight:500;font-size:13px}
-.pv .acts a.sec{background:var(--soft);color:var(--fg)}
+.pv .acts a.sec{background:var(--soft);color:var(--fg)}.acts a.raw{font:12px var(--mono);padding:7px 10px}
 .grp{padding:8px 20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);background:#fafafa;border-bottom:1px solid var(--line)}
 .pub{display:flex;gap:18px;padding:18px 20px;align-items:flex-start}.pub .cover{flex:none;width:110px;aspect-ratio:2/3;border-radius:6px;background:var(--soft);display:grid;place-items:center;font-size:32px;font-weight:700;color:var(--mut);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.18)}
 .pub .cover img{width:100%;height:100%;object-fit:cover}.pub .info{flex:1;min-width:0}.pub h2{margin:0 0 2px;font-size:19px;letter-spacing:-.02em}.pub .desc{color:#3f3f46;margin:10px 0}
@@ -91,7 +91,7 @@ const LANGS=['','fr','en','fr-FR,fr;q=0.9,en;q=0.5','en-US,en;q=0.9','de,fr;q=0.
 const TABS=['Preview','Response','Headers','Raw','curl','Compare'];
 const COLORS={gray:'#6b7280',red:'#dc2626',yellow:'#ca8a04',blue:'#2563eb',green:'#16a34a',purple:'#9333ea',orange:'#ea580c',pink:'#db2777'};
 const REL_LABEL={catalog:'Browse the catalog',shelf:'Shelf',search:'Search it',authenticate:'Sign in',alternate:'Alternate',profile:'Profile',self:'Registry entry',next:'Next',previous:'Previous',first:'First',last:'Last'};
-let clients={},last=null,tab='Preview',selected=null,compareHtml=null;
+let clients={},last=null,nextTab=null,tab='Preview',selected=null,compareHtml=null;
 
 const links=b=>b?.links||[];
 const rels=l=>[].concat(l.rel||[]);
@@ -148,7 +148,7 @@ addEventListener('hashchange',async()=>{
 
 async function send(){
   const path=$('path').value.trim()||'/';
-  saveHash();selected=null;tab='Preview';
+  saveHash();selected=null;tab=nextTab||'Preview';nextTab=null;
   $('status').replaceChildren(el('span','stat','Loading\u2026'));
   try{last=await call(path,$('client').value);}
   catch(e){last=null;const p=el('span','pill err','Error');$('status').replaceChildren(p,el('span','stat',e.message));$('rows').replaceChildren(errorBox(e));$('count').textContent='Results';$('paging').textContent='';$('pager').replaceChildren();renderTabs();return}
@@ -243,7 +243,10 @@ function linkButtons(list,skip){
     const r0=rels(l)[0]||'',lab=l.title||REL_LABEL[r0]||r0.split('/').pop()||'Link';
     const a=el('a',rels(l).includes('catalog')?'':'sec',lab+(l.templated?' \u2026':'')+(leavesConsole(l)?' \u2197':''));
     a.href=new URL(l.href.replace(/\{[^}]*\}/g,''),baseUrl()).href;a.title=l.href+(l.type?'  ['+l.type+']':'');
-    a.onclick=e=>{e.preventDefault();openLink(l)};acts.append(a)});
+    a.onclick=e=>{e.preventDefault();openLink(l)};acts.append(a);
+    // A link to an OPDS document also gets its raw JSON, opened on the Raw tab.
+    if(!l.templated&&!leavesConsole(l)){const j=el('a','sec raw','{ } JSON');j.href=a.href;j.title='Load this document and show its raw JSON';
+      j.onclick=e=>{e.preventDefault();nextTab='Raw';openLink(l)};acts.append(j)}});
   return acts;
 }
 function initial(t){return[...(t||'?')][0].toUpperCase()}
