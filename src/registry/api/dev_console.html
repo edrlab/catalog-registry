@@ -70,7 +70,7 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 <script>
 const $=id=>document.getElementById(id);
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
-const PRESETS=[['Recommended feed','/'],['Search: paris','/search?query=paris'],['Typo: parsi','/search?query=parsi'],['Accents: ecole','/search?query=%C3%A9cole'],['Empty search','/search'],['Page 2','/search?query=library&page=2']];
+const PRESETS=[['Recommended feed','/'],['Search: paris','/search?query=paris'],['Typo: parsi','/search?query=parsi'],['Accents: ecole','/search?query=%C3%A9cole'],['Empty search','/search?query='],['Page 2','/search?query=library&page=2']];
 const LANGS=['','fr','en','fr-FR,fr;q=0.9,en;q=0.5','en-US,en;q=0.9','de,fr;q=0.5','*'];
 const TABS=['Response','Headers','Raw','curl','Compare'];
 let clients={},last=null,tab='Response',selected=null,compareHtml=null;
