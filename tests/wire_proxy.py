@@ -1,16 +1,20 @@
-"""A TCP proxy on loopback that counts what a client sends to PostgreSQL.
+"""A TCP proxy on loopback that counts the round trips a client makes to PostgreSQL.
 
-The number of messages a search sends is the number of times the app waits for the database, which
-is what costs time when the database is a region away. A statement counter cannot see the ones
-the driver sends itself (pre-ping, transaction control, type look-ups), so the tests put this
-between the engine and the server and count chunks on the wire. A chunk is what one `read` on the
-client's socket returned: asyncpg writes each protocol message group in one `write`, and on
-loopback those arrive whole.
+What costs time when the database is a region away is the number of times the app sends something
+and then waits for the answer. A statement counter cannot see the ones the driver sends itself
+(pre-ping, transaction control, type look-ups), so the tests put this between the engine and the
+server and watch the wire.
+
+TCP is a byte stream: one `read` can return half a protocol message or several writes joined, so
+reads are not messages and are not counted. A **round trip** is a run of client bytes followed by
+the server's reply. Client data that arrives before the server has answered belongs to the same
+round trip, however the network happened to cut it. This is also what a pipelined driver costs in
+latency: one wait, however many messages it sent in a row.
 """
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 
 from sqlalchemy.engine import make_url
@@ -20,31 +24,43 @@ from registry.core.config import Settings
 
 @dataclass
 class WireLog:
-    """Client-to-server chunks, in order."""
+    """The client's round trips, in order. Each entry is every byte the client sent in that one."""
 
-    chunks: list[bytes] = field(default_factory=list)
+    flights: list[bytes] = field(default_factory=list)
+    _server_has_answered: bool = True  # so the first client bytes start a round trip
+
+    def client_sent(self, data: bytes) -> None:
+        if self._server_has_answered:
+            self.flights.append(data)
+            self._server_has_answered = False
+        else:
+            self.flights[-1] += data
+
+    def server_sent(self) -> None:
+        self._server_has_answered = True
 
     @property
-    def to_server(self) -> int:
-        return len(self.chunks)
+    def round_trips(self) -> int:
+        return len(self.flights)
 
     def mark(self) -> int:
-        return len(self.chunks)
+        return len(self.flights)
 
     def since(self, mark: int) -> list[bytes]:
-        return self.chunks[mark:]
+        return self.flights[mark:]
 
     def contains(self, *needles: bytes, since: int = 0) -> bool:
-        return any(needle in chunk for chunk in self.chunks[since:] for needle in needles)
+        return any(needle in flight for flight in self.flights[since:] for needle in needles)
 
 
 async def _pipe(
-    reader: asyncio.StreamReader, writer: asyncio.StreamWriter, log: WireLog | None
+    reader: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
+    note: Callable[[bytes], None],
 ) -> None:
     try:
         while data := await reader.read(65536):
-            if log is not None:
-                log.chunks.append(data)
+            note(data)
             writer.write(data)
             await writer.drain()
     except (ConnectionError, asyncio.CancelledError):
@@ -65,8 +81,10 @@ async def counting_proxy(settings: Settings) -> AsyncIterator[tuple[Settings, Wi
         client_reader: asyncio.StreamReader, client_writer: asyncio.StreamWriter
     ) -> None:
         server_reader, server_writer = await asyncio.open_connection(target.host, target.port)
-        upstream = asyncio.create_task(_pipe(client_reader, server_writer, log))
-        downstream = asyncio.create_task(_pipe(server_reader, client_writer, None))
+        upstream = asyncio.create_task(_pipe(client_reader, server_writer, log.client_sent))
+        downstream = asyncio.create_task(
+            _pipe(server_reader, client_writer, lambda _data: log.server_sent())
+        )
         tasks.update((upstream, downstream))
         await asyncio.wait((upstream, downstream), return_when=asyncio.FIRST_COMPLETED)
 

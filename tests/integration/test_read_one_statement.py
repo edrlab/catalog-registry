@@ -1,4 +1,4 @@
-"""One statement, one message: what the feed and a single catalog cost the connection (ADR-062).
+"""One statement, one round trip: what the feed and a single catalog cost the connection (ADR-062).
 
 The feed used to be six ORM statements (the catalogs and one `selectinload` per collection) inside
 a transaction on the main pool. Now `fetch_recommended_catalogs` and `fetch_catalog_by_id` are one
@@ -8,8 +8,9 @@ catalogs.
 Two counters, because each sees what the other cannot:
 
 * `before_cursor_execute` on the read engine counts SQLAlchemy's statements.
-* The loopback proxy of `tests/wire_proxy.py` counts the chunks the client sends to the server:
-  the real measure, which also sees what the driver sends by itself.
+* The loopback proxy of `tests/wire_proxy.py` counts the client's round trips (bytes sent, then
+  the server's answer; TCP reads are not messages): the real measure, which also sees what the
+  driver sends by itself.
 
 Their own engines and really committed rows (deleted in a `finally`): the rollback fixtures are
 invisible to a second connection, and the proxy needs real ones.
@@ -33,13 +34,13 @@ from tests.wire_proxy import WireLog, counting_proxy
 
 pytestmark = pytest.mark.integration
 
-#: Measured on 7 October 2026 against Postgres 18: 1 for a warm feed or catalog. 2 leaves room for
-#: one driver bookkeeping message; six statements in a transaction was the old design.
-WARM_READ_MAX_MESSAGES = 2
+#: Measured on 7 October 2026 against Postgres 18: exactly 1 round trip for a warm feed or catalog;
+#: six statements in a transaction (9 round trips) was the old design.
+WARM_READ_MAX_MESSAGES = 1
 #: A new connection's one-off cost (startup packet, SCRAM, SQLAlchemy's dialect probes, asyncpg's
 #: type introspection), paid once per pooled connection and never per request. The search's was
 #: measured at 20; `test_a_cold_feed_sends_a_small_bounded_number_of_messages` reports this one.
-COLD_READ_MAX_MESSAGES = 25
+COLD_READ_MAX_MESSAGES = 25  # round trips; measured at 20
 
 MANY = 60
 
@@ -200,7 +201,7 @@ async def test_the_import_path_is_not_the_public_read(
         assert len(counter.statements) > 1
 
 
-# --- the real measure: messages on the wire ------------------------------------------------------
+# --- the real measure: round trips on the wire ----------------------------------------------------
 
 
 @pytest.fixture
@@ -246,7 +247,7 @@ async def test_fifty_warm_feeds_cost_at_most_two_messages_each(
     for _ in range(50):
         await read_feed(engine)
 
-    assert log.to_server - before <= 50 * WARM_READ_MAX_MESSAGES
+    assert log.round_trips - before <= 50 * WARM_READ_MAX_MESSAGES
 
 
 async def test_no_begin_commit_rollback_savepoint_or_pre_ping_is_ever_sent(
@@ -259,7 +260,7 @@ async def test_no_begin_commit_rollback_savepoint_or_pre_ping_is_ever_sent(
     for _ in range(3):
         await read_feed(engine)
         await read_catalog(engine, seeded[0])
-    sent = b"".join(log.chunks).upper()
+    sent = b"".join(log.flights).upper()
 
     for word in (b"BEGIN", b"COMMIT", b"ROLLBACK", b"SAVEPOINT", b"SET TRANSACTION"):
         assert word not in sent, word
@@ -291,7 +292,7 @@ async def test_a_cold_feed_sends_a_small_bounded_number_of_messages(
 
     await read_feed(engine)
 
-    assert 1 < log.to_server <= COLD_READ_MAX_MESSAGES, log.to_server
+    assert 1 < log.round_trips <= COLD_READ_MAX_MESSAGES, log.round_trips
     assert not log.contains(b"BEGIN", b"COMMIT", b"ROLLBACK")
 
 

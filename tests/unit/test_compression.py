@@ -2,7 +2,7 @@
 
 import pytest
 
-from registry.api.compression import choose_encoding, parse_accept_encoding
+from registry.api.compression import choose_encoding, identity_acceptable, parse_accept_encoding
 
 pytestmark = pytest.mark.unit
 
@@ -67,3 +67,29 @@ def test_the_coding_is_the_clients_best_choice_among_what_we_offer(
     header: str | None, chosen: str | None
 ) -> None:
     assert choose_encoding(header) == chosen
+
+
+@pytest.mark.parametrize(
+    ("header", "acceptable"),
+    [
+        (None, True),  # no header: identity
+        ("", True),  # present but empty: no coding wanted, which is identity
+        ("identity", True),
+        ("gzip", True),  # names only a coding: identity stays acceptable
+        ("deflate, compress", True),  # codings we do not offer: still identity
+        ("gzip;q=0", True),
+        ("identity;q=0", False),  # explicitly refused
+        (
+            "identity;q=0, gzip",
+            False,
+        ),  # refused even though gzip is fine (choose_encoding picks it)
+        ("*;q=0", False),  # everything refused, identity not named
+        ("*;q=0, identity", True),  # named, so it is accepted
+        ("*;q=0, identity;q=0.5", True),
+        ("*;q=0.5", True),
+        ("identity;q=0, *;q=1", False),
+    ],
+)
+def test_whether_an_uncoded_body_is_acceptable(header: str | None, acceptable: bool) -> None:
+    """RFC 9110 §12.5.3: identity is acceptable unless it is refused by name, or by `*;q=0`."""
+    assert identity_acceptable(header) is acceptable

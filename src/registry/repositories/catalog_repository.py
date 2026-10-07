@@ -39,15 +39,16 @@ READ_CONNECTION_SETTINGS: Final = {
     "default_transaction_read_only": "on",
 }
 
-#: The top-level feed's only query. Hits `ix_catalogs_recommended`. Newest first, then title: the
-#: seed writes `created_at` staggered by position in the file (the feed's order), and title is a
-#: tie-break for determinism, since rows inserted in one transaction can share a `created_at`.
+#: The top-level feed's only query. Hits `ix_catalogs_recommended`. Newest first, then title, then
+#: id. The seed writes `created_at` staggered by position in the file (the feed's order), title
+#: breaks a tie between rows inserted in one transaction, and id breaks the rest, because a title
+#: is not unique. Without a last, total tie-break two such rows could swap places between runs.
 _RECOMMENDED = text(
     f"""
 SELECT {CATALOG_COLUMNS}
   FROM catalogs c
  WHERE c.recommended AND c.status = 'active'
- ORDER BY c.created_at DESC, c.title
+ ORDER BY c.created_at DESC, c.title, c.id
 """
 )
 

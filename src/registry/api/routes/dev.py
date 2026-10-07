@@ -1,6 +1,7 @@
 """The dev console: a page to try search and the feed as the real reader apps would (ADR-063).
 
-Mounted in every environment. It only reads public data, through paths the registry already serves.
+Mounted only when `REGISTRY_ENVIRONMENT=local` (see `create_app`). It reads public data, through
+paths the registry already serves.
 
 A browser cannot set `Accept-Encoding` or `User-Agent`, so a plain page cannot be KOReader. This
 asks the server to call the app's own ASGI stack, in-process, with a client's exact headers.

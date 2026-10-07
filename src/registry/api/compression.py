@@ -23,6 +23,8 @@ import zstandard
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from registry.api.exception_handlers import build_problem_response
+
 #: In the server's order of preference, used to break a tie between equal q-values.
 OFFERED: Final = ("zstd", "br", "gzip")
 
@@ -82,6 +84,21 @@ def choose_encoding(header: str | None) -> str | None:
     return best
 
 
+def identity_acceptable(header: str | None) -> bool:
+    """Whether the client accepts an uncoded body (RFC 9110 §12.5.3).
+
+    Yes when there is no header, or an empty one. No when `identity` is refused with q=0, or when
+    `*` is refused with q=0 and `identity` is not named. Anything else keeps identity acceptable,
+    even a list that names only codings we do not offer.
+    """
+    if header is None:
+        return True
+    wanted = parse_accept_encoding(header)
+    if "identity" in wanted:
+        return wanted["identity"] > 0
+    return wanted.get("*", 1.0) > 0
+
+
 _client_log = logging.getLogger("registry.clients")
 
 
@@ -99,6 +116,26 @@ def configure_client_log() -> None:
     _client_log.addHandler(handler)
     _client_log.setLevel(logging.INFO)
     _client_log.propagate = False
+
+
+def log_client_request(
+    scope: Scope, request_headers: Headers, *, status: int, encoding: str | None
+) -> None:
+    """The one line per request, whichever path the response took (ADR-061)."""
+    _client_log.info(
+        json.dumps(
+            {
+                "severity": "INFO",
+                "message": "client",
+                "path": scope["path"],
+                "status": status,
+                "accept_encoding": request_headers.get("accept-encoding"),
+                "encoding": encoding,
+                "user_agent": (request_headers.get("user-agent") or "")[:_USER_AGENT_LIMIT],
+            },
+            ensure_ascii=False,
+        )
+    )
 
 
 def _add_vary(headers: MutableHeaders) -> None:
@@ -139,16 +176,33 @@ class CompressionMiddleware:
         request_headers = Headers(scope=scope)
         offered = request_headers.get("accept-encoding")
         encoding = choose_encoding(offered)
+        if encoding is None and not identity_acceptable(offered):
+            # The client refused every coding we offer and refused an uncoded body too (RFC 9110
+            # §12.5.3). Nothing acceptable exists, so say so instead of sending what it refused.
+            refusal = build_problem_response(
+                status=406,
+                title="Not Acceptable",
+                detail="Accept-Encoding refuses identity and every coding offered: zstd, br, gzip.",
+            )
+            _add_vary(refusal.headers)
+            log_client_request(scope, request_headers, status=406, encoding=None)
+            await refusal(scope, receive, send)
+            return
+
         start: Message | None = None
         chunks: list[bytes] = []
-
+        logged = False
         is_head = scope.get("method") == "HEAD"
 
         async def respond(message: Message) -> None:
-            nonlocal start
+            nonlocal start, logged
             if is_head:
                 if message["type"] == "http.response.start":
                     _add_vary(MutableHeaders(scope=message))
+                    log_client_request(
+                        scope, request_headers, status=message["status"], encoding=None
+                    )
+                    logged = True
                 await send(message)
                 return
             if message["type"] == "http.response.start":
@@ -176,21 +230,16 @@ class CompressionMiddleware:
                 headers["content-encoding"] = encoding
                 applied = encoding
             headers["content-length"] = str(len(body))
-            _client_log.info(
-                json.dumps(
-                    {
-                        "severity": "INFO",
-                        "message": "client",
-                        "path": scope["path"],
-                        "status": start["status"],
-                        "accept_encoding": offered,
-                        "encoding": applied,
-                        "user_agent": (request_headers.get("user-agent") or "")[:_USER_AGENT_LIMIT],
-                    },
-                    ensure_ascii=False,
-                )
-            )
+            log_client_request(scope, request_headers, status=start["status"], encoding=applied)
+            logged = True
             await send(start)
             await send({"type": "http.response.body", "body": body})
 
-        await self.app(scope, receive, respond)
+        try:
+            await self.app(scope, receive, respond)
+        except Exception:
+            # Starlette sends an unexpected error's 500 from outside every middleware, so this is
+            # the last place that still knows the request. Log it, then let the error go on.
+            if not logged:
+                log_client_request(scope, request_headers, status=500, encoding=None)
+            raise

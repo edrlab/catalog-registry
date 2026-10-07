@@ -1,6 +1,6 @@
-"""One statement, one message: what a search costs the database connection (ADR-060).
+"""One statement, one round trip: what a search costs the database connection (ADR-060).
 
-Search used to be 7 ORM statements, which was 14 messages on the wire (a pre-ping, BEGIN, SET
+Search used to be 7 ORM statements, which was 14 round trips on the wire (a pre-ping, BEGIN, SET
 TRANSACTION, the settings call, the search, the catalog load, five child loads, COMMIT, and
 asyncpg's type look-ups). Now the page and every child come back from one statement, the search
 engine is AUTOCOMMIT with its settings on the connection, and nothing else is sent.
@@ -9,8 +9,9 @@ Two counters, because each sees what the other cannot:
 
 * `before_cursor_execute` on the search engine counts SQLAlchemy's statements, whatever the page
   size. It cannot see what the driver sends by itself.
-* A TCP proxy on loopback (`tests/wire_proxy.py`) counts the chunks the client sends to the
-  server. This is the real measure, and the one that would have caught the original 14.
+* A TCP proxy on loopback (`tests/wire_proxy.py`) counts the client's round trips: a run of bytes
+  sent, then the server's answer. TCP does not keep message boundaries, so reads are not counted.
+  This is the real measure, and the one that would have caught the original 14.
 
 These tests use their own pools and really commit their rows (deleted in a `finally`): the
 rollback fixtures are invisible to a second connection, and the proxy needs real connections.
@@ -34,14 +35,14 @@ pytestmark = pytest.mark.integration
 
 MATCHES = 55
 
-#: Measured on 7 October 2026 against Postgres 18: 1 for a warm search. 2 leaves room for one
-#: driver bookkeeping message; 14 was the old design.
-WARM_SEARCH_MAX_MESSAGES = 2
+#: Measured on 7 October 2026 against Postgres 18: exactly 1 round trip for a warm search; 14 was
+#: the old design.
+WARM_SEARCH_MAX_MESSAGES = 1
 #: A new connection's one-off cost, measured at 20: the startup packet, two SCRAM messages,
 #: SQLAlchemy's dialect probes (version, schema, isolation level, string conformance), asyncpg's
 #: type introspection and `jit` setting, and the search itself. Paid once per pooled connection
 #: (recycled every 5 minutes), never per search.
-COLD_SEARCH_MAX_MESSAGES = 25
+COLD_SEARCH_MAX_MESSAGES = 25  # round trips; measured at 20
 
 
 def quokka_documents() -> list[dict[str, object]]:
@@ -134,7 +135,7 @@ async def test_no_transaction_control_reaches_the_driver(
         }
 
 
-# --- the real measure: messages on the wire ---------------------------------------------------
+# --- the real measure: round trips on the wire ---------------------------------------------------
 
 
 @pytest.fixture
@@ -184,7 +185,7 @@ async def test_fifty_warm_searches_cost_at_most_two_messages_each(
     for _ in range(50):
         await run_search(factory, "quokka", limit=50)
 
-    assert log.to_server - before <= 50 * WARM_SEARCH_MAX_MESSAGES
+    assert log.round_trips - before <= 50 * WARM_SEARCH_MAX_MESSAGES
 
 
 async def test_no_begin_commit_rollback_or_savepoint_is_ever_sent(
@@ -197,7 +198,7 @@ async def test_no_begin_commit_rollback_or_savepoint_is_ever_sent(
     warm = log.mark()
     for _ in range(3):
         await run_search(factory, "quokka", limit=50)
-    sent = b"".join(log.chunks).upper()
+    sent = b"".join(log.flights).upper()
 
     for word in (b"BEGIN", b"COMMIT", b"ROLLBACK", b"SAVEPOINT", b"SET TRANSACTION"):
         assert word not in sent, word
@@ -230,7 +231,7 @@ async def test_a_cold_first_search_sends_a_small_bounded_number_of_messages(
 
     await run_search(build_session_factory(engine), "quokka", limit=50)
 
-    assert 1 < log.to_server <= COLD_SEARCH_MAX_MESSAGES, log.to_server
+    assert 1 < log.round_trips <= COLD_SEARCH_MAX_MESSAGES, log.round_trips
     assert not log.contains(b"BEGIN", b"COMMIT", b"ROLLBACK")
 
 

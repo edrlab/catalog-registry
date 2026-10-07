@@ -25,9 +25,10 @@ The top-level feed advertises it with a templated `search` link, `/search{?query
 | `bruxels` | A typo is caught by trigram similarity, listed after the exact matches |
 | `paris OR valais` | `OR` is accepted and ignored: every search is already any-word |
 
-An empty query, spaces, punctuation or only left-out words give an **empty feed** and touch no
-database. Input is cut at 256 characters and 16 chunks. Not searchable: supported languages (a
-filter is planned) and descriptions.
+An empty query, spaces or only left-out words give an **empty feed** and touch no database.
+Punctuation alone (`!!!`) also gives an empty feed, but it does run the search statement: the parser
+only splits, and PostgreSQL discards chunks with no word in them. Input is cut at 256 characters and
+16 chunks. Not searchable: supported languages (a filter is planned) and descriptions.
 
 ## Order and paging
 

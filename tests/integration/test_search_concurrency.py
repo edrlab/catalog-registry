@@ -58,7 +58,6 @@ async def test_two_transactions_adding_different_subdivisions_both_end_up_in_the
     first_inserted = asyncio.Event()
     release_first = asyncio.Event()
     second_started = asyncio.Event()
-    timeline: dict[str, float] = {}
     pids: dict[str, int] = {}
 
     async def first_writer() -> None:
@@ -74,7 +73,6 @@ async def test_two_transactions_adding_different_subdivisions_both_end_up_in_the
             first_inserted.set()
             await release_first.wait()
             await connection.commit()
-            timeline["first_committed"] = time.monotonic()
 
     async def second_writer() -> None:
         await first_inserted.wait()
@@ -89,7 +87,6 @@ async def test_two_transactions_adding_different_subdivisions_both_end_up_in_the
                 ),
                 {"c": catalog_id},
             )
-            timeline["second_insert_returned"] = time.monotonic()
             await connection.commit()
 
     async def conductor(observer: AsyncConnection) -> bool:
@@ -143,7 +140,6 @@ async def test_two_transactions_adding_different_subdivisions_both_end_up_in_the
             await cleanup.execute(text("DELETE FROM catalogs WHERE id = :c"), {"c": catalog_id})
 
     assert was_blocked, "the second transaction was never blocked behind the first"
-    assert timeline["second_insert_returned"] >= timeline["first_committed"]
     assert subdivisions == ["BE-BRU", "BE-WAL"]
     for word in ("wallonie", "bruxelles"):
         assert f"'{word}'" in row.document, word

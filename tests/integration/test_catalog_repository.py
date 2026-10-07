@@ -89,6 +89,26 @@ async def test_an_unrecommended_catalog_is_excluded(
     assert await repository.fetch_catalog_by_id(first.id) is not None
 
 
+async def test_catalogs_with_the_same_time_and_title_come_back_in_id_order(
+    db_session: AsyncSession, seeded_catalogs: int
+) -> None:
+    """A title is not unique, so `created_at, title` alone leaves ties the database may answer in
+    any order. The id is the last tie-break, which keeps the feed's bytes the same run after run."""
+    repository = CatalogRepository(db_session)
+    moment = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
+    for snapshot in await repository.fetch_recommended_catalogs():
+        attached = await repository.fetch_catalog_by_identity_id(snapshot.id)
+        assert attached is not None
+        attached.title = "Same title"
+        attached.created_at = moment
+    await db_session.commit()
+
+    ids = [str(catalog.id) for catalog in await repository.fetch_recommended_catalogs()]
+
+    assert len(ids) == SEED_CATALOG_COUNT
+    assert ids == sorted(ids)
+
+
 async def test_a_returned_snapshot_is_not_changed_by_a_later_change_to_the_row(
     db_session: AsyncSession, seeded_catalogs: int
 ) -> None:

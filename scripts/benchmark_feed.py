@@ -10,7 +10,7 @@ realistic share of them rather than all.
 
 **These numbers are local.** The database is on this machine, so the trip between the app and
 Postgres costs about nothing, and the client is on the same machine too. What is left is the
-application's own work. In production add the distance: one search sends **1** message to the
+application's own work. In production add the distance: one search makes **1** round trip to the
 database (docs/performance.md), at about 2 to 4 ms each across regions, plus the client's trip.
 For a deployed instance read the Cloud Run metrics tab: `request_latencies` is the time inside the
 container, `e2e_latencies` adds Google's network in front; the difference from what a client sees is

@@ -1,5 +1,6 @@
 """The dev console, and which parts of it exist where (ADR-063)."""
 
+import asyncio
 from collections.abc import AsyncIterator
 
 import httpx
@@ -255,3 +256,68 @@ async def test_the_page_is_told_whether_it_can_read_a_library_feed(
     assert f'"fetch": {fetch}' in response.text
     assert response.headers["x-robots-tag"] == "noindex, nofollow"
     assert '{"environment":"local","fetch":true}' not in response.text, "the default was replaced"
+
+
+async def test_the_whole_fetch_has_one_time_budget_not_one_per_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """httpx's timeout limits each read. A server that sends a byte every so often never trips it,
+    so the fetch as a whole must run out of time."""
+
+    async def public(url: str) -> None:
+        return None
+
+    class Trickle(httpx.AsyncByteStream):
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            for _ in range(100):
+                await asyncio.sleep(0.05)
+                yield b"x"
+
+    monkeypatch.setattr(dev_fetch, "require_public_host", public)
+    monkeypatch.setattr(dev_fetch, "FETCH_TIMEOUT_SECONDS", 0.2)
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, stream=Trickle()))
+
+    with pytest.raises(HTTPException) as raised:
+        await dev_fetch.fetch_public("https://slow.example/feed", {}, transport=transport)
+
+    assert raised.value.status_code == 502
+    assert "took longer than" in raised.value.detail
+
+
+def test_the_fetch_sends_the_selected_clients_headers_exactly() -> None:
+    thorium = dev_fetch.build_fetch_headers(dev.CLIENTS["thorium"], "fr")
+    assert thorium["Accept-Encoding"] == "gzip, deflate, br"
+    assert thorium["User-Agent"].startswith("Thorium")
+    assert thorium["Accept-Language"] == "fr"
+    assert "opds+json" in thorium["Accept"]
+
+    koreader = dev_fetch.build_fetch_headers(dev.CLIENTS["koreader"], "")
+    assert koreader["Accept-Encoding"] == "identity"
+    assert "Accept-Language" not in koreader
+
+
+async def test_a_profile_without_accept_encoding_goes_out_without_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """httpx would add its own, and the simulated curl or .NET client would really be httpx."""
+
+    async def public(url: str) -> None:
+        return None
+
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={})
+
+    monkeypatch.setattr(dev_fetch, "require_public_host", public)
+    transport = httpx.MockTransport(handler)
+
+    bare = dev_fetch.build_fetch_headers(dev.CLIENTS["curl"], "")
+    await dev_fetch.fetch_public("https://lib.example/a", bare, transport=transport)
+    named = dev_fetch.build_fetch_headers(dev.CLIENTS["thorium"], "")
+    await dev_fetch.fetch_public("https://lib.example/b", named, transport=transport)
+
+    assert "accept-encoding" not in seen[0].headers
+    assert seen[0].headers["user-agent"] == dev.CLIENTS["curl"]["headers"]["User-Agent"]
+    assert seen[1].headers["accept-encoding"] == "gzip, deflate, br"

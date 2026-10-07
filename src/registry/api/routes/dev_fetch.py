@@ -100,15 +100,41 @@ async def fetch_public(
     allowed_hosts: frozenset[str] | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> tuple[int, dict[str, str], bytes, int]:
-    """GET *url*, checking every hop. Returns status, headers, decoded body, bytes on the wire."""
+    """GET *url*, checking every hop. Returns status, headers, decoded body, bytes on the wire.
+
+    The 10 seconds are a budget for the whole fetch, redirects included. httpx's own timeout limits
+    each read, so a server that trickles one byte at a time would never trip it.
+    """
+    try:
+        async with asyncio.timeout(FETCH_TIMEOUT_SECONDS):
+            return await _fetch_hops(url, headers, allowed_hosts, transport)
+    except TimeoutError as error:
+        raise HTTPException(
+            status_code=502, detail=f"the feed took longer than {FETCH_TIMEOUT_SECONDS:g} s"
+        ) from error
+
+
+async def _fetch_hops(
+    url: str,
+    headers: Mapping[str, str],
+    allowed_hosts: frozenset[str] | None,
+    transport: httpx.AsyncBaseTransport | None,
+) -> tuple[int, dict[str, str], bytes, int]:
+    sends_encoding = any(name.lower() == "accept-encoding" for name in headers)
     async with httpx.AsyncClient(
         transport=transport, timeout=FETCH_TIMEOUT_SECONDS, follow_redirects=False
     ) as http:
         for _ in range(FETCH_MAX_REDIRECTS + 1):
             require_registered_host(url, allowed_hosts)
             await require_public_host(url)
+            request = http.build_request("GET", url, headers=dict(headers))
+            if not sends_encoding:
+                # httpx adds its own Accept-Encoding. A client profile that sends none (curl, a
+                # bare .NET client) must go out without one, or the simulation is httpx's.
+                request.headers.pop("accept-encoding", None)
             try:
-                async with http.stream("GET", url, headers=dict(headers)) as response:
+                response = await http.send(request, stream=True)
+                try:
                     body = bytearray()
                     async for chunk in response.aiter_bytes():
                         body += chunk
@@ -117,6 +143,8 @@ async def fetch_public(
                     wire = response.num_bytes_downloaded
                     status = response.status_code
                     response_headers = dict(response.headers)
+                finally:
+                    await response.aclose()
             except httpx.HTTPError as error:
                 raise HTTPException(status_code=502, detail=f"fetch failed: {error!r}") from error
             location = response_headers.get("location")
@@ -125,6 +153,15 @@ async def fetch_public(
                 continue
             return status, response_headers, bytes(body), wire
     raise HTTPException(status_code=502, detail="too many redirects")
+
+
+def build_fetch_headers(profile: Mapping[str, Any], language: str) -> dict[str, str]:
+    """A client's own headers, exactly, plus the Accept a feed reader sends."""
+    headers = {"Accept": "application/opds+json, application/json;q=0.9, */*;q=0.1"}
+    headers.update(profile["headers"])
+    if language:
+        headers["Accept-Language"] = language
+    return headers
 
 
 @router.get("/fetch")
@@ -139,12 +176,7 @@ async def fetch_feed(
     profile = CLIENTS.get(client)
     if profile is None:
         raise HTTPException(status_code=422, detail=f"unknown client {client!r}")
-    headers = {
-        "Accept": "application/opds+json, application/json;q=0.9, */*;q=0.1",
-        "User-Agent": profile["headers"]["User-Agent"],
-    }
-    if language:
-        headers["Accept-Language"] = language
+    headers = build_fetch_headers(profile, language)
 
     started = time.perf_counter()
     allowed = await read_registered_hosts(request) if restricted else None
