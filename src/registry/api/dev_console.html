@@ -26,7 +26,7 @@ button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius
 button:hover{background:var(--soft)}button.pri{background:var(--fg);color:#fff;border-color:var(--fg)}button.pri:hover{background:#27272a}
 .chips{display:flex;gap:6px;flex-wrap:wrap}.chips button{font-size:12px;padding:3px 10px;border-radius:999px;color:var(--mut)}
 label.f{display:flex;gap:6px;align-items:center;color:var(--mut);font-size:12px}
-.busy .grid{opacity:.5;transition:opacity .15s}.status{min-height:48px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:12px 20px;font-size:13px}
+.status{min-height:48px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:12px 20px;font-size:13px}
 .pill{font:600 12px var(--mono);border-radius:6px;padding:1px 8px}.pill.ok{background:var(--okbg);color:var(--ok)}.pill.err{background:var(--badbg);color:var(--bad)}
 .stat{color:var(--mut)}.stat b{color:var(--fg);font-weight:600;font-family:var(--mono);font-size:12.5px}
 .meter{width:120px;height:6px;background:var(--soft);border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle;margin-left:6px}.meter i{display:block;height:100%;background:var(--acc)}
@@ -73,7 +73,7 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 .shint{font-size:12px;color:var(--mut);margin:6px 0 14px}
 .sgrid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:20px;align-items:start}@media(max-width:900px){.sgrid{grid-template-columns:1fr}}
 .ssum{font-size:13px;color:var(--mut);margin:0 0 10px;min-height:20px}
-.sres.busy #slist{opacity:.5;transition:opacity .15s}
+
 .hit{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 10px;cursor:pointer;background:#fff}
 .hit:hover{border-color:#c9c9d1;box-shadow:0 2px 10px rgba(0,0,0,.06)}.hit.sel{border-color:var(--acc);box-shadow:0 0 0 3px var(--tint)}
 .hit .rk{font:11px var(--mono);color:var(--mut);float:right;margin-left:10px}
@@ -84,10 +84,19 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 .hit .fz{font:600 11px var(--mono);background:var(--warnbg);color:var(--warn);border-radius:5px;padding:0 6px;margin-left:6px;vertical-align:middle}
 .sdet{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
 .smore{text-align:center;padding:8px;color:var(--mut);font-size:13px;min-height:30px}
+#prog{position:fixed;left:0;top:0;height:2px;width:100%;overflow:hidden;opacity:0;pointer-events:none;transition:opacity .15s}
+#prog::before{content:"";position:absolute;inset:0;width:40%;background:var(--acc);animation:prog 1s ease-in-out infinite}
+@keyframes prog{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+.slow #prog{opacity:1}.slow .grid,.slow #slist{opacity:.55;transition:opacity .15s}
+.skel{height:74px;border-radius:12px;margin:0 0 10px;background:linear-gradient(90deg,var(--soft) 25%,#ececf0 37%,var(--soft) 63%);background-size:400% 100%;animation:shim 1.2s ease infinite}
+@keyframes shim{0%{background-position:100% 0}100%{background-position:0 0}}
+@media(prefers-reduced-motion:reduce){#prog::before,.skel{animation:none}}
+.sdet>.empty,.pane>.empty{display:grid;place-items:center;min-height:50vh;padding:20px}
 .empty{padding:40px 20px;color:var(--mut);text-align:center}.err{color:var(--bad)}
 </style>
 </head>
 <body>
+<div id="prog" role="progressbar" aria-label="Loading"></div>
 <div class="top"><b>Registry dev console</b><span class="badge">LOCAL ONLY</span><div class="views"><button data-view="explorer" class="on">Explorer</button><button data-view="search">Search</button></div><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
 <section id="sv" hidden>
   <div class="sbar">
@@ -161,16 +170,38 @@ function errorBox(e){
   return b;
 }
 // A path is simulated against this registry; a full URL is read from the library's own server.
+// A loading state that follows the response time: nothing for a fast answer, a progress bar and
+// skeletons only once a request has been outstanding for SLOW_MS.
+const SLOW_MS=150;let slowTimer=null,inflight=0;
+function loading(on){
+  inflight=Math.max(0,inflight+(on?1:-1));
+  if(on){
+    if(inflight===1)slowTimer=setTimeout(()=>{
+      document.body.classList.add('slow');
+      if(!$('sv').hidden){
+        if(!sItems.length&&sQuery!==undefined&&$('sq').value.trim()){$('slist').replaceChildren(...[0,1,2].map(()=>el('div','skel')));$('ssum').textContent='Searching\u2026'}
+        else if(sItems.length&&sNext)$('smore').textContent='Loading more\u2026';
+      }
+    },SLOW_MS);
+  }else if(inflight===0){clearTimeout(slowTimer);document.body.classList.remove('slow')}
+}
 async function call(path,client,lang=$('lang').value){
   const ext=/^https?:/.test(path);
+  loading(true);
+  try{
   const r=await fetch((ext?'/dev/fetch?':'/dev/simulate?')+new URLSearchParams({[ext?'url':'path']:path,client,language:lang}));
   const j=await r.json();
   if(!r.ok)throw friendly(j.detail,r.status);
   return j;
+  }finally{loading(false)}
 }
 const hashOf=()=>new URLSearchParams({p:$('path').value,c:$('client').value,l:$('lang').value}).toString();
 // Each request adds a history entry; Back and Forward change the hash, which loads that request again.
-function saveHash(){if(location.hash.slice(1)!==hashOf()){idx++;furthest=idx;location.hash=hashOf()}}
+const searchHash=()=>new URLSearchParams({v:'search',q:$('sq').value,c:$('sclient').value,l:$('slang').value}).toString();
+const curHash=()=>$('sv').hidden?hashOf():searchHash();
+// A new view or request is a history entry; typing in the search box only rewrites the current one.
+function pushHash(h){if(location.hash.slice(1)!==h){idx++;furthest=idx;location.hash=h}}
+function saveHash(){pushHash(hashOf())}
 function updateNav(){document.querySelectorAll('[data-nav]').forEach(b=>{b.disabled=b.dataset.nav==='back'?idx<=0:idx>=furthest})}
 function loadHash(){
   const h=new URLSearchParams(location.hash.slice(1));
@@ -178,7 +209,10 @@ function loadHash(){
 }
 const remember=()=>{try{history.replaceState({sel:selected,tab,idx},'')}catch{}};
 addEventListener('hashchange',async()=>{
-  if(location.hash.slice(1)===hashOf())return;
+  if(location.hash.slice(1)===curHash())return;
+  const hv=new URLSearchParams(location.hash.slice(1));
+  if(hv.get('v')==='search'){showView('search',true);restoreSearch(hv);return}
+  showView('explorer',true);
   const st=history.state;if(st?.idx!=null){idx=st.idx;furthest=Math.max(furthest,idx)}
   // Back and Forward bring back what was open on that page, not just the request.
   if(st){nextSel=st.sel;nextTab=st.tab}
@@ -188,13 +222,12 @@ addEventListener('hashchange',async()=>{
 async function send(){
   const path=$('path').value.trim()||'/';
   saveHash();selected=nextSel;nextSel=null;tab=nextTab||'Preview';nextTab=null;
-  document.body.classList.add('busy');
   try{last=await call(path,$('client').value)}
   catch(e){
     last=null;$('status').replaceChildren(el('span','pill err','Error'),el('span','stat',e.message));
     $('rows').replaceChildren(errorBox(e));$('count').textContent='Results';$('paging').textContent='';$('pager').replaceChildren();renderTabs();
     return;
-  }finally{document.body.classList.remove('busy')}
+  }
   render();
 }
 
@@ -278,7 +311,7 @@ function openLink(l){
   const u=new URL(href,baseUrl());
   if(leavesConsole(l)){window.open(u.href,'_blank','noopener,noreferrer');return}
   $('path').value=!isExt()&&(rels(l).includes('self')||u.origin===location.origin)?u.pathname+u.search:u.href;
-  showView('explorer');send();
+  showView('explorer',true);send();
 }
 function linkButtons(list,skip){
   const acts=el('div','acts');
@@ -394,11 +427,18 @@ function highlight(text,ts){
   chars.forEach((ch,i)=>{if(on[i]!==cur){flush();cur=on[i]}buf+=ch});flush();return out;
 }
 let sToken=0,sItems=[],sNext=null,sSel=null,sQuery='',sTimer=null,sBusy=false;
-function showView(v){
+function showView(v,quiet=false){
   const search=v==='search';
   document.querySelectorAll('.bar,#status,.grid').forEach(e=>e.hidden=search);$('sv').hidden=!search;
   document.querySelectorAll('.views button').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
   if(search)$('sq').focus();
+  if(!quiet)pushHash(search?searchHash():hashOf());
+}
+function restoreSearch(h){
+  $('sq').value=h.get('q')||'';
+  if(h.get('c')&&clients[h.get('c')])$('sclient').value=h.get('c');
+  $('slang').value=h.get('l')||'';
+  sSearch(false);
 }
 function sPlace(m){return[m.city,(m.subdivisions||[]).join(', '),m.country].filter(Boolean).join(' · ')}
 function hitCard(it,i,ts){
@@ -434,22 +474,23 @@ function sRender(){
 async function sSearch(more=false){
   const q=$('sq').value.trim(),my=++sToken;
   $('sclear').hidden=!$('sq').value;
+  if(!more&&!$('sv').hidden)history.replaceState({idx},'','#'+searchHash());
   if(!more){
     sQuery=q;sItems=[];sNext=null;sSel=null;
     if(!q){$('slist').replaceChildren();$('ssum').textContent='';$('smore').textContent='';$('sdet').replaceChildren(el('div','empty','Select a result to preview it.'));return}
   }
-  sBusy=true;document.querySelector('.sres').classList.add('busy');
+  sBusy=true;
   let j;
   try{
     const u=more?new URL(sNext,location.origin):null;
     j=await call(more?u.pathname+u.search:'/search?query='+encodeURIComponent(q),$('sclient').value,$('slang').value);
   }catch(e){
     if(my!==sToken)return;
-    sBusy=false;document.querySelector('.sres').classList.remove('busy');
+    sBusy=false;
     $('slist').replaceChildren(errorBox(e));$('ssum').textContent='';$('smore').textContent='';return;
   }
   if(my!==sToken)return; // a newer keystroke already replaced this search
-  sBusy=false;document.querySelector('.sres').classList.remove('busy');
+  sBusy=false;
   const items=itemsOf(j.body,'/search'),md=j.body?.metadata||{};
   sItems=sItems.concat(items);sNext=findRel(j.body,'next')?.href||null;
   const total=md.numberOfItems??sItems.length;
@@ -499,7 +540,9 @@ const sSchedule=()=>{$('sclear').hidden=!$('sq').value;clearTimeout(sTimer);sTim
     if(e.key==='/'&&document.activeElement!==field){e.preventDefault();field.focus();field.select()}
     if(e.key==='Enter'&&(e.metaKey||e.ctrlKey))send();
   });
-  renderTabs();send();
+  renderTabs();
+  const first=new URLSearchParams(location.hash.slice(1));
+  if(first.get('v')==='search'){showView('search',true);restoreSearch(first)}else send();
 })();
 </script>
 </body>
