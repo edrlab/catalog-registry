@@ -56,7 +56,7 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 .pv .bd{padding:12px 20px 20px}.pv .desc{color:#3f3f46;margin:0 0 14px}
 .pv dl{display:grid;grid-template-columns:130px 1fr;gap:6px 12px;margin:0 0 16px;font-size:13px}.pv dt{color:var(--mut)}.pv dd{margin:0;word-break:break-word}
 .pv .acts{display:flex;gap:8px;flex-wrap:wrap}.pv .acts a{display:inline-block;text-decoration:none;color:#fff;background:var(--c);border-radius:8px;padding:7px 14px;font-weight:500;font-size:13px}
-.pv .acts a.sec{background:var(--soft);color:var(--fg)}.acts a.raw{font:12px var(--mono);padding:7px 10px}
+.pv .acts a.sec{background:var(--soft);color:var(--fg)}.acts a.raw{border:1px dashed var(--line);background:#fff}
 .grp{padding:8px 20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);background:#fafafa;border-bottom:1px solid var(--line)}
 .pub{display:flex;gap:18px;padding:18px 20px;align-items:flex-start}.pub .cover{flex:none;width:110px;aspect-ratio:2/3;border-radius:6px;background:var(--soft);display:grid;place-items:center;font-size:32px;font-weight:700;color:var(--mut);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.18)}
 .pub .cover img{width:100%;height:100%;object-fit:cover}.pub .info{flex:1;min-width:0}.pub h2{margin:0 0 2px;font-size:19px;letter-spacing:-.02em}.pub .desc{color:#3f3f46;margin:10px 0}
@@ -93,7 +93,7 @@ const LANGS=['','fr','en','fr-FR,fr;q=0.9,en;q=0.5','en-US,en;q=0.9','de,fr;q=0.
 const TABS=['Preview','Response','Headers','Raw','curl','Compare'];
 const COLORS={gray:'#6b7280',red:'#dc2626',yellow:'#ca8a04',blue:'#2563eb',green:'#16a34a',purple:'#9333ea',orange:'#ea580c',pink:'#db2777'};
 const REL_LABEL={catalog:'Browse the catalog',shelf:'Shelf',search:'Search it',authenticate:'Sign in',alternate:'Alternate',profile:'Profile',self:'Registry entry',next:'Next',previous:'Previous',first:'First',last:'Last'};
-let idx=0,top=0,clients={},last=null,nextTab=null,tab='Preview',selected=null,compareHtml=null;
+let idx=0,furthest=0,clients={},last=null,nextTab=null,tab='Preview',selected=null,compareHtml=null;
 
 const links=b=>b?.links||[];
 const rels=l=>[].concat(l.rel||[]);
@@ -135,19 +135,16 @@ async function call(path,client){
 }
 const hashOf=()=>new URLSearchParams({p:$('path').value,c:$('client').value,l:$('lang').value}).toString();
 // Each request adds a history entry; Back and Forward change the hash, which loads that request again.
-function saveHash(){if(location.hash.slice(1)!==hashOf()){idx++;top=idx;location.hash=hashOf()}}
-const go=d=>history[d]();
-function updateNav(){document.querySelectorAll('[data-nav]').forEach(b=>{b.disabled=b.dataset.nav==='back'?idx<=0:idx>=top})}
+function saveHash(){if(location.hash.slice(1)!==hashOf()){idx++;furthest=idx;location.hash=hashOf()}}
+function updateNav(){document.querySelectorAll('[data-nav]').forEach(b=>{b.disabled=b.dataset.nav==='back'?idx<=0:idx>=furthest})}
 function loadHash(){
-  loadHash();
-  if(history.state?.idx!=null){idx=history.state.idx;top=idx}
-  if(!location.hash)history.replaceState(null,'','#'+hashOf()); // the first page is not an extra entry
-  document.addEventListener('click',e=>{const b=e.target.closest('[data-nav]');if(b&&!b.disabled)history[b.dataset.nav==='back'?'back':'forward']()});
+  const h=new URLSearchParams(location.hash.slice(1));
+  $('path').value=h.get('p')||'/';if(h.get('c')&&clients[h.get('c')])$('client').value=h.get('c');$('lang').value=h.get('l')||'';
 }
 const remember=()=>{try{history.replaceState({sel:selected,tab,idx},'')}catch{}};
 addEventListener('hashchange',async()=>{
   if(location.hash.slice(1)===hashOf())return;
-  const st=history.state;if(st?.idx!=null){idx=st.idx;top=Math.max(top,idx)}
+  const st=history.state;if(st?.idx!=null){idx=st.idx;furthest=Math.max(furthest,idx)}
   compareHtml=null;loadHash();await send();
   // Back and Forward bring back what was open on that page, not just the request.
   if(st&&last){selected=st.sel;tab=st.tab;renderRows();renderTabs()}
@@ -188,7 +185,7 @@ function render(){
   const m=el('span','meter');m.append(el('i'));m.firstChild.style.width=Math.min(100,j.wire_bytes/Math.max(j.decoded_bytes,1)*100)+'%';sz.append(m);st.append(sz);
   st.append(mk('time',j.ms+' ms'));
   if(!isExt())st.append(mk('request-id',j.headers['x-request-id']?.slice(0,8)||'-'));
-  const rawHref=new URL(j.request.path,baseUrl()).href,ra=el('a','stat','Open raw \u2197');
+  const rawHref=new URL(j.request.path,baseUrl()).href,ra=el('a','stat','Open this response raw \u2197');
   ra.href=rawHref;ra.target='_blank';ra.rel='noopener noreferrer';ra.title=rawHref;ra.style.marginLeft='auto';st.append(ra);
   renderRows();renderTabs();remember();updateNav();
 }
@@ -252,8 +249,8 @@ function linkButtons(list,skip){
     const a=el('a',rels(l).includes('catalog')?'':'sec',lab+(l.templated?' \u2026':'')+(leavesConsole(l)?' \u2197':''));
     a.href=new URL(l.href.replace(/\{[^}]*\}/g,''),baseUrl()).href;a.title=l.href+(l.type?'  ['+l.type+']':'');
     a.onclick=e=>{e.preventDefault();openLink(l)};acts.append(a);
-    // A link to an OPDS document also gets its raw JSON, opened on the Raw tab.
-    if(!l.templated&&!leavesConsole(l)){const j=el('a','sec raw','{ } JSON');j.href=a.href;j.title='Load this document and show its raw JSON';
+    // Only the library's own feed gets a raw button: it opens that feed on the Raw tab.
+    if(rels(l).includes('catalog')&&!leavesConsole(l)){const j=el('a','sec raw','Raw OPDS feed');j.href=a.href;j.title='Load the library\u2019s own OPDS feed and show its raw JSON';
       j.onclick=e=>{e.preventDefault();nextTab='Raw';openLink(l)};acts.append(j)}});
   return acts;
 }
@@ -302,9 +299,9 @@ function renderTabs(){
   const pre=(html,text)=>{const w=el('div');const tl=el('div','tools');const c=el('button',null,'Copy');c.onclick=()=>copy(text,c);tl.append(c);const pr=el('pre');pr.innerHTML=html;w.append(tl,pr);p.append(w)};
   if(tab==='Preview'){
     if(it){
-      const tl=el('div','tools'),bk=el('button','nb','\u2039 Back'),fw=el('button','nb','Forward \u203a');bk.dataset.nav='back';fw.dataset.nav='fwd';tl.append(bk,fw);const sp=el('span');sp.style.flex='1';tl.append(sp);const raw=el('button',null,'{ } Raw JSON of this item');raw.onclick=()=>{tab='Response';remember();renderTabs()};tl.append(raw);
+      const tl=el('div','tools'),bk=el('button','nb','\u2039 Back'),fw=el('button','nb','Forward \u203a');bk.dataset.nav='back';fw.dataset.nav='fwd';tl.append(bk,fw);const sp=el('span');sp.style.flex='1';tl.append(sp);const raw=el('button',null,'This item\u2019s JSON');raw.onclick=()=>{tab='Response';remember();renderTabs()};tl.append(raw);
       const self=links(it.raw).find(l=>rels(l).includes('self')),href=new URL(self?self.href:j.request.path,baseUrl()).href;
-      const a=el('a','btn','Open raw OPDS \u2197');a.href=href;a.target='_blank';a.rel='noopener noreferrer';a.title=href;tl.append(a);
+      const a=el('a','btn','Open item in new tab \u2197');a.href=href;a.target='_blank';a.rel='noopener noreferrer';a.title=href;tl.append(a);
       p.append(tl,preview(it));updateNav();
     }else p.append(el('div','empty','Select an item to see how an app could show it.'));
   }
@@ -350,6 +347,9 @@ async function compareTab(p){
   LANGS.forEach(l=>{const o=el('option',null,l||'(none)');o.value=l;$('lang').append(o)});
   PRESETS.forEach(([n,pth])=>{const b=el('button',null,n);b.onclick=()=>{$('path').value=pth;compareHtml=null;send()};$('presets').append(b)});
   loadHash();
+  if(history.state?.idx!=null){idx=history.state.idx;furthest=idx}
+  if(!location.hash)history.replaceState(null,'','#'+hashOf()); // the first page is not an extra entry
+  document.addEventListener('click',e=>{const b=e.target.closest('[data-nav]');if(b&&!b.disabled)history[b.dataset.nav==='back'?'back':'forward']()});
   $('go').onclick=()=>{compareHtml=null;send()};
   $('path').addEventListener('keydown',e=>{if(e.key==='Enter'){compareHtml=null;send()}});
   for(const id of['client','lang'])$(id).onchange=()=>{compareHtml=null;send()};
