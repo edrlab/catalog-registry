@@ -84,7 +84,7 @@ _HTML: Final = Path(__file__).resolve().parents[1] / "dev_console.html"
 #: The page loads nothing from outside and talks only to this server.
 _CSP: Final = (
     "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
-    "connect-src 'self'; base-uri 'none'; form-action 'none'"
+    "connect-src 'self'; img-src https: data:; base-uri 'none'; form-action 'none'"
 )
 
 
