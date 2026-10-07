@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from registry.api.routes import dev
+from registry.api.routes import dev_fetch
 from registry.core.config import Settings
 from registry.main import create_app
 
@@ -160,7 +160,7 @@ def _public(monkeypatch: pytest.MonkeyPatch) -> None:
     async def allowed(url: str) -> None:
         return None
 
-    monkeypatch.setattr(dev, "require_public_host", allowed)
+    monkeypatch.setattr(dev_fetch, "require_public_host", allowed)
 
 
 async def test_fetch_returns_the_document_and_the_wire_size(
@@ -171,7 +171,7 @@ async def test_fetch_returns_the_document_and_the_wire_size(
         lambda request: httpx.Response(200, json={"metadata": {"title": "A library"}})
     )
 
-    status, _, body, wire = await dev.fetch_public(
+    status, _, body, wire = await dev_fetch.fetch_public(
         "https://lib.example/feed", {}, transport=transport
     )
 
@@ -186,7 +186,7 @@ async def test_fetch_checks_every_redirect_hop(monkeypatch: pytest.MonkeyPatch) 
     async def record(url: str) -> None:
         checked.append(url)
 
-    monkeypatch.setattr(dev, "require_public_host", record)
+    monkeypatch.setattr(dev_fetch, "require_public_host", record)
     transport = httpx.MockTransport(
         lambda request: (
             httpx.Response(302, headers={"location": "https://other.example/feed"})
@@ -195,7 +195,7 @@ async def test_fetch_checks_every_redirect_hop(monkeypatch: pytest.MonkeyPatch) 
         )
     )
 
-    await dev.fetch_public("https://lib.example/feed", {}, transport=transport)
+    await dev_fetch.fetch_public("https://lib.example/feed", {}, transport=transport)
 
     assert checked == ["https://lib.example/feed", "https://other.example/feed"]
 
@@ -206,7 +206,7 @@ async def test_a_redirect_to_a_private_address_is_refused() -> None:
     )
 
     with pytest.raises(HTTPException) as raised:
-        await dev.fetch_public("http://93.184.216.34/feed", {}, transport=transport)
+        await dev_fetch.fetch_public("http://93.184.216.34/feed", {}, transport=transport)
 
     assert raised.value.status_code == 422
 
@@ -218,13 +218,13 @@ async def test_a_redirect_loop_stops(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     with pytest.raises(HTTPException, match="too many redirects"):
-        await dev.fetch_public("https://lib.example/feed", {}, transport=transport)
+        await dev_fetch.fetch_public("https://lib.example/feed", {}, transport=transport)
 
 
 async def test_an_oversized_feed_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     _public(monkeypatch)
-    monkeypatch.setattr(dev, "FETCH_MAX_BYTES", 100)
+    monkeypatch.setattr(dev_fetch, "FETCH_MAX_BYTES", 100)
     transport = httpx.MockTransport(lambda request: httpx.Response(200, content=b"x" * 500))
 
     with pytest.raises(HTTPException, match="over 2 MB"):
-        await dev.fetch_public("https://lib.example/feed", {}, transport=transport)
+        await dev_fetch.fetch_public("https://lib.example/feed", {}, transport=transport)

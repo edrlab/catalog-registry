@@ -62,6 +62,16 @@ SELECT {CATALOG_COLUMNS}
 """
 )
 
+#: The hosts of the feeds the registry lists, for the dev console's deployed `/dev/fetch` (ADR-063).
+#: The host is what sits between `://` and the path of a `catalog` link.
+_REGISTERED_HOSTS = text(
+    r"""
+SELECT DISTINCT lower(substring(href FROM '^https?://([^/:?#@]+)')) AS host
+  FROM links
+ WHERE rel::text = 'catalog'
+"""
+)
+
 EAGER_COLLECTIONS = (
     selectinload(Catalog.kinds),
     selectinload(Catalog.publication_types),
@@ -89,6 +99,11 @@ class CatalogRepository:
         public."""
         rows = await fetch_rows(self._session, _ACTIVE_BY_ID, {"catalog_id": catalog_id})
         return build_catalog_from_row(rows[0]) if rows else None
+
+    async def fetch_registered_hosts(self) -> frozenset[str]:
+        """Every host that appears in a `catalog` link, lowercased."""
+        rows = await fetch_rows(self._session, _REGISTERED_HOSTS, {})
+        return frozenset(row["host"] for row in rows if row["host"])
 
     async def load_catalog_by_id(self, catalog_id: uuid.UUID) -> CatalogView:
         """Read one catalog, raising if it is absent. `load_` raises where `fetch_` returns

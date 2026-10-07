@@ -298,6 +298,10 @@ the next/previous links. Only public `http(s)` hosts are fetched (loopback, priv
 addresses are refused, every redirect hop is checked, 2 MB and 10 s caps). A feed that is OPDS 1
 (Atom) or not JSON shows as raw text.
 
+Reading a library's own feed (`/dev/fetch`) has its own guardrails for any non-local environment:
+the caller must send `X-Dev-Token` equal to `REGISTRY_DEV_FETCH_TOKEN`, and only hosts that appear in
+a registered catalog's `catalog` link can be reached. Locally neither applies.
+
 It exists only when `REGISTRY_ENVIRONMENT=local`: the router is not even imported elsewhere, so
 test, staging and production answer 404 (`tests/e2e/test_dev_console.py`). Only `/`, `/search` and
 `/catalogs/{id}` can be simulated.
