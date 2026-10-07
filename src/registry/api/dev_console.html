@@ -13,6 +13,7 @@ body{margin:0;background:#fff;color:var(--fg);font:14px/1.5 -apple-system,BlinkM
 .top b{font-size:15px;letter-spacing:-.01em}.badge{font-size:11px;font-weight:600;color:var(--warn);background:var(--warnbg);border-radius:6px;padding:1px 7px}
 .top .sp{flex:1}.kbd{font:11px var(--mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--mut)}
 .bar{padding:14px 20px 0;display:grid;gap:10px}
+.navrow{display:flex;gap:8px}.nb{font-weight:600;padding:5px 14px}.nb:disabled{opacity:.35;cursor:default}.nb:disabled:hover{background:#fff}
 .req{display:flex;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .req:focus-within{border-color:var(--acc);box-shadow:0 0 0 3px var(--tint)}
 .req span{font:600 12px var(--mono);padding:9px 12px;background:var(--soft);color:var(--mut);border-right:1px solid var(--line)}
@@ -65,8 +66,9 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 </style>
 </head>
 <body>
-<div class="top"><b>Registry dev console</b><span class="badge">LOCAL ONLY</span><button id="back" title="Back (browser history)">‹</button><button id="fwd" title="Forward">›</button><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
+<div class="top"><b>Registry dev console</b><span class="badge">LOCAL ONLY</span><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
 <div class="bar">
+  <div class="navrow"><button class="nb" data-nav="back">‹ Back</button><button class="nb" data-nav="fwd">Forward ›</button></div>
   <div class="req"><span>GET</span><input id="path" spellcheck="false" autocomplete="off" placeholder="/search?query=paris   or a library feed URL, https://…"><button class="pri" id="go">Send</button></div>
   <div class="opts">
     <div class="chips" id="presets"></div>
@@ -91,7 +93,7 @@ const LANGS=['','fr','en','fr-FR,fr;q=0.9,en;q=0.5','en-US,en;q=0.9','de,fr;q=0.
 const TABS=['Preview','Response','Headers','Raw','curl','Compare'];
 const COLORS={gray:'#6b7280',red:'#dc2626',yellow:'#ca8a04',blue:'#2563eb',green:'#16a34a',purple:'#9333ea',orange:'#ea580c',pink:'#db2777'};
 const REL_LABEL={catalog:'Browse the catalog',shelf:'Shelf',search:'Search it',authenticate:'Sign in',alternate:'Alternate',profile:'Profile',self:'Registry entry',next:'Next',previous:'Previous',first:'First',last:'Last'};
-let clients={},last=null,nextTab=null,tab='Preview',selected=null,compareHtml=null;
+let idx=0,top=0,clients={},last=null,nextTab=null,tab='Preview',selected=null,compareHtml=null;
 
 const links=b=>b?.links||[];
 const rels=l=>[].concat(l.rel||[]);
@@ -133,17 +135,23 @@ async function call(path,client){
 }
 const hashOf=()=>new URLSearchParams({p:$('path').value,c:$('client').value,l:$('lang').value}).toString();
 // Each request adds a history entry; Back and Forward change the hash, which loads that request again.
-function saveHash(){if(location.hash.slice(1)!==hashOf())location.hash=hashOf()}
+function saveHash(){if(location.hash.slice(1)!==hashOf()){idx++;top=idx;location.hash=hashOf()}}
+const go=d=>history[d]();
+function updateNav(){document.querySelectorAll('[data-nav]').forEach(b=>{b.disabled=b.dataset.nav==='back'?idx<=0:idx>=top})}
 function loadHash(){
   loadHash();
-  $('back').onclick=()=>history.back();$('fwd').onclick=()=>history.forward();
+  if(history.state?.idx!=null){idx=history.state.idx;top=idx}
+  if(!location.hash)history.replaceState(null,'','#'+hashOf()); // the first page is not an extra entry
+  document.addEventListener('click',e=>{const b=e.target.closest('[data-nav]');if(b&&!b.disabled)history[b.dataset.nav==='back'?'back':'forward']()});
 }
-const remember=()=>{try{history.replaceState({sel:selected,tab},'')}catch{}};
+const remember=()=>{try{history.replaceState({sel:selected,tab,idx},'')}catch{}};
 addEventListener('hashchange',async()=>{
   if(location.hash.slice(1)===hashOf())return;
-  const st=history.state;compareHtml=null;loadHash();await send();
+  const st=history.state;if(st?.idx!=null){idx=st.idx;top=Math.max(top,idx)}
+  compareHtml=null;loadHash();await send();
   // Back and Forward bring back what was open on that page, not just the request.
   if(st&&last){selected=st.sel;tab=st.tab;renderRows();renderTabs()}
+  updateNav();
 });
 
 async function send(){
@@ -182,7 +190,7 @@ function render(){
   if(!isExt())st.append(mk('request-id',j.headers['x-request-id']?.slice(0,8)||'-'));
   const rawHref=new URL(j.request.path,baseUrl()).href,ra=el('a','stat','Open raw \u2197');
   ra.href=rawHref;ra.target='_blank';ra.rel='noopener noreferrer';ra.title=rawHref;ra.style.marginLeft='auto';st.append(ra);
-  renderRows();renderTabs();
+  renderRows();renderTabs();remember();updateNav();
 }
 
 function renderRows(){
@@ -294,10 +302,10 @@ function renderTabs(){
   const pre=(html,text)=>{const w=el('div');const tl=el('div','tools');const c=el('button',null,'Copy');c.onclick=()=>copy(text,c);tl.append(c);const pr=el('pre');pr.innerHTML=html;w.append(tl,pr);p.append(w)};
   if(tab==='Preview'){
     if(it){
-      const tl=el('div','tools'),raw=el('button',null,'{ } Raw JSON of this item');raw.onclick=()=>{tab='Response';remember();renderTabs()};tl.append(raw);
+      const tl=el('div','tools'),bk=el('button','nb','\u2039 Back'),fw=el('button','nb','Forward \u203a');bk.dataset.nav='back';fw.dataset.nav='fwd';tl.append(bk,fw);const sp=el('span');sp.style.flex='1';tl.append(sp);const raw=el('button',null,'{ } Raw JSON of this item');raw.onclick=()=>{tab='Response';remember();renderTabs()};tl.append(raw);
       const self=links(it.raw).find(l=>rels(l).includes('self')),href=new URL(self?self.href:j.request.path,baseUrl()).href;
       const a=el('a','btn','Open raw OPDS \u2197');a.href=href;a.target='_blank';a.rel='noopener noreferrer';a.title=href;tl.append(a);
-      p.append(tl,preview(it));
+      p.append(tl,preview(it));updateNav();
     }else p.append(el('div','empty','Select an item to see how an app could show it.'));
   }
   else if(tab==='Response'){
