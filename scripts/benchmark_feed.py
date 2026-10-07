@@ -255,7 +255,7 @@ async def main(argv: list[str]) -> int:
 
             print(
                 f"{count:>9} {statistics.median(samples):8.1f}ms "
-                f"{cuts[94]:8.1f}ms {cuts[98]:8.1f}ms"
+                f"{cuts[94]:8.1f}ms {cuts[98]:8.1f}ms "
                 f"{returned:>9} {statistics.median(wire) / 1024:7.1f}K "
                 f"{statistics.median(raw) / 1024:7.1f}K"
             )

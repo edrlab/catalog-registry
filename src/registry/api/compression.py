@@ -102,10 +102,20 @@ def configure_client_log() -> None:
     _client_log.propagate = False
 
 
+def _add_vary(headers: MutableHeaders) -> None:
+    """`Vary: Accept-Encoding`, kept next to whatever the inner app already varies on."""
+    headers.setdefault("vary", "Accept-Encoding")
+    if "accept-encoding" not in headers["vary"].lower():
+        headers["vary"] = f"{headers['vary']}, Accept-Encoding"
+
+
 class CompressionMiddleware:
     """Compress a finished response when the client can take it, and log who asked.
 
     The whole body is buffered: every response here is a JSON document, a few hundred KB at most.
+
+    A HEAD response carries the headers of the GET it stands for (its `Content-Length` is the size
+    of the body it does not send), so it is passed through untouched except for `Vary`.
     """
 
     def __init__(self, app: ASGIApp, *, minimum_size: int = MINIMUM_SIZE) -> None:
@@ -123,8 +133,15 @@ class CompressionMiddleware:
         start: Message | None = None
         chunks: list[bytes] = []
 
+        is_head = scope.get("method") == "HEAD"
+
         async def respond(message: Message) -> None:
             nonlocal start
+            if is_head:
+                if message["type"] == "http.response.start":
+                    _add_vary(MutableHeaders(scope=message))
+                await send(message)
+                return
             if message["type"] == "http.response.start":
                 start = message
                 return
@@ -137,9 +154,7 @@ class CompressionMiddleware:
 
             body = b"".join(chunks)
             headers = MutableHeaders(scope=start)
-            headers.setdefault("vary", "Accept-Encoding")
-            if "accept-encoding" not in headers.get("vary", "").lower():
-                headers["vary"] = f"{headers['vary']}, Accept-Encoding"
+            _add_vary(headers)
             applied = None
             if (
                 encoding is not None
