@@ -192,8 +192,11 @@ function preview(cat){
   bd.append(dl);
   const acts=el('div','acts');
   links(cat).filter(l=>!rels(l).includes('icon')).forEach(l=>{
-    const a=el('a',rels(l).includes('catalog')?'':'sec',(l.title||REL_LABEL[rels(l)[0]]||rels(l)[0])+(l.templated?' (template)':''));
-    a.href=l.href;a.target='_blank';a.rel='noopener noreferrer';a.title=l.href+(l.type?'  ['+l.type+']':'');acts.append(a)});
+    const own=rels(l).includes('self'),a=el('a',rels(l).includes('catalog')?'':'sec',(l.title||REL_LABEL[rels(l)[0]]||rels(l)[0])+(l.templated?' (template)':'')+(own?'':' \u2197'));
+    a.href=l.href;a.title=l.href+(l.type?'  ['+l.type+']':'');
+    if(own){a.onclick=e=>{e.preventDefault();const u=new URL(l.href,location.origin);$('path').value=u.pathname+u.search;send()}}
+    else{a.target='_blank';a.rel='noopener noreferrer'}
+    acts.append(a)});
   bd.append(acts);v.append(bd);return v;
 }
 function renderTabs(){
