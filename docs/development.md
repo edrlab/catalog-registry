@@ -87,6 +87,7 @@ make test       # full suite
 make lint       # ruff check, ruff format --check, mypy --strict on src, tests and scripts
 make fmt        # apply ruff fixes and formatting
 make search-score   # score the running server's search against the test cases (0 to 1)
+make live-check     # pass or fail: plumbing and every documented search, against URL=... (docs/search.md)
 make search-cases   # regenerate docs/search-test-cases.md from tests/search_cases.py
 make reference-data # review a CLDR / ISO update (writes .cache/reference-data/out/)
 ```

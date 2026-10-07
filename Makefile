@@ -19,7 +19,7 @@ export DB_PORT
 .DEFAULT_GOAL := help
 
 .PHONY: help setup env enums seed-schema up down clean run seed seed-libraries seed-sample add migrate revision psql \
-        test lint fmt bench check-db schema-check reference-data search-score search-cases docker-build docker-run logs stop
+        test lint fmt bench check-db schema-check reference-data search-score search-cases live-check docker-build docker-run logs stop
 
 # Self-documenting: a target appears here when its line carries a `## ` description, and
 # `##@ ` starts a section. Nothing to keep in step, add a target with `## what it does`
@@ -148,6 +148,12 @@ reference-data:  ## Regenerate search reference data from pinned CLDR/ISO source
 # Read-only. `make search-score ARGS="--save before.json"`, tweak, then `ARGS="--baseline before.json"`.
 search-score:  ## Score the running server's search: make search-score ARGS="--url http://... -v"
 	uv run python scripts/score_search.py $(ARGS)
+
+# Pass or fail against a running or deployed registry: the plumbing, then every documented search
+# (presence and position). Read-only. `make live-check URL=https://registry.thoriumreader.com`.
+URL ?= http://localhost:8000
+live-check:  ## Check a running or deployed registry end to end: make live-check URL=https://...
+	uv run python scripts/live_check.py --url $(URL) $(ARGS)
 
 # The page for Hadrien comes from the same data as the tests; a test fails when it is stale.
 search-cases:  ## Regenerate docs/search-test-cases.md from tests/search_cases.py

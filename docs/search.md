@@ -72,6 +72,23 @@ make search-score ARGS="--baseline before.json"    # better, worse or unchanged,
 A search scores 1.0 when it returns the expected catalogs, in order, and nothing else. The list
 includes 29 realistic typos next to the hand-picked searches, so a change to typo handling shows.
 
+## Live check
+
+The same searches run as a pass or fail against any running or deployed registry, read-only:
+
+```
+make live-check                                           # http://localhost:8000
+make live-check URL=https://registry.thoriumreader.com    # after a deploy
+make live-check ARGS="-v --max-ms 150"                    # list every check, fail if slow
+```
+
+It first checks the plumbing (health, the feed and its `search` link, the compression each kind of
+client should get, the security headers, the error responses), then sends every search of the
+test-case page and requires exactly the titles listed there, in the same order: presence and
+position, per search. The score against the ideal answers is printed too. Exit code 0 when
+everything passed, 1 when something failed, 2 when the server does not answer. The searches describe
+the twelve seed catalogs, so a registry with other data will fail them.
+
 ## Reference data
 
 Official languages and place names come from CLDR 48.2, subdivision types from ISO 3166-2
