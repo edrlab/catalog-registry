@@ -65,7 +65,7 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 </style>
 </head>
 <body>
-<div class="top"><b>Registry dev console</b><span class="badge">LOCAL ONLY</span><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
+<div class="top"><b>Registry dev console</b><span class="badge">LOCAL ONLY</span><button id="back" title="Back (browser history)">‹</button><button id="fwd" title="Forward">›</button><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
 <div class="bar">
   <div class="req"><span>GET</span><input id="path" spellcheck="false" autocomplete="off" placeholder="/search?query=paris   or a library feed URL, https://…"><button class="pri" id="go">Send</button></div>
   <div class="opts">
@@ -136,8 +136,15 @@ const hashOf=()=>new URLSearchParams({p:$('path').value,c:$('client').value,l:$(
 function saveHash(){if(location.hash.slice(1)!==hashOf())location.hash=hashOf()}
 function loadHash(){
   loadHash();
+  $('back').onclick=()=>history.back();$('fwd').onclick=()=>history.forward();
 }
-addEventListener('hashchange',()=>{if(location.hash.slice(1)===hashOf())return;compareHtml=null;loadHash();send()});
+const remember=()=>{try{history.replaceState({sel:selected,tab},'')}catch{}};
+addEventListener('hashchange',async()=>{
+  if(location.hash.slice(1)===hashOf())return;
+  const st=history.state;compareHtml=null;loadHash();await send();
+  // Back and Forward bring back what was open on that page, not just the request.
+  if(st&&last){selected=st.sel;tab=st.tab;renderRows();renderTabs()}
+});
 
 async function send(){
   const path=$('path').value.trim()||'/';
@@ -205,7 +212,7 @@ function renderRows(){
     if(it.kind==='pub'&&m['@type'])tags.append(el('span','tag k',String(m['@type']).split('/').pop()));
     if(it.kind!=='nav')tags.append(el('span','tag',links(c).length+' links'));
     if(tags.children.length)r.append(tags);
-    r.onclick=()=>{selected=i;tab='Preview';renderRows();renderTabs()};
+    r.onclick=()=>{selected=i;tab='Preview';remember();renderRows();renderTabs()};
     r.ondblclick=()=>{const l=it.kind==='nav'?c:self;if(l)openLink(l)};
     rows.append(r);
   });
@@ -277,14 +284,14 @@ function preview(it){
 
 function renderTabs(){
   const t=$('tabs');t.replaceChildren();
-  TABS.forEach(n=>{const b=el('button',n===tab?'on':'',n);b.onclick=()=>{tab=n;renderTabs()};t.append(b)});
+  TABS.forEach(n=>{const b=el('button',n===tab?'on':'',n);b.onclick=()=>{tab=n;remember();renderTabs()};t.append(b)});
   const p=$('pane');p.replaceChildren();
   if(!last)return;
   const j=last,items=itemsOf(j.body,j.request.path),it=selected!=null?items[selected]:null;
   const pre=(html,text)=>{const w=el('div');const tl=el('div','tools');const c=el('button',null,'Copy');c.onclick=()=>copy(text,c);tl.append(c);const pr=el('pre');pr.innerHTML=html;w.append(tl,pr);p.append(w)};
   if(tab==='Preview'){
     if(it){
-      const tl=el('div','tools'),raw=el('button',null,'{ } Raw JSON of this item');raw.onclick=()=>{tab='Response';renderTabs()};tl.append(raw);
+      const tl=el('div','tools'),raw=el('button',null,'{ } Raw JSON of this item');raw.onclick=()=>{tab='Response';remember();renderTabs()};tl.append(raw);
       const self=links(it.raw).find(l=>rels(l).includes('self')),href=new URL(self?self.href:j.request.path,baseUrl()).href;
       const a=el('a','btn','Open raw OPDS \u2197');a.href=href;a.target='_blank';a.rel='noopener noreferrer';a.title=href;tl.append(a);
       p.append(tl,preview(it));
