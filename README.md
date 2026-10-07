@@ -25,6 +25,7 @@ This project will serve a registry using both OPDS 2.0 and HTML with the followi
 
 - List of recommended catalogs (language specific)
 - Full-text search (`GET /search`, see [`docs/search.md`](docs/search.md))
+- Responses compressed to what each reader can decode: zstd, brotli, gzip, or plain (see [`docs/performance.md`](docs/performance.md))
 - Geo-based search
 
 ## Running it
@@ -52,6 +53,19 @@ $ curl -s localhost:8000/ | jq '.metadata'
 If port 5432 is already taken, run `make up DB_PORT=55432` and match it in `.env`. `make up`
 tells you when this happens.
 
+To try it by hand, open <http://localhost:8000/dev> after `make seed` and `make seed-libraries`. It
+is a page for the feed and search as different reader apps would see them, with a search box that
+updates as you type. It only exists when `REGISTRY_ENVIRONMENT=local`, so it is not in a deployed
+service.
+
+To check a running or deployed registry end to end (health, the feed, compression, and every
+documented search, pass or fail):
+
+```
+make live-check
+make live-check URL=https://registry.thoriumreader.com
+```
+
 | Endpoint | |
 |---|---|
 | `GET /` | The top-level feed, `application/opds-catalog+json`, ranked by `Accept-Language` |
@@ -67,7 +81,7 @@ tells you when this happens.
 | [`docs/development.md`](docs/development.md) | Setup, the daily loop, configuration, migrations, the seed, testing, benchmarks, the Cloud SQL sandbox, and troubleshooting |
 | [`docs/search.md`](docs/search.md) | What search does, the query syntax, ordering, paging, the analyzer, reloading reference data, grants and operating notes |
 | [`docs/performance.md`](docs/performance.md) | Why one search is one database round trip, where it runs, how to measure it, what compression each client gets, and what old devices can connect to |
-| [`docs/search-test-cases.md`](docs/search-test-cases.md) | The searches used to check search: what each should return, what it returns today, a score, and how to run them (`make search-score`) |
+| [`docs/search-test-cases.md`](docs/search-test-cases.md) | The searches used to check search: what each should return, what it returns today, a score, and how to run them (`make search-score`, `make live-check`) |
 | [`docs/importing.md`](docs/importing.md) | `make add`, which imports a catalog from its live OPDS feed. The flags, how links are mapped, when it refuses |
 | [`docs/schemas.md`](docs/schemas.md) | The `schema/` directory. What is contract, what is vendored, what is generated, and why Python cannot use these schemas as published |
 
