@@ -66,6 +66,18 @@ make live-check
 make live-check URL=https://registry.thoriumreader.com
 ```
 
+The same endpoints answer in both places:
+
+| | Base URL | Notes |
+|---|---|---|
+| Local | `http://localhost:8000` | After `make up` and `make seed`. Also has the dev page at `/dev` |
+| Production | `https://registry.thoriumreader.com` | Use this name, not the `*.run.app` address, for anything a reader device uses. No dev page |
+
+```
+curl -s 'http://localhost:8000/search?query=wallis'
+curl -s 'https://registry.thoriumreader.com/search?query=wallis'
+```
+
 | Endpoint | |
 |---|---|
 | `GET /` | The top-level feed, `application/opds-catalog+json`, ranked by `Accept-Language` |
