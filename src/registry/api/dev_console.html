@@ -97,7 +97,7 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 </head>
 <body>
 <div id="prog" role="progressbar" aria-label="Loading"></div>
-<div class="top"><b>Registry dev console</b><span class="badge">LOCAL ONLY</span><div class="views"><button data-view="explorer" class="on">Explorer</button><button data-view="search">Search</button></div><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
+<div class="top"><b>Registry dev console</b><span class="badge" id="envbadge">LOCAL ONLY</span><div class="views"><button data-view="explorer" class="on">Explorer</button><button data-view="search">Search</button></div><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
 <section id="sv" hidden>
   <div class="sbar">
     <div class="sbox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="sq" type="text" placeholder="Search libraries, places, languages" autocomplete="off" spellcheck="false" enterkeyhint="search"><button id="sclear" hidden title="Clear (Esc)">&times;</button></div>
@@ -137,6 +137,8 @@ const LANGS=['','fr','en','fr-FR,fr;q=0.9,en;q=0.5','en-US,en;q=0.9','de,fr;q=0.
 const TABS=['Preview','Response','Headers','Raw','curl','Compare'];
 const COLORS={gray:'#6b7280',red:'#dc2626',yellow:'#ca8a04',blue:'#2563eb',green:'#16a34a',purple:'#9333ea',orange:'#ea580c',pink:'#db2777'};
 const REL_LABEL={catalog:'Browse the catalog',shelf:'Shelf',search:'Search it',authenticate:'Sign in',alternate:'Alternate',profile:'Profile',self:'Registry entry',next:'Next',previous:'Previous',first:'First',last:'Last'};
+// Filled in by the server (`read_console`): the environment, and whether /dev/fetch exists here.
+const DEV={"environment":"local","fetch":true};
 let nextSel=null,idx=0,furthest=0,clients={},last=null,nextTab=null,tab='Preview',selected=null,compareHtml=null;
 
 const links=b=>b?.links||[];
@@ -166,6 +168,7 @@ function friendly(detail,status){
 }
 function errorBox(e){
   const b=el('div','errbox');b.append(el('b',null,e.title||e.message),el('p',null,e.hint||''));
+  if(e.open){const a=el('a','btn','Open it in a new tab \u2197');a.href=e.open;a.target='_blank';a.rel='noopener noreferrer';a.style.cssText='display:inline-block;margin-top:10px;border:1px solid #fecaca;background:#fff;border-radius:8px;padding:4px 12px;color:var(--bad);text-decoration:none;font-weight:500';b.append(a)}
   if(e.examples){const x=el('div','ex');e.examples.forEach(v=>{const c=el('code',null,v);c.onclick=()=>{$('path').value=v.includes('<')?'/':v;send()};x.append(c)});b.append(x)}
   return b;
 }
@@ -187,6 +190,11 @@ function loading(on){
 }
 async function call(path,client,lang=$('lang').value){
   const ext=/^https?:/.test(path);
+  if(ext&&!DEV.fetch){
+    const e=new Error();e.title='Library feeds open in a new tab here';
+    e.hint='Reading a library\u2019s own feed inside the console works only on a local console. This one only shows the registry\u2019s own feed, search and catalogs.';
+    e.open=path;e.message=e.title;throw e;
+  }
   loading(true);
   try{
   const r=await fetch((ext?'/dev/fetch?':'/dev/simulate?')+new URLSearchParams({[ext?'url':'path']:path,client,language:lang}));
@@ -301,7 +309,9 @@ function renderRows(){
 }
 
 // A link stays inside the console when it leads to an OPDS/JSON document; anything else (a web page, a book file) opens in a new tab.
-function leavesConsole(l){return !rels(l).includes('self')&&!/opds|json/.test(l.type||'')}
+// A link stays in the console when it is this registry's own entry, or an OPDS/JSON document the
+// console can fetch. Without /dev/fetch (anywhere but a local console) every library link opens in a new tab.
+function leavesConsole(l){return !rels(l).includes('self')&&(!DEV.fetch||!/opds|json/.test(l.type||''))}
 function openLink(l){
   let href=l.href;
   if(l.templated){
@@ -320,9 +330,13 @@ function linkButtons(list,skip){
     const a=el('a',rels(l).includes('catalog')?'':'sec',lab+(l.templated?' \u2026':'')+(leavesConsole(l)?' \u2197':''));
     a.href=new URL(l.href.replace(/\{[^}]*\}/g,''),baseUrl()).href;a.title=l.href+(l.type?'  ['+l.type+']':'');
     a.onclick=e=>{e.preventDefault();openLink(l)};acts.append(a);
-    // Only the library's own feed gets a raw button: it opens that feed on the Raw tab.
-    if(rels(l).includes('catalog')&&!leavesConsole(l)){const j=el('a','sec raw','Raw OPDS feed');j.href=a.href;j.title='Load the library\u2019s own OPDS feed and show its raw JSON';
-      j.onclick=e=>{e.preventDefault();nextTab='Raw';openLink(l)};acts.append(j)}});
+    // Only the library's own feed gets a raw button. With /dev/fetch it loads here, on the Raw tab;
+    // without it, it is a plain link that opens the feed in a new tab, and says so.
+    if(rels(l).includes('catalog')&&!l.templated){
+      const j=el('a','sec raw','Raw OPDS feed'+(DEV.fetch?'':' \u2197'));j.href=a.href;
+      if(DEV.fetch){j.title='Load the library\u2019s own OPDS feed and show its raw JSON';j.onclick=e=>{e.preventDefault();nextTab='Raw';openLink(l)}}
+      else{j.title='Opens the library\u2019s own feed in a new tab: '+a.href;j.target='_blank';j.rel='noopener noreferrer'}
+      acts.append(j)}});
   return acts;
 }
 function initial(t){return[...(t||'?')][0].toUpperCase()}
@@ -510,6 +524,9 @@ function sFill(){if(sNext&&!sBusy&&!$('sv').hidden&&$('smore').getBoundingClient
 const sSchedule=()=>{$('sclear').hidden=!$('sq').value;clearTimeout(sTimer);sTimer=setTimeout(()=>sSearch(false),250)};
 
 (async()=>{
+  const label=DEV.environment==='local'?'LOCAL ONLY':DEV.environment.toUpperCase();
+  $('envbadge').textContent=label;
+  if(!DEV.fetch)$('path').placeholder='/search?query=paris';
   clients=await(await fetch('/dev/clients')).json();
   for(const[k,c]of Object.entries(clients)){const o=el('option',null,`${c.label} \u00b7 ${c.source}`);o.value=k;$('client').append(o)}
   LANGS.forEach(l=>{const o=el('option',null,l||'(none)');o.value=l;$('lang').append(o)});

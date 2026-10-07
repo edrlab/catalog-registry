@@ -1,14 +1,14 @@
-"""The dev console exists on a developer's machine and nowhere else (ADR-063)."""
+"""The dev console, and which parts of it exist where (ADR-063)."""
 
 from collections.abc import AsyncIterator
 
 import httpx
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from registry.api.routes import dev_fetch
+from registry.api.routes import dev, dev_fetch
 from registry.core.config import Settings
 from registry.main import create_app
 
@@ -228,3 +228,30 @@ async def test_an_oversized_feed_is_refused(monkeypatch: pytest.MonkeyPatch) -> 
 
     with pytest.raises(HTTPException, match="over 2 MB"):
         await dev_fetch.fetch_public("https://lib.example/feed", {}, transport=transport)
+
+
+def _page_app(settings: Settings, environment: str) -> FastAPI:
+    app = FastAPI()
+    app.include_router(dev.router)
+    app.state.settings = settings.model_copy(update={"environment": environment})
+    return app
+
+
+@pytest.mark.parametrize(
+    ("environment", "fetch"),
+    [("local", "true"), ("test", "false"), ("staging", "false"), ("production", "false")],
+)
+async def test_the_page_is_told_whether_it_can_read_a_library_feed(
+    settings: Settings, environment: str, fetch: str
+) -> None:
+    """The buttons follow this. Only a local console has /dev/fetch, so everywhere else a library
+    link must open in a new tab instead of promising a view the console cannot give."""
+    transport = ASGITransport(app=_page_app(settings, environment))
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/dev")
+
+    assert response.status_code == 200
+    assert f'"environment": "{environment}"' in response.text
+    assert f'"fetch": {fetch}' in response.text
+    assert response.headers["x-robots-tag"] == "noindex, nofollow"
+    assert '{"environment":"local","fetch":true}' not in response.text, "the default was replaced"
