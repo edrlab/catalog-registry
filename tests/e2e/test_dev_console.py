@@ -56,6 +56,7 @@ async def test_the_page_is_served_locally_with_a_closed_policy(local_client: Asy
 
     assert response.status_code == 200
     assert "Registry dev console" in response.text
+    assert 'id="sq"' in response.text, "the Search view is part of the page"
     policy = response.headers["content-security-policy"]
     assert "default-src 'none'" in policy and "connect-src 'self'" in policy
 

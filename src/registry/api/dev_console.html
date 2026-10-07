@@ -7,7 +7,7 @@
 <style>
 :root{color-scheme:light;--fg:#18181b;--mut:#71717a;--line:#e4e4e7;--soft:#f4f4f5;--acc:#2563eb;--tint:#eff6ff;--ok:#15803d;--okbg:#dcfce7;--bad:#b91c1c;--badbg:#fee2e2;--warn:#a16207;--warnbg:#fef9c3;
 --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
-*{box-sizing:border-box}
+*{box-sizing:border-box}[hidden]{display:none!important}
 body{margin:0;background:#fff;color:var(--fg);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 .top{display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--line)}
 .top b{font-size:15px;letter-spacing:-.01em}.badge{font-size:11px;font-weight:600;color:var(--warn);background:var(--warnbg);border-radius:6px;padding:1px 7px}
@@ -62,11 +62,46 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 .pub .cover img{width:100%;height:100%;object-fit:cover}.pub .info{flex:1;min-width:0}.pub h2{margin:0 0 2px;font-size:19px;letter-spacing:-.02em}.pub .desc{color:#3f3f46;margin:10px 0}
 .pub dl{display:grid;grid-template-columns:100px 1fr;gap:4px 12px;margin:10px 0;font-size:13px}.pub dt{color:var(--mut)}.pub dd{margin:0;word-break:break-word}
 .pub .acts{display:flex;gap:8px;flex-wrap:wrap}.pub .acts a{display:inline-block;text-decoration:none;color:#fff;background:var(--fg);border-radius:8px;padding:7px 14px;font-weight:500;font-size:13px}.pub .acts a.sec{background:var(--soft);color:var(--fg)}
+.views{display:inline-flex;background:var(--soft);border-radius:9px;padding:2px;margin-left:10px}.views button{border:0;background:transparent;padding:4px 14px;border-radius:7px;font-weight:600;color:var(--mut)}.views button.on{background:#fff;color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+#sv{padding:18px 20px 40px;max-width:1180px;margin:auto}
+.sbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.sbox{flex:1;min-width:260px;display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:14px;padding:0 14px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06);color:var(--mut)}
+.sbox:focus-within{border-color:var(--acc);box-shadow:0 0 0 4px var(--tint);color:var(--acc)}
+.sbox input{flex:1;border:0;outline:0;font:17px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;padding:14px 0;min-width:0;background:transparent;color:var(--fg)}
+.sbox button{border:0;background:var(--soft);border-radius:50%;width:24px;height:24px;padding:0;line-height:22px;color:var(--mut)}
+.schips{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 4px}.schips button{font-size:12px;padding:3px 11px;border-radius:999px;color:var(--mut)}
+.shint{font-size:12px;color:var(--mut);margin:6px 0 14px}
+.sgrid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:20px;align-items:start}@media(max-width:900px){.sgrid{grid-template-columns:1fr}}
+.ssum{font-size:13px;color:var(--mut);margin:0 0 10px;min-height:20px}
+.sres.busy #slist{opacity:.5;transition:opacity .15s}
+.hit{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 10px;cursor:pointer;background:#fff}
+.hit:hover{border-color:#c9c9d1;box-shadow:0 2px 10px rgba(0,0,0,.06)}.hit.sel{border-color:var(--acc);box-shadow:0 0 0 3px var(--tint)}
+.hit .rk{font:11px var(--mono);color:var(--mut);float:right;margin-left:10px}
+.hit h3{margin:0 0 3px;font-size:16px;font-weight:600;letter-spacing:-.01em}
+.hit .ds{color:#3f3f46;font-size:13.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hit .pl{font-size:12.5px;color:var(--mut);margin-top:4px}
+.hit mark{background:#fef08a;color:inherit;border-radius:3px;padding:0 1px}
+.hit .fz{font:600 11px var(--mono);background:var(--warnbg);color:var(--warn);border-radius:5px;padding:0 6px;margin-left:6px;vertical-align:middle}
+.sdet{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+.smore{text-align:center;padding:8px;color:var(--mut);font-size:13px;min-height:30px}
 .empty{padding:40px 20px;color:var(--mut);text-align:center}.err{color:var(--bad)}
 </style>
 </head>
 <body>
-<div class="top"><b>Registry dev console</b><span class="badge">LOCAL ONLY</span><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
+<div class="top"><b>Registry dev console</b><span class="badge">LOCAL ONLY</span><div class="views"><button data-view="explorer" class="on">Explorer</button><button data-view="search">Search</button></div><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
+<section id="sv" hidden>
+  <div class="sbar">
+    <div class="sbox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="sq" type="text" placeholder="Search libraries, places, languages" autocomplete="off" spellcheck="false" enterkeyhint="search"><button id="sclear" hidden title="Clear (Esc)">&times;</button></div>
+    <label class="f">Client <select id="sclient"></select></label>
+    <label class="f">Accept-Language <select id="slang"></select></label>
+  </div>
+  <div class="schips" id="schips"></div>
+  <div class="shint">Results update as you type. <b>"quotes"</b> match an exact phrase. Accents and small typos are tolerated. Place names count. <span class="kbd">&darr;</span> <span class="kbd">&uarr;</span> to move, <span class="kbd">Esc</span> to clear.</div>
+  <div class="sgrid">
+    <div class="sres"><div id="ssum" class="ssum"></div><div id="slist"></div><div id="smore" class="smore"></div></div>
+    <aside class="sdet" id="sdet"><div class="empty">Select a result to preview it.</div></aside>
+  </div>
+</section>
 <div class="bar">
   <div class="navrow"><button class="nb" data-nav="back">‹ Back</button><button class="nb" data-nav="fwd">Forward ›</button></div>
   <div class="req"><span>GET</span><input id="path" spellcheck="false" autocomplete="off" placeholder="/search?query=paris   or a library feed URL, https://…"><button class="pri" id="go">Send</button></div>
@@ -88,7 +123,7 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 <script>
 const $=id=>document.getElementById(id);
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
-const PRESETS=[['Recommended feed','/'],['Search: paris','/search?query=paris'],['Typo: parsi','/search?query=parsi'],['Accents: ecole','/search?query=%C3%A9cole'],['Empty search','/search?query='],['Page 2','/search?query=library&page=2']];
+const PRESETS=[['Recommended feed','/'],['Search: paris','/search?query=paris'],['Typo: parsi','/search?query=parsi'],['Accents: numerique','/search?query=numerique'],['Empty search','/search?query='],['Page 2','/search?query=library&page=2']];
 const LANGS=['','fr','en','fr-FR,fr;q=0.9,en;q=0.5','en-US,en;q=0.9','de,fr;q=0.5','*'];
 const TABS=['Preview','Response','Headers','Raw','curl','Compare'];
 const COLORS={gray:'#6b7280',red:'#dc2626',yellow:'#ca8a04',blue:'#2563eb',green:'#16a34a',purple:'#9333ea',orange:'#ea580c',pink:'#db2777'};
@@ -126,9 +161,9 @@ function errorBox(e){
   return b;
 }
 // A path is simulated against this registry; a full URL is read from the library's own server.
-async function call(path,client){
+async function call(path,client,lang=$('lang').value){
   const ext=/^https?:/.test(path);
-  const r=await fetch((ext?'/dev/fetch?':'/dev/simulate?')+new URLSearchParams({[ext?'url':'path']:path,client,language:$('lang').value}));
+  const r=await fetch((ext?'/dev/fetch?':'/dev/simulate?')+new URLSearchParams({[ext?'url':'path']:path,client,language:lang}));
   const j=await r.json();
   if(!r.ok)throw friendly(j.detail,r.status);
   return j;
@@ -243,7 +278,7 @@ function openLink(l){
   const u=new URL(href,baseUrl());
   if(leavesConsole(l)){window.open(u.href,'_blank','noopener,noreferrer');return}
   $('path').value=!isExt()&&(rels(l).includes('self')||u.origin===location.origin)?u.pathname+u.search:u.href;
-  send();
+  showView('explorer');send();
 }
 function linkButtons(list,skip){
   const acts=el('div','acts');
@@ -344,12 +379,115 @@ async function compareTab(p){
   };
 }
 
+
+// ---- Search view: a real search page on /search, as you type ------------------------------------
+const fold=t=>t.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+const queryTerms=q=>(q.match(/"[^"]*"|\S+/g)||[]).map(t=>fold(t.replace(/"/g,'')).trim()).filter(t=>t.length>=2);
+// Accent-blind highlight: match on the folded text, mark the original characters.
+function highlight(text,ts){
+  const chars=[...text],map=[];let folded='';
+  chars.forEach((ch,i)=>{for(const c of fold(ch)){folded+=c;map.push(i)}});
+  const on=new Array(chars.length).fill(false);
+  for(const t of ts){let k=folded.indexOf(t);while(k>=0){for(let j=k;j<k+t.length;j++)on[map[j]]=true;k=folded.indexOf(t,k+t.length)}}
+  const out=document.createDocumentFragment();let buf='',cur=false;
+  const flush=()=>{if(!buf)return;if(cur){const m=el('mark',null,buf);out.append(m)}else out.append(document.createTextNode(buf));buf=''};
+  chars.forEach((ch,i)=>{if(on[i]!==cur){flush();cur=on[i]}buf+=ch});flush();return out;
+}
+let sToken=0,sItems=[],sNext=null,sSel=null,sQuery='',sTimer=null,sBusy=false;
+function showView(v){
+  const search=v==='search';
+  document.querySelectorAll('.bar,#status,.grid').forEach(e=>e.hidden=search);$('sv').hidden=!search;
+  document.querySelectorAll('.views button').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
+  if(search)$('sq').focus();
+}
+function sPlace(m){return[m.city,(m.subdivisions||[]).join(', '),m.country].filter(Boolean).join(' · ')}
+function hitCard(it,i,ts){
+  const c=it.raw,m=c.metadata||c,card=el('div','hit'+(sSel===i?' sel':''));
+  card.append(el('span','rk','#'+(i+1)));
+  const h=el('h3');h.append(highlight(m.title||'(untitled)',ts));
+  const hay=fold([m.title,m.description,m.city,m.country,...(m.subdivisions||[]),...(m.kind||[]),...(m.supportedLanguages||[])].filter(Boolean).join(' '));
+  if(ts.length&&!ts.some(t=>hay.includes(t))){const f=el('span','fz','fuzzy match');f.title='No query word appears in this result. It matched by similarity (typo tolerance).';h.append(f)}
+  card.append(h);
+  if(m.description){const d=el('div','ds');d.append(highlight(m.description,ts));card.append(d)}
+  const place=sPlace(m);if(place){const p=el('div','pl');p.append(highlight(place,ts));card.append(p)}
+  const tags=el('div','tags');
+  [].concat(m.kind||[]).forEach(k=>tags.append(el('span','tag k',k)));
+  [].concat(m.supportedLanguages||[]).forEach(l=>tags.append(el('span','tag',l)));
+  card.append(tags);
+  card.onclick=()=>sSelect(i);
+  return card;
+}
+function sSelect(i){
+  sSel=i;const it=sItems[i];
+  document.querySelectorAll('#slist .hit').forEach((e,k)=>e.classList.toggle('sel',k===i));
+  document.querySelectorAll('#slist .hit')[i]?.scrollIntoView({block:'nearest'});
+  if(!it)return;
+  const box=el('div');
+  const self=links(it.raw).find(l=>rels(l).includes('self'));
+  if(self){const tl=el('div','tools'),b=el('button',null,'Open in Explorer');b.onclick=()=>openLink(self);tl.append(b);box.append(tl)}
+  box.append(preview(it));$('sdet').replaceChildren(box);
+}
+function sRender(){
+  const ts=queryTerms(sQuery),list=$('slist');list.replaceChildren();
+  sItems.forEach((it,i)=>list.append(hitCard(it,i,ts)));
+}
+async function sSearch(more=false){
+  const q=$('sq').value.trim(),my=++sToken;
+  $('sclear').hidden=!$('sq').value;
+  if(!more){
+    sQuery=q;sItems=[];sNext=null;sSel=null;
+    if(!q){$('slist').replaceChildren();$('ssum').textContent='';$('smore').textContent='';$('sdet').replaceChildren(el('div','empty','Select a result to preview it.'));return}
+  }
+  sBusy=true;document.querySelector('.sres').classList.add('busy');
+  let j;
+  try{
+    const u=more?new URL(sNext,location.origin):null;
+    j=await call(more?u.pathname+u.search:'/search?query='+encodeURIComponent(q),$('sclient').value,$('slang').value);
+  }catch(e){
+    if(my!==sToken)return;
+    sBusy=false;document.querySelector('.sres').classList.remove('busy');
+    $('slist').replaceChildren(errorBox(e));$('ssum').textContent='';$('smore').textContent='';return;
+  }
+  if(my!==sToken)return; // a newer keystroke already replaced this search
+  sBusy=false;document.querySelector('.sres').classList.remove('busy');
+  const items=itemsOf(j.body,'/search'),md=j.body?.metadata||{};
+  sItems=sItems.concat(items);sNext=findRel(j.body,'next')?.href||null;
+  const total=md.numberOfItems??sItems.length;
+  $('ssum').textContent=total?`${total} result${total===1?'':'s'} for “${sQuery}” · ${j.ms} ms · ${j.encoding||'identity'} · ${bytes(j.wire_bytes)}`:'';
+  sRender();
+  if(!sItems.length){
+    const e=el('div','empty');e.append(el('b',null,`No results for “${sQuery}”`),document.createElement('br'),'Try fewer words, or check the spelling. Small typos are tolerated, big ones are not.');
+    $('slist').replaceChildren(e);$('ssum').textContent=`0 results · ${j.ms} ms`;
+  }
+  $('smore').textContent=sNext?`Showing ${sItems.length} of ${total}. Scroll for more.`:(sItems.length?`All ${sItems.length} shown.`:'');
+  if(sSel==null&&sItems.length&&!more&&matchMedia('(min-width:901px)').matches)sSelect(0);
+  sFill();
+}
+// The scroll observer only fires when the sentinel enters view. A short first page leaves it in
+// view already, so check after every render as well.
+function sFill(){if(sNext&&!sBusy&&!$('sv').hidden&&$('smore').getBoundingClientRect().top<innerHeight+200)sSearch(true)}
+const sSchedule=()=>{$('sclear').hidden=!$('sq').value;clearTimeout(sTimer);sTimer=setTimeout(()=>sSearch(false),250)};
+
 (async()=>{
   clients=await(await fetch('/dev/clients')).json();
   for(const[k,c]of Object.entries(clients)){const o=el('option',null,`${c.label} \u00b7 ${c.source}`);o.value=k;$('client').append(o)}
   LANGS.forEach(l=>{const o=el('option',null,l||'(none)');o.value=l;$('lang').append(o)});
   PRESETS.forEach(([n,pth])=>{const b=el('button',null,n);b.onclick=()=>{$('path').value=pth;compareHtml=null;send()};$('presets').append(b)});
   loadHash();
+  ['sclient'].forEach(id=>{for(const[k,c]of Object.entries(clients)){const o=el('option',null,c.label.split(' (')[0]);o.value=k;$(id).append(o)}});
+  LANGS.forEach(l=>{const o=el('option',null,l||'(none)');o.value=l;$('slang').append(o)});
+  ['paris','parsi','numerique','"numérique de paris"','wallis','bibliotheque','bruxels','fr'].forEach(q=>{const b=el('button',null,q);b.onclick=()=>{$('sq').value=q;sSearch(false)};$('schips').append(b)});
+  $('sq').addEventListener('input',sSchedule);
+  $('sq').addEventListener('keydown',e=>{
+    if(e.key==='Enter'){clearTimeout(sTimer);sSearch(false)}
+    else if(e.key==='Escape'){$('sq').value='';sSearch(false)}
+    else if(e.key==='ArrowDown'){e.preventDefault();if(sItems.length)sSelect(Math.min((sSel??-1)+1,sItems.length-1))}
+    else if(e.key==='ArrowUp'){e.preventDefault();if(sItems.length)sSelect(Math.max((sSel??1)-1,0))}
+  });
+  $('sclear').onclick=()=>{$('sq').value='';sSearch(false);$('sq').focus()};
+  for(const id of['sclient','slang'])$(id).onchange=()=>sSearch(false);
+  document.querySelectorAll('.views button').forEach(b=>b.onclick=()=>showView(b.dataset.view));
+  new IntersectionObserver(es=>{if(es[0].isIntersecting&&sNext&&!sBusy&&!$('sv').hidden)sSearch(true)}).observe($('smore'));
   if(history.state?.idx!=null){idx=history.state.idx;furthest=idx}
   if(!location.hash)history.replaceState(null,'','#'+hashOf()); // the first page is not an extra entry
   document.addEventListener('click',e=>{const b=e.target.closest('[data-nav]');if(b&&!b.disabled)history[b.dataset.nav==='back'?'back':'forward']()});
@@ -357,7 +495,8 @@ async function compareTab(p){
   $('path').addEventListener('keydown',e=>{if(e.key==='Enter'){compareHtml=null;send()}});
   for(const id of['client','lang'])$(id).onchange=()=>{compareHtml=null;send()};
   addEventListener('keydown',e=>{
-    if(e.key==='/'&&document.activeElement!==$('path')){e.preventDefault();$('path').focus();$('path').select()}
+    const field=$('sv').hidden?$('path'):$('sq');
+    if(e.key==='/'&&document.activeElement!==field){e.preventDefault();field.focus();field.select()}
     if(e.key==='Enter'&&(e.metaKey||e.ctrlKey))send();
   });
   renderTabs();send();

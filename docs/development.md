@@ -287,6 +287,11 @@ server to call its own app in-process with that client's real headers. It shows 
 chosen, wire against decoded bytes, time and the raw JSON, and "Compare all clients" lays them side by
 side. Results follow the OPDS `next` / `previous` links.
 
+The **Search** view (top bar) is a search page on `/search`: results update as you type, matches are
+highlighted (accent-blind), a result that matched only by typo tolerance is badged "fuzzy match", more
+results load as you scroll, and the arrow keys move through them. Pick a client and language to see
+how each reader would be answered.
+
 Clicking "Browse the catalog" (or pasting a library's feed URL into the path box) reads that feed
 from the library's own server and shows it the same way: navigation, publications with covers, and
 the next/previous links. Only public `http(s)` hosts are fetched (loopback, private and metadata
