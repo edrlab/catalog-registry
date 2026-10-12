@@ -57,8 +57,8 @@ not the `*.run.app` address, for anything a reader device uses.
 
 | Endpoint | |
 |---|---|
-| `GET /` | The top-level feed, `application/opds-catalog+json`, ranked by `Accept-Language` |
-| `GET /search?query=&page=` | Search, 50 per page, same media type. An empty query returns an empty feed |
+| `GET /?restrict=` | The top-level feed, `application/opds-catalog+json`, ranked by `Accept-Language`. See [Restricting](#restricting-the-feed-and-search) |
+| `GET /search?query=&page=&restrict=` | Search, 50 per page, same media type. An empty query returns an empty feed |
 | `GET /catalogs/{id}` | One catalog. 404 problem+json if unknown, 422 if the uuid is malformed |
 | `GET /dev` | The console. Reading a library's own feed from it works only on a local run |
 | `GET /health/live` | Liveness. Does not touch the database |
@@ -95,12 +95,35 @@ make live-check URL=https://registry.thoriumreader.com ARGS="--deployed"
 | `data/dev-sample.json` | Invented data for trying ranking by hand (`make seed-sample`) |
 | `demo/` | Example output and the contract-test corpus |
 
+## Restricting the feed and search
+
+Some apps and devices cannot use every catalog (no browser, or libraries only). They add one query
+param to `/` and `/search`, a comma-separated list:
+
+| `restrict=` | Keeps |
+|---|---|
+| `opds` | Catalogs with a `catalog` link of type `application/opds+json` (OPDS 2.0 only). HTML-only catalogs are dropped |
+| `no-open` | Drops every catalog that has `open` among its kinds |
+| `opds,no-open` | Both |
+
+```
+curl -s 'http://localhost:8000/?restrict=opds,no-open'
+curl -s 'http://localhost:8000/search?query=paris&restrict=opds'
+```
+
+A restriction only removes catalogs, never reorders them. The registry's own links keep it (the
+feed's `self` and `search` links, and every page link of a search), so a client stays inside its
+restricted view. An unknown value is a 422. The console has a box for each.
+
 ## Language ranking
 
 A catalog that declares `supportedLanguages` is returned only when the request's
-`Accept-Language` matches one of them. Catalogs scoped to no language come first, because they
-serve every reader. The matches follow, in the client's own order of preference, and then by
-how specifically the tags agree.
+`Accept-Language` matches one of them. The matches come first, in the client's own order of
+preference and then by how specifically the tags agree. Catalogs scoped to no language serve every
+reader and follow them.
+
+With no `Accept-Language` (or one that cannot be read) only the catalogs scoped to no language are
+returned. `Accept-Language: *` says any language will do and returns everything.
 
 Matching is a whole-subtag prefix in either direction. `fr-FR` finds a `fr` catalog, `fr` finds
 a `fr-BE` one, and `fr-BE` does not match `fr-CA`.

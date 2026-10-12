@@ -10,6 +10,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 import pytest
 
+from registry.domain.restrictions import NO_RESTRICTIONS, Restrictions
 from registry.domain.search_query import ParsedQuery
 from registry.repositories.protocols import SearchPage
 from registry.services.search_service import PAGE_SIZE, resolve_search
@@ -25,9 +26,18 @@ class FakeSearcher:
     def __init__(self, total: int = 0) -> None:
         self.total = total
         self.calls: list[tuple[ParsedQuery, int, int]] = []
+        self.restrictions: list[Restrictions] = []
 
-    async def search_catalogs(self, query: ParsedQuery, *, limit: int, offset: int) -> SearchPage:
+    async def search_catalogs(
+        self,
+        query: ParsedQuery,
+        *,
+        limit: int,
+        offset: int,
+        restrictions: Restrictions = NO_RESTRICTIONS,
+    ) -> SearchPage:
         self.calls.append((query, limit, offset))
+        self.restrictions.append(restrictions)
         return SearchPage(total=self.total, catalogs=())
 
 
@@ -108,7 +118,7 @@ async def test_the_total_and_the_paging_links_come_from_the_page_the_searcher_re
 
 async def test_a_searcher_that_raises_still_closes_and_the_error_reaches_the_caller() -> None:
     class Boom(FakeSearcher):
-        async def search_catalogs(self, query: ParsedQuery, *, limit: int, offset: int):  # type: ignore[no-untyped-def]
+        async def search_catalogs(self, query, *, limit, offset, restrictions=NO_RESTRICTIONS):  # type: ignore[no-untyped-def]
             raise RuntimeError("database went away")
 
     opener = FakeOpener(Boom())

@@ -201,12 +201,34 @@ async def test_language_is_sent_as_accept_language(local_client: AsyncClient) ->
 
 @pytest.mark.parametrize(
     "path",
-    ["/dev", "/health/live", "http://evil.example/", "//evil.example/", "/docs", "/search/../dev"],
+    [
+        "/dev",
+        "/health/live",
+        "http://evil.example/",
+        "//evil.example/",
+        "/docs",
+        "/search/../dev",
+        "/?restrict=opds&next=/dev",
+        "/?x=1",
+    ],
 )
 async def test_only_the_public_reads_can_be_simulated(local_client: AsyncClient, path: str) -> None:
     response = await local_client.get(SIMULATE, params={"path": path, "client": "curl"})
 
     assert response.status_code == 422
+
+
+async def test_the_feed_can_be_simulated_with_a_restriction(
+    local_client: AsyncClient, searchable_catalogs: None
+) -> None:
+    response = await local_client.get(
+        SIMULATE,
+        params={"path": "/?restrict=opds", "client": "browser", "language": "*"},
+    )
+
+    assert response.status_code == 200
+    titles = [c["metadata"]["title"] for c in response.json()["body"]["catalogs"]]
+    assert titles == ["Project Gutenberg"]
 
 
 async def test_an_unknown_client_is_rejected(local_client: AsyncClient) -> None:

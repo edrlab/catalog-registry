@@ -182,9 +182,11 @@ async def test_thirty_concurrent_feeds_return_the_same_body_and_leak_no_connecti
         committed_catalogs(migrated_database, documents(), recommended=True),
         AsyncClient(transport=ASGITransport(app=wired_app), base_url="http://testserver") as client,
     ):
-        alone = (await client.get("/")).json()
+        alone = (await client.get("/", headers={"Accept-Language": "*"})).json()
         async with asyncio.timeout(HANG_GUARD_SECONDS):
-            responses = await asyncio.gather(*(client.get("/") for _ in range(CONCURRENT)))
+            responses = await asyncio.gather(
+                *(client.get("/", headers={"Accept-Language": "*"}) for _ in range(CONCURRENT))
+            )
 
     assert alone["metadata"]["numberOfItems"] == CATALOGS
     assert_valid_feed(alone)
@@ -253,8 +255,8 @@ async def test_the_body_is_the_same_text_every_time(
     wired_client: AsyncClient, migrated_database: str
 ) -> None:
     async with committed_catalogs(migrated_database, documents(), recommended=True):
-        first = await wired_client.get("/")
-        second = await wired_client.get("/")
+        first = await wired_client.get("/", headers={"Accept-Language": "*"})
+        second = await wired_client.get("/", headers={"Accept-Language": "*"})
 
     assert first.content == second.content
     assert json.loads(first.content)["metadata"]["numberOfItems"] == CATALOGS

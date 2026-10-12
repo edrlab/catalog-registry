@@ -18,6 +18,8 @@ from sqlalchemy import REAL, TEXT, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from registry.core.constants import OPDS_JSON_MEDIA_TYPE
+from registry.domain.restrictions import NO_RESTRICTIONS, Restrictions
 from registry.domain.search_query import ParsedQuery
 from registry.repositories.catalog_rows import (
     CATALOG_COLUMNS,
@@ -81,6 +83,12 @@ hits AS (
   SELECT h.catalog_id, h.tier, h.score, c.created_at
     FROM (SELECT * FROM word_hits UNION ALL SELECT * FROM trigram_hits) h
     JOIN catalogs c ON c.id = h.catalog_id AND c.status = 'active'
+     AND (NOT CAST(:opds AS boolean) OR EXISTS (
+           SELECT 1 FROM links k
+            WHERE k.catalog_id = c.id AND k.rel = 'catalog'
+              AND lower(trim(split_part(k.media_type, ';', 1))) = CAST(:opds_type AS text)))
+     AND (NOT CAST(:no_open AS boolean) OR NOT EXISTS (
+           SELECT 1 FROM catalog_kinds x WHERE x.catalog_id = c.id AND x.kind = 'open'))
 )
 SELECT t.total, p.tier, p.score, """
     + CATALOG_COLUMNS
@@ -109,7 +117,14 @@ class CatalogSearchRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def search_catalogs(self, query: ParsedQuery, *, limit: int, offset: int) -> SearchPage:
+    async def search_catalogs(
+        self,
+        query: ParsedQuery,
+        *,
+        limit: int,
+        offset: int,
+        restrictions: Restrictions = NO_RESTRICTIONS,
+    ) -> SearchPage:
         """One page of matches in rank order, with the total across all pages, in one statement."""
         params = {
             "positives": list(query.positives),
@@ -118,6 +133,9 @@ class CatalogSearchRepository:
             "weights": list(RANK_WEIGHTS),
             "limit": limit,
             "offset": offset,
+            "opds": restrictions.opds,
+            "opds_type": OPDS_JSON_MEDIA_TYPE,
+            "no_open": restrictions.no_open,
         }
         rows = await fetch_rows(self._session, _SEARCH, params)
         total = rows[0]["total"]  # the statement always returns at least one row

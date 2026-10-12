@@ -19,7 +19,9 @@ from registry.api.compression import MINIMUM_SIZE
 
 pytestmark = pytest.mark.e2e
 
-PLAIN = {"Accept-Encoding": "identity"}
+#: `*`: these tests compare big bodies, so they ask for every language (no header would not).
+ANY_LANGUAGE = {"Accept-Language": "*"}
+PLAIN = {"Accept-Encoding": "identity", **ANY_LANGUAGE}
 
 
 async def plain_body(client: AsyncClient, path: str) -> bytes:
@@ -32,7 +34,7 @@ async def plain_body(client: AsyncClient, path: str) -> bytes:
 async def raw(
     client: AsyncClient, path: str, accept: str | None
 ) -> tuple[int, dict[str, str], bytes]:
-    request = client.build_request("GET", path)
+    request = client.build_request("GET", path, headers=ANY_LANGUAGE)
     request.headers.pop("accept-encoding", None)
     if accept is not None:
         request.headers["accept-encoding"] = accept

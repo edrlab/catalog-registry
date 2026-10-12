@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Query, Request
 
 from registry.api.responses import OPDSResponse
+from registry.domain.restrictions import RESTRICT_PATTERN, parse_restrictions
 from registry.domain.search_query import MAX_PAGE
 from registry.schemas.feed import FeedResponse
 from registry.services.search_service import resolve_search
@@ -23,10 +24,12 @@ async def read_search_results(
     request: Request,
     query: str | None = None,
     page: int = Query(default=1, ge=1, le=MAX_PAGE),
+    restrict: str | None = Query(default=None, pattern=RESTRICT_PATTERN),
 ) -> dict[str, Any]:
     return await resolve_search(
         request.app.state.open_catalog_searcher,
         query=query,
         page=page,
         base_url=request.app.state.settings.base_url,
+        restrictions=parse_restrictions(restrict),
     )

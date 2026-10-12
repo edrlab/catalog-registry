@@ -127,6 +127,15 @@ anything containing them, ranked below the real match.
   catalogs;`. It is derived data. `refresh_catalog_search` locks the catalog row, so two
   transactions changing one catalog's subdivisions both end up in its row.
 
+## Restricting
+
+`GET /search?query=…&restrict=opds,no-open` removes catalogs that an app or device cannot use:
+`opds` keeps catalogs with a `catalog` link of type `application/opds+json`, `no-open` drops those
+with `open` among their kinds. The total, the pages and every page link follow the restriction, and
+the ranking is untouched. It is two `WHERE` clauses in the same single statement; the top-level
+feed applies the same two rules in Python (`registry/domain/restrictions.py`). At a million
+catalogs with BM25 a restriction that removes most hits will cost more; that is not measured yet.
+
 ## Known limits
 
 - "Belgio" and "Vallonia" (Italian, not loaded for Belgium) still find the Belgian catalogs, as

@@ -19,7 +19,7 @@ async def test_a_self_link_from_the_feed_resolves(
     client: AsyncClient, seeded_catalogs: int
 ) -> None:
     """The feed's own output has to be honest: every self link it emits must work."""
-    feed = (await client.get("/")).json()
+    feed = (await client.get("/", headers={"Accept-Language": "*"})).json()
 
     for catalog in feed["catalogs"]:
         response = await client.get(catalog["links"][0]["href"])
@@ -31,7 +31,7 @@ async def test_a_self_link_from_the_feed_resolves(
 async def test_the_content_type_is_the_opds_media_type(
     client: AsyncClient, seeded_catalogs: int
 ) -> None:
-    feed = (await client.get("/")).json()
+    feed = (await client.get("/", headers={"Accept-Language": "*"})).json()
     response = await client.get(feed["catalogs"][0]["links"][0]["href"])
 
     assert response.headers["content-type"].startswith(OPDS_CATALOG_MEDIA_TYPE)
@@ -85,7 +85,7 @@ async def test_a_not_recommended_catalog_is_readable_at_its_derived_id(
     await db_session.commit()
     derived = uuid.uuid5(uuid.NAMESPACE_URL, href)
 
-    feed = (await client.get("/")).json()
+    feed = (await client.get("/", headers={"Accept-Language": "*"})).json()
     response = await client.get(f"/catalogs/{derived}")
 
     assert "Lirtuel" not in [catalog["metadata"]["title"] for catalog in feed["catalogs"]]

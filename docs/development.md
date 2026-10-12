@@ -289,6 +289,11 @@ server to call its own app in-process with that client's real headers. It shows 
 chosen, wire against decoded bytes, time and the raw JSON, and "Compare all clients" lays them side by
 side. Results follow the OPDS `next` / `previous` links.
 
+The browser is the default client. Two boxes in the top bar, **OPDS only** and **No open catalogs**, add
+`restrict=` to the feed and search requests (see the README) and are kept in the URL. The status
+line shows two times: *server* is what the app spent handling the request, with no network; *round
+trip* is measured in your browser and includes the network.
+
 The **Search** view (top bar) is a search page on `/search`: results update as you type, matches are
 highlighted (accent-blind), a result that matched only by typo tolerance is badged "fuzzy match", more
 results load as you scroll, and the arrow keys move through them. Pick a client and language to see

@@ -7,6 +7,7 @@ import pytest
 
 from registry.core.constants import OPDS_JSON_MEDIA_TYPE
 from registry.core.errors import ReadTimeoutError, RegistryError
+from registry.domain.restrictions import Restrictions
 from registry.rendering.search_renderer import (
     SEARCH_TITLE,
     build_search_template_link,
@@ -218,3 +219,38 @@ def test_a_search_timeout_is_a_503_service_unavailable_registry_error() -> None:
     assert isinstance(error, RegistryError)
     assert (error.status_code, error.title) == (503, "Service Unavailable")
     assert str(error) == "took too long"
+
+
+# --- restrictions ----------------------------------------------------------------------------
+
+RESTRICTED = Restrictions(opds=True, no_open=True)
+
+
+def test_every_paging_link_keeps_the_restriction() -> None:
+    feed = render_search_results(
+        SearchPage(total=500, catalogs=()),
+        query="paris",
+        page=3,
+        page_size=50,
+        base_url=BASE,
+        restrictions=RESTRICTED,
+    )
+    links = rels(feed)
+
+    prefix = "https://example.org/search?query=paris&restrict=opds,no-open"
+    assert links["first"] == prefix
+    assert links["self"] == f"{prefix}&page=3"
+    assert links["previous"] == f"{prefix}&page=2"
+    assert links["next"] == f"{prefix}&page=4"
+    assert links["search"] == "https://example.org/search?restrict=opds,no-open{&query}"
+
+
+def test_the_template_link_fixes_the_restriction_and_leaves_query_to_the_client() -> None:
+    link = build_search_template_link("https://example.org", Restrictions(no_open=True))
+
+    assert link["href"] == "https://example.org/search?restrict=no-open{&query}"
+    assert link["templated"] is True
+
+
+def test_no_restriction_leaves_every_link_as_it_was() -> None:
+    assert "restrict" not in str(render(total=500, page=3))

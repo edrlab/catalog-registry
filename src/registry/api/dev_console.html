@@ -97,7 +97,7 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 </head>
 <body>
 <div id="prog" role="progressbar" aria-label="Loading"></div>
-<div class="top"><b>Catalog Registry</b><div class="views"><button data-view="explorer" class="on">Explorer</button><button data-view="search">Search</button></div><span class="sp"></span><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
+<div class="top"><b>Catalog Registry</b><div class="views"><button data-view="explorer" class="on">Explorer</button><button data-view="search">Search</button></div><span class="sp"></span><label class="f" title="Only catalogs with an OPDS 2.0 catalog link (restrict=opds)"><input type="checkbox" id="ropds"> OPDS only</label><label class="f" title="Drop catalogs of kind open (restrict=no-open)"><input type="checkbox" id="rnoopen"> No open catalogs</label><span class="mut"><span class="kbd">/</span> path &nbsp; <span class="kbd">⌘↵</span> send</span></div>
 <section id="sv" hidden>
   <div class="sbar">
     <div class="sbox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="sq" type="text" placeholder="Search libraries, places, languages" autocomplete="off" spellcheck="false" enterkeyhint="search"><button id="sclear" hidden title="Clear (Esc)">&times;</button></div>
@@ -133,7 +133,7 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 const $=id=>document.getElementById(id);
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 const PRESETS=[['Recommended feed','/'],['Search: paris','/search?query=paris'],['Typo: parsi','/search?query=parsi'],['Accents: numerique','/search?query=numerique'],['Empty search','/search?query='],['Page 2','/search?query=library&page=2']];
-const LANGS=['','fr','en','fr-FR,fr;q=0.9,en;q=0.5','en-US,en;q=0.9','de,fr;q=0.5','*'];
+const LANGS=['','fr','en','it','fr-FR,fr;q=0.9,en;q=0.5','en-US,en;q=0.9','de,fr;q=0.5','*'];
 const TABS=['Preview','Response','Headers','Raw','curl','Compare'];
 const COLORS={gray:'#6b7280',red:'#dc2626',yellow:'#ca8a04',blue:'#2563eb',green:'#16a34a',purple:'#9333ea',orange:'#ea580c',pink:'#db2777'};
 const REL_LABEL={catalog:'Browse the catalog',shelf:'Shelf',search:'Search it',authenticate:'Sign in',alternate:'Alternate',profile:'Profile',self:'Registry entry',next:'Next',previous:'Previous',first:'First',last:'Last'};
@@ -188,8 +188,12 @@ function loading(on){
     },SLOW_MS);
   }else if(inflight===0){clearTimeout(slowTimer);document.body.classList.remove('slow')}
 }
+const restrictValue=()=>[$('ropds').checked&&'opds',$('rnoopen').checked&&'no-open'].filter(Boolean).join(',');
+function setRestrict(h){const r=(h.get('r')||'').split(',');$('ropds').checked=r.includes('opds');$('rnoopen').checked=r.includes('no-open')}
 async function call(path,client,lang=$('lang').value){
   const ext=/^https?:/.test(path);
+  // The two boxes restrict the registry's own feed and search. A restrict already typed in the path is left alone.
+  if(!ext&&restrictValue()){const u=new URL(path,location.origin);u.searchParams.set('restrict',restrictValue());path=u.pathname+u.search}
   if(ext&&!DEV.fetch){
     const e=new Error();e.title='Library feeds open in a new tab here';
     e.hint='Reading a library\u2019s own feed inside the console works only on a local console. This one only shows the registry\u2019s own feed, search and catalogs.';
@@ -205,9 +209,9 @@ async function call(path,client,lang=$('lang').value){
   return j;
   }finally{loading(false)}
 }
-const hashOf=()=>new URLSearchParams({p:$('path').value,c:$('client').value,l:$('lang').value}).toString();
+const hashOf=()=>new URLSearchParams({p:$('path').value,c:$('client').value,l:$('lang').value,r:restrictValue()}).toString();
 // Each request adds a history entry; Back and Forward change the hash, which loads that request again.
-const searchHash=()=>new URLSearchParams({v:'search',q:$('sq').value,c:$('sclient').value,l:$('slang').value}).toString();
+const searchHash=()=>new URLSearchParams({v:'search',q:$('sq').value,c:$('sclient').value,l:$('slang').value,r:restrictValue()}).toString();
 const curHash=()=>$('sv').hidden?hashOf():searchHash();
 // A new view or request is a history entry; typing in the search box only rewrites the current one.
 function pushHash(h){if(location.hash.slice(1)!==h){idx++;furthest=idx;location.hash=h}}
@@ -215,7 +219,7 @@ function saveHash(){pushHash(hashOf())}
 function updateNav(){document.querySelectorAll('[data-nav]').forEach(b=>{b.disabled=b.dataset.nav==='back'?idx<=0:idx>=furthest})}
 function loadHash(){
   const h=new URLSearchParams(location.hash.slice(1));
-  $('path').value=h.get('p')||'/';if(h.get('c')&&clients[h.get('c')])$('client').value=h.get('c');$('lang').value=h.get('l')||'';
+  $('path').value=h.get('p')||'/';if(h.get('c')&&clients[h.get('c')])$('client').value=h.get('c');$('lang').value=h.get('l')||'';setRestrict(h);
 }
 const remember=()=>{try{history.replaceState({sel:selected,tab,idx},'')}catch{}};
 addEventListener('hashchange',async()=>{
@@ -453,7 +457,7 @@ function showView(v,quiet=false){
 function restoreSearch(h){
   $('sq').value=h.get('q')||'';
   if(h.get('c')&&clients[h.get('c')])$('sclient').value=h.get('c');
-  $('slang').value=h.get('l')||'';
+  $('slang').value=h.get('l')||'';setRestrict(h);
   sSearch(false);
 }
 function sPlace(m){return[m.city,(m.subdivisions||[]).join(', '),m.country].filter(Boolean).join(' · ')}
@@ -533,6 +537,7 @@ const sSchedule=()=>{$('sclear').hidden=!$('sq').value;clearTimeout(sTimer);sTim
   LANGS.forEach(l=>{const o=el('option',null,l||'(none)');o.value=l;$('lang').append(o)});
   PRESETS.forEach(([n,pth])=>{const b=el('button',null,n);b.onclick=()=>{$('path').value=pth;compareHtml=null;send()};$('presets').append(b)});
   loadHash();
+  ['ropds','rnoopen'].forEach(id=>{$(id).onchange=()=>{if($('sv').hidden)send();else sSearch(false)}});
   ['sclient'].forEach(id=>{for(const[k,c]of Object.entries(clients)){const o=el('option',null,c.label.split(' (')[0]);o.value=k;$(id).append(o)}$(id).value='browser'});
   LANGS.forEach(l=>{const o=el('option',null,l||'(none)');o.value=l;$('slang').append(o)});
   ['paris','parsi','numerique','"numérique de paris"','wallis','bibliotheque','bruxels','fr'].forEach(q=>{const b=el('button',null,q);b.onclick=()=>{$('sq').value=q;sSearch(false)};$('schips').append(b)});
