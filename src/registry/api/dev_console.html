@@ -188,12 +188,14 @@ function loading(on){
     },SLOW_MS);
   }else if(inflight===0){clearTimeout(slowTimer);document.body.classList.remove('slow')}
 }
+// A comma is legal in a URL fragment and in a query, so keep `opds,no-open` readable instead of `opds%2Cno-open`.
+const plain=q=>q.replace(/%2C/gi,',');
 const restrictValue=()=>[$('ropds').checked&&'opds',$('rnoopen').checked&&'no-open'].filter(Boolean).join(',');
 function setRestrict(h){const r=(h.get('r')||'').split(',');$('ropds').checked=r.includes('opds');$('rnoopen').checked=r.includes('no-open')}
 async function call(path,client,lang=$('lang').value){
   const ext=/^https?:/.test(path);
   // The two boxes restrict the registry's own feed and search. A restrict already typed in the path is left alone.
-  if(!ext&&restrictValue()){const u=new URL(path,location.origin);if(!u.searchParams.has('restrict')){u.searchParams.set('restrict',restrictValue());path=u.pathname+u.search}}
+  if(!ext&&restrictValue()){const u=new URL(path,location.origin);if(!u.searchParams.has('restrict')){u.searchParams.set('restrict',restrictValue());path=plain(u.pathname+u.search)}}
   if(ext&&!DEV.fetch){
     const e=new Error();e.title='Library feeds open in a new tab here';
     e.hint='Reading a library\u2019s own feed inside the console works only on a local console. This one only shows the registry\u2019s own feed, search and catalogs.';
@@ -209,9 +211,9 @@ async function call(path,client,lang=$('lang').value){
   return j;
   }finally{loading(false)}
 }
-const hashOf=()=>new URLSearchParams({p:$('path').value,c:$('client').value,l:$('lang').value,r:restrictValue()}).toString();
+const hashOf=()=>new URLSearchParams({p:$('path').value,c:$('client').value,l:$('lang').value,r:restrictValue()}).toString().replace(/%2C/gi,',');
 // Each request adds a history entry; Back and Forward change the hash, which loads that request again.
-const searchHash=()=>new URLSearchParams({v:'search',q:$('sq').value,c:$('sclient').value,l:$('slang').value,r:restrictValue()}).toString();
+const searchHash=()=>new URLSearchParams({v:'search',q:$('sq').value,c:$('sclient').value,l:$('slang').value,r:restrictValue()}).toString().replace(/%2C/gi,',');
 const curHash=()=>$('sv').hidden?hashOf():searchHash();
 // A new view or request is a history entry; typing in the search box only rewrites the current one.
 function pushHash(h){if(location.hash.slice(1)!==h){idx++;furthest=idx;location.hash=h}}
