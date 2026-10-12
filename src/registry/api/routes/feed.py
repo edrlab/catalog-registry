@@ -7,9 +7,10 @@ fails on.
 
 from typing import Any
 
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, Header, Query, Request
 
 from registry.api.responses import OPDSResponse
+from registry.domain.restrictions import RESTRICT_PATTERN, parse_restrictions
 from registry.schemas.feed import FeedResponse
 from registry.services.feed_service import resolve_top_level_feed
 
@@ -24,11 +25,14 @@ router = APIRouter(tags=["feed"])
     summary="The recommended catalogs, filtered by Accept-Language",
 )
 async def read_top_level_feed(
-    request: Request, accept_language: str | None = Header(default=None)
+    request: Request,
+    accept_language: str | None = Header(default=None),
+    restrict: str | None = Query(default=None, pattern=RESTRICT_PATTERN),
 ) -> dict[str, Any]:
     async with request.app.state.open_catalog_reader() as reader:
         return await resolve_top_level_feed(
             reader,
             accept_language=accept_language,
             base_url=request.app.state.settings.base_url,
+            restrictions=parse_restrictions(restrict),
         )

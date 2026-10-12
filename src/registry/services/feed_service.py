@@ -9,6 +9,7 @@ from typing import Any
 
 from registry.domain.catalog_view import CatalogLike
 from registry.domain.language import LanguageRange, parse_accept_language, rank_language_match
+from registry.domain.restrictions import NO_RESTRICTIONS, Restrictions, allows
 from registry.rendering.feed_renderer import render_feed
 from registry.repositories.protocols import CatalogReader
 
@@ -37,22 +38,30 @@ def _rank(
 
 
 async def resolve_top_level_feed(
-    reader: CatalogReader, *, accept_language: str | None, base_url: str
+    reader: CatalogReader,
+    *,
+    accept_language: str | None,
+    base_url: str,
+    restrictions: Restrictions = NO_RESTRICTIONS,
 ) -> dict[str, Any]:
     """Return the recommended catalogs acceptable to *accept_language*, best match first.
 
-    No ranges means no filtering and no reordering, the client stated no preference — the
-    feed keeps the repository's `created_at DESC, title` order as-is.
+    No ranges means the client stated no preference, so only catalogs scoped to no language are
+    returned (they serve every reader), in the repository's `created_at DESC, title` order.
+    `restrictions` then remove catalogs; they never reorder.
 
     The sort is *stable*, so catalogs ranking exactly equally (same bucket, rank, depth, and
     `created_at`) keep the order the repository established, and two identical requests
     produce byte-identical bodies without this function knowing anything about titles.
     """
-    catalogs = await reader.fetch_recommended_catalogs()
+    catalogs = [c for c in await reader.fetch_recommended_catalogs() if allows(c, restrictions)]
     ranges = parse_accept_language(accept_language)
     if not ranges:
-        return render_feed(catalogs, base_url=base_url)
+        unscoped = [catalog for catalog in catalogs if not catalog.languages]
+        return render_feed(unscoped, base_url=base_url, restrictions=restrictions)
 
     ranked = [(rank, catalog) for catalog in catalogs if (rank := _rank(catalog, ranges))]
     ranked.sort(key=lambda pair: pair[0])
-    return render_feed([catalog for _, catalog in ranked], base_url=base_url)
+    return render_feed(
+        [catalog for _, catalog in ranked], base_url=base_url, restrictions=restrictions
+    )

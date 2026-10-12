@@ -302,7 +302,8 @@ async def test_the_language_sort_works_on_the_mapped_objects_and_ties_on_created
         )
         return [c["metadata"]["title"] for c in feed["catalogs"]]
 
-    assert await titles(None) == ["English", "No language", "New french", "Old french"]
+    assert await titles(None) == ["No language"]
+    assert sorted(await titles("*")) == ["English", "New french", "No language", "Old french"]
     assert await titles("fr") == ["New french", "Old french", "No language"]
     assert await titles("en") == ["English", "No language"]
     assert await titles("ja") == ["No language"]

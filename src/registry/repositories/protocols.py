@@ -12,6 +12,7 @@ from typing import Any, Protocol
 
 from registry.db.models.catalog import Catalog
 from registry.domain.catalog_view import CatalogLike
+from registry.domain.restrictions import NO_RESTRICTIONS, Restrictions
 from registry.domain.search_query import ParsedQuery
 
 
@@ -36,5 +37,10 @@ class SearchPage:
 
 class CatalogSearcher(Protocol):
     async def search_catalogs(
-        self, query: ParsedQuery, *, limit: int, offset: int
+        self,
+        query: ParsedQuery,
+        *,
+        limit: int,
+        offset: int,
+        restrictions: Restrictions = NO_RESTRICTIONS,
     ) -> SearchPage: ...

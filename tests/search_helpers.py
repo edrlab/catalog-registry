@@ -79,6 +79,9 @@ async def search_rows(
             "weights": list(RANK_WEIGHTS),
             "limit": limit,
             "offset": (page - 1) * limit,
+            "opds": False,
+            "opds_type": "application/opds+json",
+            "no_open": False,
         },
     )
     rows = [r for r in result.all() if r.catalog_id is not None]

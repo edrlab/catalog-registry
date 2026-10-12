@@ -22,7 +22,7 @@ import pytest
 from httpx import AsyncClient
 
 from registry.core.constants import OPDS_CATALOG_MEDIA_TYPE
-from tests.conftest import SEED_CATALOG_COUNT, SEED_FILE, SEED_TITLES_IN_FILE_ORDER
+from tests.conftest import SEED_FILE, SEED_TITLES_IN_FILE_ORDER
 
 pytestmark = pytest.mark.e2e
 
@@ -52,10 +52,17 @@ async def test_the_content_type_is_the_opds_media_type(
     assert response.headers["content-type"].startswith(OPDS_CATALOG_MEDIA_TYPE)
 
 
-async def test_no_accept_language_returns_everything_recommended(
+async def test_no_accept_language_returns_only_the_catalogs_with_no_language(
     client: AsyncClient, seeded_catalogs: int
 ) -> None:
-    assert await titles(client) == SEED_TITLES_IN_FILE_ORDER
+    """The client stated no language, so it is not shown catalogs in languages it never named."""
+    assert await titles(client) == UNSCOPED
+
+
+async def test_italian_finds_the_italian_catalog_and_the_unscoped_ones(
+    client: AsyncClient, seeded_catalogs: int
+) -> None:
+    assert await titles(client, "it") == ["Liber Liber", *UNSCOPED]
 
 
 async def test_a_language_bucket_keeps_the_seed_file_order(
@@ -106,13 +113,20 @@ async def test_rejecting_a_language_excludes_it(client: AsyncClient, seeded_cata
     assert await titles(client, "*;q=0") == UNSCOPED
 
 
-async def test_a_malformed_header_returns_200_unfiltered(
+async def test_a_malformed_header_returns_200_like_no_header(
     client: AsyncClient, seeded_catalogs: int
 ) -> None:
     response = await client.get("/", headers={"Accept-Language": ";;;,,,"})
 
     assert response.status_code == 200
-    assert response.json()["metadata"]["numberOfItems"] == SEED_CATALOG_COUNT
+    assert [c["metadata"]["title"] for c in response.json()["catalogs"]] == UNSCOPED
+
+
+async def test_a_wildcard_still_returns_everything(
+    client: AsyncClient, seeded_catalogs: int
+) -> None:
+    """`*` states that any language will do, which is not the same as stating nothing."""
+    assert sorted(await titles(client, "*")) == sorted(SEED_TITLES_IN_FILE_ORDER)
 
 
 async def test_no_recommended_catalogs_returns_an_empty_list(client: AsyncClient) -> None:

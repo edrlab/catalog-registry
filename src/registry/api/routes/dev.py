@@ -85,7 +85,7 @@ CLIENTS: Final[dict[str, dict[str, Any]]] = {
 #: becomes a header, so the field cannot carry control characters or anything unexpected.
 _LANGUAGE: Final = r"^[A-Za-z0-9,;=.*\- ]*$"
 
-_PATH: Final = r"^/(search(\?[^#\s]*)?|catalogs/[0-9a-fA-F-]{36})?$"
+_PATH: Final = r"^/(\?restrict=[A-Za-z0-9,%-]*|search(\?[^#\s]*)?|catalogs/[0-9a-fA-F-]{36})?$"
 
 #: What the page ships with, so the file also works opened on its own.
 _DEFAULT_CONFIG: Final = '{"environment":"local","fetch":true}'

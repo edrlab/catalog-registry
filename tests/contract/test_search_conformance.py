@@ -133,7 +133,10 @@ async def test_every_result_is_rendered_exactly_as_the_detail_endpoint_renders_i
 async def test_a_search_result_equals_the_same_catalog_in_the_top_level_feed(
     client: AsyncClient, searchable_catalogs: None
 ) -> None:
-    feed = {c["metadata"]["title"]: c for c in (await client.get("/")).json()["catalogs"]}
+    feed = {
+        c["metadata"]["title"]: c
+        for c in (await client.get("/", headers={"Accept-Language": "*"})).json()["catalogs"]
+    }
     found = (await client.get("/search", params={"query": "ebooks"})).json()["catalogs"]
 
     assert found

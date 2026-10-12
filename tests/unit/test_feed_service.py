@@ -21,11 +21,21 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from registry.db.models.catalog import Catalog, CatalogLanguageRow
-from registry.domain.enums import CatalogColor, CatalogStatus, CoverageScope
+from registry.db.models.catalog import Catalog, CatalogKindRow, CatalogLanguageRow
+from registry.db.models.link import Link
+from registry.domain.enums import (
+    CatalogColor,
+    CatalogKind,
+    CatalogStatus,
+    CoverageScope,
+    LinkRel,
+)
+from registry.domain.restrictions import NO_RESTRICTIONS, Restrictions
 from registry.services.feed_service import resolve_top_level_feed
 
 pytestmark = pytest.mark.unit
+
+OPDS2 = "application/opds+json"
 
 #: Every catalog built without an explicit `created_at` gets this same instant, so tests that
 #: aren't about recency don't have to think about it — ties fall back to build order via a
@@ -77,8 +87,8 @@ async def titles(accept_language: str | None, reader: FakeCatalogReader = READER
     return [entry["metadata"]["title"] for entry in feed["catalogs"]]
 
 
-async def test_no_header_returns_everything() -> None:
-    assert await titles(None) == ["English", "French", "Silent"]
+async def test_no_header_returns_only_the_catalogs_with_no_language() -> None:
+    assert await titles(None) == ["Silent"]
 
 
 async def test_a_stated_language_keeps_matching_and_unscoped_catalogs() -> None:
@@ -104,8 +114,8 @@ async def test_quality_overrides_header_order() -> None:
     assert await titles("en;q=0.5, fr") == ["French", "English", "Silent"]
 
 
-async def test_a_malformed_header_is_treated_as_no_preference() -> None:
-    assert await titles(";;;,,,") == ["English", "French", "Silent"]
+async def test_a_malformed_header_is_treated_as_no_header() -> None:
+    assert await titles(";;;,,,") == ["Silent"]
 
 
 async def test_number_of_items_matches_the_catalogs_returned() -> None:
@@ -265,3 +275,80 @@ async def test_created_at_breaks_ties_within_a_language_match_too() -> None:
 
 async def test_an_empty_registry_is_not_an_error() -> None:
     assert await titles("fr", FakeCatalogReader([])) == []
+
+
+# --- restrictions ----------------------------------------------------------------------------
+
+
+def with_links_and_kinds(catalog: Catalog, kinds: tuple[CatalogKind, ...], *links: Link) -> Catalog:
+    catalog.kinds = [CatalogKindRow(kind=kind) for kind in kinds]
+    catalog.links = list(links)
+    return catalog
+
+
+def _link(media_type: str) -> Link:
+    return Link(href="https://x.example/feed", media_type=media_type, rel=LinkRel.CATALOG)
+
+
+RESTRICTED = FakeCatalogReader(
+    [
+        with_links_and_kinds(build_catalog("Open OPDS"), (CatalogKind.OPEN,), _link(OPDS2)),
+        with_links_and_kinds(build_catalog("Public OPDS"), (CatalogKind.PUBLIC,), _link(OPDS2)),
+        with_links_and_kinds(
+            build_catalog("Public HTML"), (CatalogKind.PUBLIC,), _link("text/html")
+        ),
+        with_links_and_kinds(
+            build_catalog("Both"), (CatalogKind.OPEN, CatalogKind.PUBLIC), _link(OPDS2)
+        ),
+    ]
+)
+
+
+async def restricted_titles(restrictions: Restrictions) -> list[str]:
+    feed = await resolve_top_level_feed(
+        RESTRICTED, accept_language="*", base_url="http://testserver", restrictions=restrictions
+    )
+    return [entry["metadata"]["title"] for entry in feed["catalogs"]]
+
+
+async def test_no_restrictions_keep_every_catalog() -> None:
+    assert len(await restricted_titles(NO_RESTRICTIONS)) == 4
+
+
+async def test_opds_drops_the_html_only_catalog() -> None:
+    assert await restricted_titles(Restrictions(opds=True)) == ["Open OPDS", "Public OPDS", "Both"]
+
+
+async def test_no_open_drops_every_catalog_with_open_among_its_kinds() -> None:
+    assert await restricted_titles(Restrictions(no_open=True)) == ["Public OPDS", "Public HTML"]
+
+
+async def test_both_restrictions_together() -> None:
+    assert await restricted_titles(Restrictions(opds=True, no_open=True)) == ["Public OPDS"]
+
+
+async def test_restrictions_apply_before_the_language_fallback() -> None:
+    """With no header, the unscoped catalogs that remain are the ones that pass."""
+    feed = await resolve_top_level_feed(
+        RESTRICTED,
+        accept_language=None,
+        base_url="http://testserver",
+        restrictions=Restrictions(opds=True),
+    )
+    assert [c["metadata"]["title"] for c in feed["catalogs"]] == [
+        "Open OPDS",
+        "Public OPDS",
+        "Both",
+    ]
+
+
+async def test_the_feed_links_carry_the_restriction() -> None:
+    feed = await resolve_top_level_feed(
+        RESTRICTED,
+        accept_language="*",
+        base_url="https://example.org",
+        restrictions=Restrictions(opds=True, no_open=True),
+    )
+    hrefs = {link["rel"]: link["href"] for link in feed["links"]}
+    assert hrefs["self"] == "https://example.org/?restrict=opds,no-open"
+    assert hrefs["search"] == "https://example.org/search?restrict=opds,no-open{&query}"
