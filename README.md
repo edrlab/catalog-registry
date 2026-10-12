@@ -125,6 +125,22 @@ reader and follow them.
 With no `Accept-Language` (or one that cannot be read) only the catalogs scoped to no language are
 returned. `Accept-Language: *` says any language will do and returns everything.
 
+What `GET /` returns for the seed catalogs (Project Gutenberg and Librivox declare no language):
+
+| `Accept-Language` | Feed |
+|---|---|
+| (none) | Project Gutenberg, Librivox |
+| `ja` (no catalog in it) | Project Gutenberg, Librivox |
+| `fr;q=0` (French refused), `;;;` (unreadable) | Project Gutenberg, Librivox |
+| `it` | Liber Liber, then Project Gutenberg, Librivox |
+| `en` | Standard Ebooks, then Project Gutenberg, Librivox |
+| `fr` | the four French catalogs, then Project Gutenberg, Librivox |
+| `fr, en` | the French catalogs, Standard Ebooks, then Project Gutenberg, Librivox |
+| `*` | every recommended catalog |
+
+`restrict=` (above) is applied first, so with no language and `restrict=opds` the feed is Project
+Gutenberg alone.
+
 Matching is a whole-subtag prefix in either direction. `fr-FR` finds a `fr` catalog, `fr` finds
 a `fr-BE` one, and `fr-BE` does not match `fr-CA`.
 
