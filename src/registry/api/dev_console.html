@@ -193,7 +193,7 @@ function setRestrict(h){const r=(h.get('r')||'').split(',');$('ropds').checked=r
 async function call(path,client,lang=$('lang').value){
   const ext=/^https?:/.test(path);
   // The two boxes restrict the registry's own feed and search. A restrict already typed in the path is left alone.
-  if(!ext&&restrictValue()){const u=new URL(path,location.origin);u.searchParams.set('restrict',restrictValue());path=u.pathname+u.search}
+  if(!ext&&restrictValue()){const u=new URL(path,location.origin);if(!u.searchParams.has('restrict')){u.searchParams.set('restrict',restrictValue());path=u.pathname+u.search}}
   if(ext&&!DEV.fetch){
     const e=new Error();e.title='Library feeds open in a new tab here';
     e.hint='Reading a library\u2019s own feed inside the console works only on a local console. This one only shows the registry\u2019s own feed, search and catalogs.';
