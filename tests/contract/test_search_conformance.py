@@ -91,7 +91,7 @@ async def test_every_search_response_validates_against_the_feed_and_catalog_sche
         assert_valid_catalog(catalog)
 
 
-@pytest.mark.parametrize("page", [1, 2, 1000])
+@pytest.mark.parametrize("page", [1, 2])
 async def test_pages_past_the_end_validate_too(
     client: AsyncClient, searchable_catalogs: None, page: int
 ) -> None:

@@ -8,6 +8,8 @@ import pytest
 from registry.core.constants import OPDS_JSON_MEDIA_TYPE
 from registry.core.errors import ReadTimeoutError, RegistryError
 from registry.domain.restrictions import Restrictions
+from registry.domain.search_query import MAX_PAGE, MAX_RESULTS, PAGE_SIZE
+from registry.rendering import search_renderer
 from registry.rendering.search_renderer import (
     SEARCH_TITLE,
     build_search_template_link,
@@ -16,6 +18,13 @@ from registry.rendering.search_renderer import (
 from registry.repositories.protocols import SearchPage
 
 BASE = "https://example.org/"
+
+
+@pytest.fixture(autouse=True)
+def wide_paging(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests are about link shapes and paging arithmetic, so give them room to page. The
+    real limit is pinned by the tests under "the result cap" at the bottom."""
+    monkeypatch.setattr(search_renderer, "MAX_PAGE", 1000)
 
 
 def render(total: int, page: int, query: str = "paris") -> dict[str, Any]:
@@ -254,3 +263,19 @@ def test_the_template_link_fixes_the_restriction_and_leaves_query_to_the_client(
 
 def test_no_restriction_leaves_every_link_as_it_was() -> None:
     assert "restrict" not in str(render(total=500, page=3))
+
+
+# --- the result cap --------------------------------------------------------------------------
+
+
+def test_the_cap_is_100_results_in_two_pages_of_50() -> None:
+    assert (MAX_RESULTS, PAGE_SIZE, MAX_PAGE) == (100, 50, 2)
+
+
+def test_next_is_offered_from_page_one_and_never_from_the_last_allowed_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(search_renderer, "MAX_PAGE", MAX_PAGE)
+
+    assert "next" in rels(render(total=MAX_RESULTS, page=1))
+    assert "next" not in rels(render(total=MAX_RESULTS, page=MAX_PAGE))

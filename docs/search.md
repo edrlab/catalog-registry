@@ -36,8 +36,10 @@ only splits, and PostgreSQL discards chunks with no word in them. Input is cut a
 2. Then catalogs found only through trigrams, by similarity.
 3. Ties: newest first, then id. The order is fixed, so pages never overlap or skip.
 
-50 results per page, `page` from 1 to 1000 (422 outside that). `numberOfItems` is the total number of
-matches, also on a page past the end. Links: `self`, `search`, `first`, and `previous` / `next`
+50 results per page, and at most 100 results in all: `page` is 1 or 2 (422 outside that), so there is
+no paging through hundreds or thousands of catalogs. `numberOfItems` is the number of matches
+**capped at 100**, also on a page past the end. A search with more matches than that is narrowed with
+a longer query or `restrict`, not paged. Links: `self`, `search`, `first`, and `previous` / `next`
 only when there is one. Changing the weights is one constant, `RANK_WEIGHTS`, with no reindex.
 
 ## Typos

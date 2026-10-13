@@ -82,8 +82,8 @@ async def test_a_page_past_the_end_is_empty_but_still_reports_the_total(
     assert_valid_feed(body)
 
 
-@pytest.mark.parametrize("page", [0, -1, 1001])
-async def test_a_page_outside_1_to_1000_is_rejected(client: AsyncClient, page: int) -> None:
+@pytest.mark.parametrize("page", [0, -1, 3, 1001])
+async def test_a_page_outside_1_to_2_is_rejected(client: AsyncClient, page: int) -> None:
     assert (await client.get("/search", params={"query": "x", "page": page})).status_code == 422
 
 

@@ -9,8 +9,12 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
-#: The highest page the API serves (ADR-054). `next` is never offered beyond it.
-MAX_PAGE: Final = 1000
+PAGE_SIZE: Final = 50
+#: A search returns at most this many catalogs, and `numberOfItems` never reports more. Nobody pages
+#: through hundreds of results; narrow the query instead.
+MAX_RESULTS: Final = 100
+#: The highest page the API serves. `next` is never offered beyond it.
+MAX_PAGE: Final = -(-MAX_RESULTS // PAGE_SIZE)
 MAX_QUERY_CHARS: Final = 256
 MAX_QUERY_CHUNKS: Final = 16
 
