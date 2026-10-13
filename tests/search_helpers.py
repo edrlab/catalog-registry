@@ -82,6 +82,7 @@ async def search_rows(
             "opds": False,
             "opds_type": "application/opds+json",
             "no_open": False,
+            "no_audiobook": False,
         },
     )
     rows = [r for r in result.all() if r.catalog_id is not None]

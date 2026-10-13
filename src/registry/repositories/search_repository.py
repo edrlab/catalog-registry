@@ -89,6 +89,11 @@ hits AS (
               AND lower(trim(split_part(k.media_type, ';', 1))) = CAST(:opds_type AS text)))
      AND (NOT CAST(:no_open AS boolean) OR NOT EXISTS (
            SELECT 1 FROM catalog_kinds x WHERE x.catalog_id = c.id AND x.kind = 'open'))
+     AND (NOT CAST(:no_audiobook AS boolean) OR NOT (
+           EXISTS (SELECT 1 FROM catalog_publication_types p
+                    WHERE p.catalog_id = c.id AND p.publication_type = 'audiobook')
+           AND NOT EXISTS (SELECT 1 FROM catalog_publication_types p
+                            WHERE p.catalog_id = c.id AND p.publication_type <> 'audiobook')))
 )
 SELECT t.total, p.tier, p.score, """
     + CATALOG_COLUMNS
@@ -136,6 +141,7 @@ class CatalogSearchRepository:
             "opds": restrictions.opds,
             "opds_type": OPDS_JSON_MEDIA_TYPE,
             "no_open": restrictions.no_open,
+            "no_audiobook": restrictions.no_audiobook,
         }
         rows = await fetch_rows(self._session, _SEARCH, params)
         total = rows[0]["total"]  # the statement always returns at least one row

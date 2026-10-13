@@ -35,6 +35,10 @@ def is_open(catalog: dict[str, Any]) -> bool:
     return "open" in catalog["metadata"]["kind"]
 
 
+def audiobook_only(catalog: dict[str, Any]) -> bool:
+    return set(catalog["metadata"].get("publicationTypes", [])) == {"audiobook"}
+
+
 async def search(client: AsyncClient, query: str, restrict: str | None = None) -> dict[str, Any]:
     params = {"query": query, **({"restrict": restrict} if restrict is not None else {})}
     response = await client.get("/search", params=params)
@@ -74,6 +78,17 @@ async def test_no_open_empties_a_feed_whose_catalogs_are_all_open(
     assert feed["metadata"]["numberOfItems"] == 0
 
 
+async def test_no_audiobook_drops_librivox_and_nothing_else(
+    client: AsyncClient, searchable_catalogs: None
+) -> None:
+    plain = (await client.get("/", headers=ANY)).json()
+    feed = (await client.get("/", params={"restrict": "no-audiobook"}, headers=ANY)).json()
+
+    assert_valid_feed(feed)
+    assert "Librivox" in titles(plain)
+    assert titles(feed) == [t for t in titles(plain) if t != "Librivox"]
+
+
 async def test_the_unscoped_fallback_and_a_restriction_work_together(
     client: AsyncClient, searchable_catalogs: None
 ) -> None:
@@ -100,6 +115,11 @@ async def test_the_feed_links_keep_the_restriction(
         ("opds", has_opds2),
         ("no-open", lambda c: not is_open(c)),
         ("opds,no-open", lambda c: has_opds2(c) and not is_open(c)),
+        ("no-audiobook", lambda c: not audiobook_only(c)),
+        (
+            "opds,no-open,no-audiobook",
+            lambda c: has_opds2(c) and not is_open(c) and not audiobook_only(c),
+        ),
     ],
 )
 async def test_a_restricted_search_is_the_unrestricted_one_with_catalogs_removed(

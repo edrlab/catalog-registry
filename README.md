@@ -104,11 +104,13 @@ param to `/` and `/search`, a comma-separated list:
 |---|---|
 | `opds` | Catalogs with a `catalog` link of type `application/opds+json` (OPDS 2.0 only). HTML-only catalogs are dropped |
 | `no-open` | Drops every catalog that has `open` among its kinds |
-| `opds,no-open` | Both |
+| `no-audiobook` | Drops a catalog whose publication types are audiobook and nothing else (today, Librivox). A catalog that also has ebooks or comics stays, and so does one that lists no types |
+| `opds,no-open,no-audiobook` | All three. Any combination works |
 
 ```
 curl -s 'http://localhost:8000/?restrict=opds,no-open'
 curl -s 'http://localhost:8000/search?query=paris&restrict=opds'
+curl -s 'http://localhost:8000/?restrict=no-audiobook'
 ```
 
 A restriction only removes catalogs, never reorders them. The registry's own links keep it (the
