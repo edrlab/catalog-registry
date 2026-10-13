@@ -129,11 +129,12 @@ anything containing them, ranked below the real match.
 
 ## Restricting
 
-`GET /search?query=…&restrict=opds,no-open` removes catalogs that an app or device cannot use:
-`opds` keeps catalogs with a `catalog` link of type `application/opds+json`, `no-open` drops those
-with `open` among their kinds. The total, the pages and every page link follow the restriction, and
-the ranking is untouched. It is two `WHERE` clauses in the same single statement; the top-level
-feed applies the same two rules in Python (`registry/domain/restrictions.py`). At a million
+`GET /search?query=…&restrict=opds,no-open,no-audiobook` removes catalogs that an app or device
+cannot use: `opds` keeps catalogs with a `catalog` link of type `application/opds+json`, `no-open`
+drops those with `open` among their kinds, `no-audiobook` drops those whose publication types are
+audiobook and nothing else (mixed catalogs and catalogs with no types stay). The total, the pages
+and every page link follow the restriction, and the ranking is untouched. It is three `WHERE`
+clauses in the same single statement; the top-level feed applies the same three rules in Python (`registry/domain/restrictions.py`). At a million
 catalogs with BM25 a restriction that removes most hits will cost more; that is not measured yet.
 
 ## Known limits
