@@ -132,10 +132,12 @@ th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;lett
 <script>
 const $=id=>document.getElementById(id);
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
-const PRESETS=[['Recommended feed','/'],['Search: paris','/search?query=paris'],['Typo: parsi','/search?query=parsi'],['Accents: numerique','/search?query=numerique'],['Empty search','/search?query='],['Page 2','/search?query=library&page=2']];
+const PRESETS=[['Recommended feed','/'],['Search: paris','/search?query=paris'],['Typo: parsi','/search?query=parsi'],['Accents: numerique','/search?query=numerique'],['Empty search','/search?query='],['Page 2','/search?query=library&page=2'],['Past the cap (422)','/search?query=library&page=3']];
 const LANGS=['','fr','en','it','fr-FR,fr;q=0.9,en;q=0.5','en-US,en;q=0.9','de,fr;q=0.5','*'];
 const TABS=['Preview','Response','Headers','Raw','curl','Compare'];
 const COLORS={gray:'#6b7280',red:'#dc2626',yellow:'#ca8a04',blue:'#2563eb',green:'#16a34a',purple:'#9333ea',orange:'#ea580c',pink:'#db2777'};
+// A search serves at most 100 results (MAX_RESULTS), so a total of 100 means "100 or more".
+const CAP=100,capped=n=>n>=CAP?`${CAP}+`:n;
 const REL_LABEL={catalog:'Browse the catalog',shelf:'Shelf',search:'Search it',authenticate:'Sign in',alternate:'Alternate',profile:'Profile',self:'Registry entry',next:'Next',previous:'Previous',first:'First',last:'Last'};
 // Filled in by the server (`read_console`): the environment, and whether /dev/fetch exists here.
 const DEV={"environment":"local","fetch":true};
@@ -281,7 +283,7 @@ function renderRows(){
   const j=last,b=j.body,rows=$('rows');rows.replaceChildren();$('pager').replaceChildren();
   const items=itemsOf(b,j.request.path),md=b?.metadata||{};
   if(items.length&&selected==null)selected=0;
-  $('count').textContent=(isExt()&&md.title?md.title+' \u00b7 ':'')+(items.length?`${items.length} shown`+(md.numberOfItems!=null?` of ${md.numberOfItems}`:''):'Results');
+  $('count').textContent=(isExt()&&md.title?md.title+' \u00b7 ':'')+(items.length?`${items.length} shown`+(md.numberOfItems!=null?` of ${capped(md.numberOfItems)}`:''):'Results');
   $('paging').textContent=md.currentPage?`page ${md.currentPage}`:'';
   if(!items.length)rows.append(el('div','empty',j.is_json?'No catalogs or publications in this response.':'Not an OPDS 2 JSON document (see the Raw tab).'));
   let lastGroup;
@@ -516,13 +518,13 @@ async function sSearch(more=false){
   const items=itemsOf(j.body,'/search'),md=j.body?.metadata||{};
   sItems=sItems.concat(items);sNext=findRel(j.body,'next')?.href||null;
   const total=md.numberOfItems??sItems.length;
-  $('ssum').textContent=total?`${total} result${total===1?'':'s'} for “${sQuery}” · ${j.ms} ms · ${j.encoding||'identity'} · ${bytes(j.wire_bytes)}`:'';
+  $('ssum').textContent=total?`${capped(total)} result${total===1?'':'s'} for “${sQuery}” · ${j.ms} ms · ${j.encoding||'identity'} · ${bytes(j.wire_bytes)}`:'';
   sRender();
   if(!sItems.length){
     const e=el('div','empty');e.append(el('b',null,`No results for “${sQuery}”`),document.createElement('br'),'Try fewer words, or check the spelling. Small typos are tolerated, big ones are not.');
     $('slist').replaceChildren(e);$('ssum').textContent=`0 results · ${j.ms} ms`;
   }
-  $('smore').textContent=sNext?`Showing ${sItems.length} of ${total}. Scroll for more.`:(sItems.length?`All ${sItems.length} shown.`:'');
+  $('smore').textContent=sNext?`Showing ${sItems.length} of ${capped(total)}. Scroll for more.`:(sItems.length?`All ${sItems.length} shown.`:'');
   if(sSel==null&&sItems.length&&!more&&matchMedia('(min-width:901px)').matches)sSelect(0);
   sFill();
 }
