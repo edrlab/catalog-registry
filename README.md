@@ -58,7 +58,7 @@ not the `*.run.app` address, for anything a reader device uses.
 | Endpoint | |
 |---|---|
 | `GET /?restrict=` | The top-level feed, `application/opds-catalog+json`, ranked by `Accept-Language`. See [Restricting](#restricting-the-feed-and-search) |
-| `GET /search?query=&page=&restrict=` | Search, 50 per page, same media type. An empty query returns an empty feed |
+| `GET /search?query=&page=&restrict=` | Search, 50 per page and at most 100 results (`page` is 1 or 2), same media type. An empty query returns an empty feed |
 | `GET /catalogs/{id}` | One catalog. 404 problem+json if unknown, 422 if the uuid is malformed |
 | `GET /dev` | The console. Reading a library's own feed from it works only on a local run |
 | `GET /health/live` | Liveness. Does not touch the database |

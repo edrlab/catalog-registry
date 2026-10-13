@@ -11,9 +11,9 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 import pytest
 
 from registry.domain.restrictions import NO_RESTRICTIONS, Restrictions
-from registry.domain.search_query import ParsedQuery
+from registry.domain.search_query import PAGE_SIZE, ParsedQuery
 from registry.repositories.protocols import SearchPage
-from registry.services.search_service import PAGE_SIZE, resolve_search
+from registry.services.search_service import resolve_search
 
 pytestmark = pytest.mark.unit
 
@@ -103,17 +103,41 @@ async def test_the_parsed_query_reaches_the_searcher_unfolded() -> None:
 
 async def test_the_total_and_the_paging_links_come_from_the_page_the_searcher_returned() -> None:
     feed = await resolve_search(
-        FakeOpener(FakeSearcher(total=120)), query="paris", page=2, base_url=BASE
+        FakeOpener(FakeSearcher(total=80)), query="paris", page=1, base_url=BASE
     )
 
     assert feed["metadata"] == {
         "title": "Search results",
-        "numberOfItems": 120,
+        "numberOfItems": 80,
         "itemsPerPage": 50,
-        "currentPage": 2,
+        "currentPage": 1,
     }
     rels = {link["rel"] for link in feed["links"]}
-    assert {"self", "search", "first", "previous", "next"} <= rels
+    assert {"self", "search", "first", "next"} <= rels
+    assert "previous" not in rels
+
+
+@pytest.mark.parametrize("matches", [101, 120, 50_000])
+async def test_the_total_is_capped_at_100_and_there_is_no_third_page(matches: int) -> None:
+    first = await resolve_search(
+        FakeOpener(FakeSearcher(total=matches)), query="paris", page=1, base_url=BASE
+    )
+    second = await resolve_search(
+        FakeOpener(FakeSearcher(total=matches)), query="paris", page=2, base_url=BASE
+    )
+
+    assert first["metadata"]["numberOfItems"] == second["metadata"]["numberOfItems"] == 100
+    assert "next" in {link["rel"] for link in first["links"]}
+    assert "next" not in {link["rel"] for link in second["links"]}
+    assert "previous" in {link["rel"] for link in second["links"]}
+
+
+async def test_fewer_matches_than_the_cap_are_reported_as_they_are() -> None:
+    feed = await resolve_search(
+        FakeOpener(FakeSearcher(total=99)), query="paris", page=1, base_url=BASE
+    )
+
+    assert feed["metadata"]["numberOfItems"] == 99
 
 
 async def test_a_searcher_that_raises_still_closes_and_the_error_reaches_the_caller() -> None:

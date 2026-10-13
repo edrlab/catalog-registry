@@ -2,14 +2,12 @@
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from typing import Any, Final
+from typing import Any
 
 from registry.domain.restrictions import NO_RESTRICTIONS, Restrictions
-from registry.domain.search_query import parse_search_query
+from registry.domain.search_query import MAX_RESULTS, PAGE_SIZE, parse_search_query
 from registry.rendering.search_renderer import render_search_results
 from registry.repositories.protocols import CatalogSearcher, SearchPage
-
-PAGE_SIZE: Final = 50
 
 
 async def resolve_search(
@@ -29,6 +27,7 @@ async def resolve_search(
             result = await searcher.search_catalogs(
                 parsed, limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE, restrictions=restrictions
             )
+        result = SearchPage(total=min(result.total, MAX_RESULTS), catalogs=result.catalogs)
     return render_search_results(
         result,
         query=query or "",

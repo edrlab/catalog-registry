@@ -62,7 +62,8 @@ def render_search_results(
 ) -> dict[str, Any]:
     """`previous` and `next` appear only when there is a page to go to.
 
-    `next` stops at `MAX_PAGE`: the route answers 422 beyond it, so a link there would be dead."""
+    `next` stops at `MAX_PAGE`: the route answers 422 beyond it, so a link there would be dead.
+    `result.total` is already capped at `MAX_RESULTS` by the service."""
     links = [
         _link("self", _page_href(base_url, query, page, restrictions)),
         build_search_template_link(base_url, restrictions),

@@ -1,7 +1,7 @@
-"""Search paging over the real ASGI path (ADR-054): 50 per page, a deterministic order.
+"""Search paging over the real ASGI path: 50 per page, at most 100 results, a deterministic order.
 
-120 synthetic catalogs match one word, in three groups chosen so the order has to use every
-term of `tier, score DESC, created_at DESC, id`:
+120 synthetic catalogs match one word, so the cap drops the last 20 of them. They sit in three
+groups chosen so the order has to use every term of `tier, score DESC, created_at DESC, id`:
 
 * 50 titled "Zeppelin ..." (word match, label A, the highest score), in pairs sharing a
   `created_at` so only `id` can order them;
@@ -27,7 +27,8 @@ pytestmark = pytest.mark.e2e
 TITLE_MATCHES = 50
 CITY_MATCHES = 40
 TRIGRAM_MATCHES = 30
-TOTAL = TITLE_MATCHES + CITY_MATCHES + TRIGRAM_MATCHES
+MATCHES = TITLE_MATCHES + CITY_MATCHES + TRIGRAM_MATCHES
+CAP = 100  # MAX_RESULTS: two pages of 50
 BASE = "http://testserver"
 QUERY = "zeppelin"
 
@@ -73,7 +74,7 @@ async def zeppelin_ids(db_session: AsyncSession) -> list[str]:
             by_time.setdefault(ordered_at, []).append(catalog_id)
         for ordered_at in sorted(by_time, reverse=True):
             expected += sorted(by_time[ordered_at])
-    assert len(expected) == TOTAL
+    assert len(expected) == MATCHES
     return expected
 
 
@@ -92,21 +93,21 @@ def ids_of(body: dict[str, Any]) -> list[str]:
 async def test_pages_split_the_matches_fifty_at_a_time_in_the_documented_order(
     client: AsyncClient, zeppelin_ids: list[str]
 ) -> None:
-    first, second, third = [await page_of(client, n) for n in (1, 2, 3)]
+    first, second = [await page_of(client, n) for n in (1, 2)]
 
-    assert [len(first["catalogs"]), len(second["catalogs"]), len(third["catalogs"])] == [50, 50, 20]
-    assert ids_of(first) + ids_of(second) + ids_of(third) == zeppelin_ids
+    assert [len(first["catalogs"]), len(second["catalogs"])] == [50, 50]
+    assert ids_of(first) + ids_of(second) == zeppelin_ids[:CAP]
 
 
 async def test_no_catalog_appears_on_two_pages_and_none_is_skipped(
     client: AsyncClient, zeppelin_ids: list[str]
 ) -> None:
     seen: list[str] = []
-    for n in (1, 2, 3):
+    for n in (1, 2):
         seen += ids_of(await page_of(client, n))
 
-    assert len(seen) == len(set(seen)) == TOTAL
-    assert set(seen) == set(zeppelin_ids)
+    assert len(seen) == len(set(seen)) == CAP
+    assert set(seen) == set(zeppelin_ids[:CAP])
 
 
 async def test_tiers_come_in_order_across_the_page_boundaries(
@@ -114,12 +115,13 @@ async def test_tiers_come_in_order_across_the_page_boundaries(
 ) -> None:
     """Title matches (50) fill page 1, city matches follow, trigram-only matches come last."""
     titles: list[str] = []
-    for n in (1, 2, 3):
+    for n in (1, 2):
         titles += [c["metadata"]["title"] for c in (await page_of(client, n))["catalogs"]]
 
     assert all(t.startswith("Zeppelin shelf") for t in titles[:TITLE_MATCHES])
     middle = titles[TITLE_MATCHES : TITLE_MATCHES + CITY_MATCHES]
     assert all(t.startswith("Dirigible shelf") for t in middle)
+    assert len(titles) == CAP
     assert all(t.startswith("Zeppelins shelf") for t in titles[TITLE_MATCHES + CITY_MATCHES :])
 
 
@@ -129,31 +131,32 @@ async def test_the_same_page_twice_gives_the_same_answer(
     assert ids_of(await page_of(client, 2)) == ids_of(await page_of(client, 2))
 
 
-@pytest.mark.parametrize("page", [1, 2, 3, 4, 1000])
-async def test_number_of_items_is_the_total_on_every_page_including_past_the_end(
+@pytest.mark.parametrize("page", [1, 2])
+async def test_number_of_items_is_the_capped_total_on_every_page(
     client: AsyncClient, zeppelin_ids: list[str], page: int
 ) -> None:
     body = await page_of(client, page)
 
-    assert body["metadata"]["numberOfItems"] == TOTAL
+    assert body["metadata"]["numberOfItems"] == CAP  # 120 match; the cap is 100
     assert body["metadata"]["currentPage"] == page
     assert body["metadata"]["itemsPerPage"] == 50
 
 
-async def test_pages_past_the_end_are_empty_and_page_1000_works(
+async def test_the_third_page_does_not_exist_even_though_matches_remain(
     client: AsyncClient, zeppelin_ids: list[str]
 ) -> None:
-    assert (await page_of(client, 4))["catalogs"] == []
-    assert (await page_of(client, 1000))["catalogs"] == []
+    """120 catalogs match; the last 20 are not reachable, and say so with a 422."""
+    response = await client.get("/search", params={"query": QUERY, "page": 3})
+
+    assert response.status_code == 422
 
 
 @pytest.mark.parametrize(
     ("page", "present", "absent"),
     [
         (1, {"self", "search", "first", "next"}, {"previous"}),
-        (2, {"self", "search", "first", "previous", "next"}, set()),
-        (3, {"self", "search", "first", "previous"}, {"next"}),
-        (4, {"self", "search", "first", "previous"}, {"next"}),
+        # 120 match but only 100 are served, so page 2 is the last page.
+        (2, {"self", "search", "first", "previous"}, {"next"}),
     ],
 )
 async def test_the_paging_links_are_present_exactly_when_they_should_be(
@@ -168,12 +171,13 @@ async def test_the_paging_links_are_present_exactly_when_they_should_be(
 async def test_the_paging_links_point_at_the_right_pages(
     client: AsyncClient, zeppelin_ids: list[str]
 ) -> None:
-    rels = {link["rel"]: link["href"] for link in (await page_of(client, 2))["links"]}
+    one = {link["rel"]: link["href"] for link in (await page_of(client, 1))["links"]}
+    two = {link["rel"]: link["href"] for link in (await page_of(client, 2))["links"]}
 
-    assert rels["self"] == f"{BASE}/search?query={QUERY}&page=2"
-    assert rels["first"] == f"{BASE}/search?query={QUERY}"
-    assert rels["previous"] == f"{BASE}/search?query={QUERY}"
-    assert rels["next"] == f"{BASE}/search?query={QUERY}&page=3"
+    assert one["self"] == one["first"] == f"{BASE}/search?query={QUERY}"
+    assert one["next"] == f"{BASE}/search?query={QUERY}&page=2"
+    assert two["self"] == f"{BASE}/search?query={QUERY}&page=2"
+    assert two["first"] == two["previous"] == f"{BASE}/search?query={QUERY}"
 
 
 async def test_every_paging_link_can_be_followed(
@@ -189,10 +193,10 @@ async def test_every_paging_link_can_be_followed(
         seen += ids_of(body)
         href = next((link["href"] for link in body["links"] if link["rel"] == "next"), None)
 
-    assert seen == zeppelin_ids
+    assert seen == zeppelin_ids[:CAP]
 
 
-@pytest.mark.parametrize("page", [0, -5, 1001, 10**9])
+@pytest.mark.parametrize("page", [0, -5, 3, 1001, 10**9])
 async def test_a_page_outside_the_range_is_a_422(
     client: AsyncClient, zeppelin_ids: list[str], page: int
 ) -> None:
