@@ -266,10 +266,10 @@ def render_cases_markdown() -> str:
         "",
         "## City names",
         "",
-        "A city goes into the search with the same weight as a subdivision (label C), below the "
-        "country. The Paris library now carries `city: Paris`, but its title also says Paris, so "
+        "A city goes into the search at label B, above the country and the subdivisions (label "
+        "C). The Paris library now carries `city: Paris`, but its title also says Paris, so "
         "no seed search can show the city alone. That is tested with synthetic catalogs: a "
-        "city-only match is found, a title match outranks a country match which outranks a city "
+        "city-only match is found, a title match outranks a city match which outranks a country "
         "match, and changing or removing the city re-indexes the row. See "
         "[`tests/integration/test_search_table.py`](../tests/integration/test_search_table.py) "
         "and [`tests/integration/test_search_lifecycle.py`]"

@@ -31,7 +31,7 @@ class CatalogSearch(Base):
     catalog_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("catalogs.id", ondelete="CASCADE"), primary_key=True
     )
-    #: Word half. Labels: A title, B country names, C subdivision names and city, D unused.
+    #: Word half. Labels: A title, B city, C country names and subdivision names, D unused.
     document: Mapped[str] = mapped_column(TSVECTOR, nullable=False)
     #: Trigram half: `fold()` of title, city, subdivision names and country names.
     names: Mapped[str] = mapped_column(Text, nullable=False)

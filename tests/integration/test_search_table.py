@@ -57,16 +57,17 @@ def test_every_title_the_table_names_is_in_a_data_file() -> None:
     [
         ("Brussel", OPENBARE, 0.638),
         ("Brussel", LIRTUEL, 0.122),
-        ("Belgique -lirtuel", OPENBARE, 0.243),
+        ("Belgique -lirtuel", OPENBARE, 0.122),
         ('"numérique de paris"', PARIS, 1.0),
-        ("Paris", PARIS, 0.638),
+        ("Paris", PARIS, 0.669),
     ],
 )
 async def test_the_scores_the_plan_pins(
     db_session: AsyncSession, searchable_catalogs: None, query: str, title: str, score: float
 ) -> None:
-    """With the weights (0.1, 0.2, 0.4, 1.0). `Paris` is 0.638 since the city was added
-    (0.608 before): the title match plus the city at label C."""
+    """With the weights (0.1, 0.2, 0.4, 1.0). `Paris` is 0.669: the title match plus the city at
+    label B (0.638 when the city was label C, 0.608 before it was indexed). `Belgique` halves to
+    0.122 now that country names are label C."""
     rows = {t: s for t, _, s in await search_rows(db_session, query)}
 
     assert rows[title] == pytest.approx(score, abs=0.0006)
@@ -183,15 +184,16 @@ async def test_a_page_past_the_end_still_reports_the_total_of_six(
     assert (page.total, page.catalogs) == (6, ())
 
 
-async def test_a_title_match_outranks_a_country_match_which_outranks_a_city_match(
+async def test_a_title_match_outranks_a_city_match_which_outranks_a_country_match(
     db_session: AsyncSession,
 ) -> None:
-    """The weight order (ADR-052, Q3): title 1.0, country 0.4, subdivisions and city 0.2.
+    """The weight order (ADR-052, Q3): title 1.0, city 0.4, countries and subdivisions 0.2.
 
+    Hadrien's order (2026-10-14): a city is more specific than a country, so it ranks above it.
     The data files have no pair of catalogs that differ only in which field matched, so the
     order was invisible to the table. Here the best match is the OLDEST and the weakest the
-    NEWEST, so `created_at` cannot be what puts them in order. Switching to the meeting-notes
-    order (0.1, 0.4, 0.2, 1.0) swaps the last two and this fails.
+    NEWEST, so `created_at` cannot be what puts them in order. Going back to the old labels
+    (country B, city C) swaps the last two and this fails.
     """
 
     def document(title: str, country: str, city: str | None, href: str) -> dict[str, object]:
@@ -205,8 +207,8 @@ async def test_a_title_match_outranks_a_country_match_which_outranks_a_city_matc
 
     for stamp, doc in [
         (1, document("Belgique reading room", "CH", None, "https://weights.example/title")),
-        (2, document("Alpha shelf", "BE", None, "https://weights.example/country")),
-        (3, document("Beta shelf", "CH", "Belgique", "https://weights.example/city")),
+        (2, document("Alpha shelf", "CH", "Belgique", "https://weights.example/city")),
+        (3, document("Beta shelf", "BE", None, "https://weights.example/country")),
     ]:
         await import_catalog_document(
             db_session, doc, recommended=False, ordered_at=datetime(2031, 1, stamp, tzinfo=UTC)

@@ -78,7 +78,8 @@ QUALITY_CASES: list[Case] = [
         "Title word, and since the city was filled in also the city",
         (PARIS,),
         words(PARIS),
-        "The city (`Paris`, label C) adds to the title match: the score went from 0.608 to 0.638.",
+        "The city (`Paris`, label B) adds to the title match: the score went from 0.608 (no city) "
+        "to 0.638 with the city at label C, and 0.669 at label B.",
     ),
     c(PLACES, "ile-de-france", "Region name with hyphens", (PARIS,), words(PARIS)),
     c(
@@ -91,7 +92,7 @@ QUALITY_CASES: list[Case] = [
         "De Openbare). Accepted for now (Q5): there are no stop words.",
         first=PARIS,
     ),
-    c(PLACES, "France", "Country name, weight B", (PARIS,), words(PARIS)),
+    c(PLACES, "France", "Country name, weight C", (PARIS,), words(PARIS)),
     c(PLACES, "Belgique", "Country, French", (LIRTUEL, OPENBARE), words(LIRTUEL, OPENBARE)),
     c(PLACES, "Belgium", "Country, English", (LIRTUEL, OPENBARE), words(LIRTUEL, OPENBARE)),
     c(
@@ -290,7 +291,9 @@ QUALITY_CASES: list[Case] = [
         "paris OR valais",
         "OR",
         (PARIS, VALAIS),
-        words(VALAIS, PARIS),
+        words(PARIS, VALAIS),
+        "Paris comes first since the city is label B (0.4) and Valais is only a subdivision "
+        "(label C, 0.2); before that Valais came first.",
     ),
     c(SYNTAX_SECTION, "PARIS or", "A bare OR is dropped", (PARIS,), words(PARIS)),
     c(

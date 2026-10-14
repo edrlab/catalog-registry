@@ -32,10 +32,10 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 
 | Search | What it checks | Expected | Today | Score | Note |
 | --- | --- | --- | --- | --- | --- |
-| `Paris` | Title word, and since the city was filled in also the city | BnParis | BnParis | 1.00 | The city (`Paris`, label C) adds to the title match: the score went from 0.608 to 0.638. |
+| `Paris` | Title word, and since the city was filled in also the city | BnParis | BnParis | 1.00 | The city (`Paris`, label B) adds to the title match: the score went from 0.608 (no city) to 0.638 with the city at label C, and 0.669 at label B. |
 | `ile-de-france` | Region name with hyphens | BnParis | BnParis | 1.00 |  |
 | `Île de France` | Same name typed without hyphens | BnParis first | BnParis, De Openbare, Lirtuel | 0.33 | Both Belgian libraries come back because of 'de' (Région de Bruxelles-Capitale, De Openbare). Accepted for now (Q5): there are no stop words. |
-| `France` | Country name, weight B | BnParis | BnParis | 1.00 |  |
+| `France` | Country name, weight C | BnParis | BnParis | 1.00 |  |
 | `Belgique` | Country, French | Lirtuel, De Openbare | Lirtuel, De Openbare | 1.00 |  |
 | `Belgium` | Country, English | Lirtuel, De Openbare | Lirtuel, De Openbare | 1.00 |  |
 | `België` | Country, Dutch, accent folded | Lirtuel, De Openbare | Lirtuel, De Openbare | 1.00 |  |
@@ -134,7 +134,7 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 | `"numérique de paris"` | Quoted phrase | BnParis | BnParis, BN Romande (trigram only) | 0.50 | Romande follows as a trigram match: the fuzzy half ignores the quotes. |
 | `bibliothèque -paris` | Excluding a word | BN Romande, Bibliothèque russe et slave | BN Romande, Bibliothèque russe et slave, De Openbare (trigram only) | 0.67 | Negated words exclude catalogs from both halves, so BnParis never comes back. |
 | `Belgique -lirtuel` | Negation keeps a real score | De Openbare | De Openbare | 1.00 |  |
-| `paris OR valais` | OR | BnParis, Médiathèque Valais | Médiathèque Valais, BnParis | 1.00 |  |
+| `paris OR valais` | OR | BnParis, Médiathèque Valais | BnParis, Médiathèque Valais | 1.00 | Paris comes first since the city is label B (0.4) and Valais is only a subdivision (label C, 0.2); before that Valais came first. |
 | `PARIS or` | A bare OR is dropped | BnParis | BnParis | 1.00 |  |
 | `"de paris` | Unbalanced quote | no error | BnParis, De Openbare, Lirtuel | — | No error is the requirement. Treated as the words 'de' and 'paris'; 'de' noise as above. |
 | `brussel -` | Lone dash | De Openbare, Lirtuel (De Openbare first) | De Openbare, Lirtuel | 1.00 | As Brussel, no error. |
@@ -176,7 +176,7 @@ Synthetic catalogs stand in for libraries that do not exist yet: one covering Ne
 
 ## City names
 
-A city goes into the search with the same weight as a subdivision (label C), below the country. The Paris library now carries `city: Paris`, but its title also says Paris, so no seed search can show the city alone. That is tested with synthetic catalogs: a city-only match is found, a title match outranks a country match which outranks a city match, and changing or removing the city re-indexes the row. See [`tests/integration/test_search_table.py`](../tests/integration/test_search_table.py) and [`tests/integration/test_search_lifecycle.py`](../tests/integration/test_search_lifecycle.py).
+A city goes into the search at label B, above the country and the subdivisions (label C). The Paris library now carries `city: Paris`, but its title also says Paris, so no seed search can show the city alone. That is tested with synthetic catalogs: a city-only match is found, a title match outranks a city match which outranks a country match, and changing or removing the city re-indexes the row. See [`tests/integration/test_search_table.py`](../tests/integration/test_search_table.py) and [`tests/integration/test_search_lifecycle.py`](../tests/integration/test_search_lifecycle.py).
 
 ## What this tells us so far
 

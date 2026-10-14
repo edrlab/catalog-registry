@@ -71,7 +71,7 @@ async def test_subdivision_names_written_after_the_catalog_row_are_in_the_docume
     for word in ("wallonie", "bruxelles", "brussel"):
         assert has_label(row["document"], word, "C"), word
     assert has_label(row["document"], "lirtuel", "A")
-    assert has_label(row["document"], "belgique", "B")
+    assert has_label(row["document"], "belgique", "C")
 
 
 async def test_renaming_a_catalog_indexes_the_new_title_in_the_same_transaction(
@@ -90,7 +90,7 @@ async def test_renaming_a_catalog_indexes_the_new_title_in_the_same_transaction(
     assert "librivox" not in row["names"]
 
 
-async def test_a_city_set_by_a_plain_update_is_indexed_at_label_c_and_removing_it_unindexes_it(
+async def test_a_city_set_by_a_plain_update_is_indexed_at_label_b_and_removing_it_unindexes_it(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
     await sql(db_session, "UPDATE catalogs SET city = 'Namur' WHERE title = :t", t=LIRTUEL)
@@ -98,7 +98,7 @@ async def test_a_city_set_by_a_plain_update_is_indexed_at_label_c_and_removing_i
     assert await found(db_session, "namur") == [LIRTUEL]
     row = await catalog_search_row(db_session, LIRTUEL)
     assert row is not None
-    assert has_label(row["document"], "namur", "C")
+    assert has_label(row["document"], "namur", "B")
     assert "namur" in row["names"]
 
     await sql(db_session, "UPDATE catalogs SET city = NULL WHERE title = :t", t=LIRTUEL)
@@ -115,8 +115,8 @@ async def test_a_country_change_replaces_the_country_names(
     assert VALAIS in await found(db_session, "france")
     row = await catalog_search_row(db_session, VALAIS)
     assert row is not None
-    assert has_label(row["document"], "france", "B")
-    assert not has_label(row["document"], "suisse", "B")
+    assert has_label(row["document"], "france", "C")
+    assert not has_label(row["document"], "suisse", "C")
 
 
 async def test_removing_the_country_keeps_the_row_and_drops_its_names(
@@ -356,13 +356,13 @@ async def test_reseeding_with_a_changed_city_updates_the_row(
     assert await search_row_count(db_session) == len(ALL_TITLES)
 
 
-async def test_the_paris_city_is_indexed_at_label_c_and_dropping_it_removes_that_label(
+async def test_the_paris_city_is_indexed_at_label_b_and_dropping_it_removes_that_label(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
     row = await catalog_search_row(db_session, PARIS)
     assert row is not None
     assert has_label(row["document"], "paris", "A")
-    assert has_label(row["document"], "paris", "C")
+    assert has_label(row["document"], "paris", "B")
 
     feed = json.loads(LIBRARIES_FILE.read_text(encoding="utf-8"))
     document = next(c for c in feed["catalogs"] if c["metadata"]["title"] == PARIS)
@@ -373,7 +373,7 @@ async def test_the_paris_city_is_indexed_at_label_c_and_dropping_it_removes_that
     row = await catalog_search_row(db_session, PARIS)
     assert row is not None
     assert has_label(row["document"], "paris", "A")
-    assert not has_label(row["document"], "paris", "C")
+    assert not has_label(row["document"], "paris", "B")
 
 
 async def test_reseeding_a_changed_subdivision_list_updates_the_row(
