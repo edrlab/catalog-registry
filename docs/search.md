@@ -32,7 +32,7 @@ only splits, and PostgreSQL discards chunks with no word in them. Input is cut a
 
 ## Order and paging
 
-1. Word matches first, scored by field: title 1.0, country names 0.4, subdivisions and city 0.2.
+1. Word matches first, scored by field: title 1.0, city 0.4, country names and subdivisions 0.2.
 2. Then catalogs found only through trigrams, by similarity.
 3. Ties: newest first, then id. The order is fixed, so pages never overlap or skip.
 
@@ -107,8 +107,7 @@ adds a subdivision adds its names too. Never edit a merged migration.
 ## What is indexed
 
 `catalog_search` holds one row per **active** catalog, built by the database (never by the
-application) from the title (label A), the country names (B), and the subdivision names and city
-(C). Place names are English plus the official languages of the country. Triggers rebuild the row in
+application) from the title (label A), the city (B), and the country and subdivision names (C). Place names are English plus the official languages of the country. Triggers rebuild the row in
 the same transaction as any change to the catalog, so `make seed`, `make add`, the back office and
 hand-written SQL all keep it current. The analyzer is `public.registry_simple`: default parser, then
 `unaccent`, then `simple`. No stemming and no stop words, so short common words such as "de" match

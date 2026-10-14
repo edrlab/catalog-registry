@@ -29,10 +29,10 @@ from registry.repositories.catalog_rows import (
 from registry.repositories.protocols import SearchPage
 
 #: `ts_rank` weights in PostgreSQL's order {D, C, B, A}. Labels are fixed per field when the
-#: document is built (A title, B country names, C subdivision names and city, D unused), so the
-#: ranking policy lives here and changes with no rebuild (ADR-052). Current: the Notion order,
-#: title, then country, then subdivisions. The meeting-notes order would be (0.1, 0.4, 0.2, 1.0).
-#: Open question Q3.
+#: document is built (A title, B city, C country names and subdivision names, D unused), so the
+#: ranking policy lives here and changes with no rebuild (ADR-052). Current: title, then city,
+#: then countries and subdivisions (Hadrien, 2026-10-14; before that country was B and the city
+#: shared C with the subdivisions). Moving a field to another label does need a rebuild.
 RANK_WEIGHTS: Final = (0.1, 0.2, 0.4, 1.0)
 
 #: How alike a typed word and a stored one must be for the trigram half to match (pg_trgm
