@@ -118,8 +118,8 @@ class CatalogRepository:
     async def fetch_catalog_by_identity_id(self, catalog_id: uuid.UUID) -> Catalog | None:
         """The import's lookup for a document that names its own id. No `status` filter.
 
-        `fetch_catalog_by_id` is the *public* read and hides anything not `active`. Using it
-        here would make the seed unable to see a `suggested` row holding this id, so the import
+        `fetch_catalog_by_id` is the *public* read and hides anything not `published`. Using it
+        here would make the seed unable to see a draft row holding this id, so the import
         would try to insert a duplicate primary key rather than update it. The seed runs as the
         operator, not as a reader; `status` is its business.
         """
