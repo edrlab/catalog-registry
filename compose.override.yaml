@@ -31,6 +31,15 @@ services:
     ports: ["8000:8000"]
     environment:
       REGISTRY_ENVIRONMENT: local
+      # No default key: one is read from .env only, so there is never a key everyone knows, and a
+      # missing one leaves /admin answering 503.
+      REGISTRY_SERVICE_KEYS: ${REGISTRY_SERVICE_KEYS:-}
+      REGISTRY_ADMIN_DEV_IDENTITY: ${REGISTRY_ADMIN_DEV_IDENTITY:-false}
+      # Real tokens are the default. Set all three in .env to use them; the dev identity (off by default)
+      # cannot be on while an issuer is set.
+      REGISTRY_ADMIN_TOKEN_ISSUER: ${REGISTRY_ADMIN_TOKEN_ISSUER:-}
+      REGISTRY_ADMIN_JWKS_URL: ${REGISTRY_ADMIN_JWKS_URL:-}
+      REGISTRY_ADMIN_TOKEN_AUDIENCE: ${REGISTRY_ADMIN_TOKEN_AUDIENCE:-}
 
 volumes:
   registry-pgdata:
