@@ -50,17 +50,17 @@ async def test_a_malformed_uuid_returns_422(client: AsyncClient) -> None:
     assert response.status_code == 422
 
 
-async def test_a_suggested_catalog_is_not_publicly_readable(
+async def test_a_draft_catalog_is_not_publicly_readable(
     client: AsyncClient, db_session: AsyncSession, seeded_catalogs: int
 ) -> None:
     """`GET /catalogs/{id}` is unauthenticated, and an id is not an access control.
 
-    A suggested catalog is somebody's unreviewed submission. It must not be readable just
+    A draft catalog is somebody's unreviewed submission. It must not be readable just
     because its identifier is known.
     """
     catalog = (await db_session.scalars(select(Catalog))).first()
     assert catalog is not None
-    catalog.status = CatalogStatus.SUGGESTED
+    catalog.status = CatalogStatus.DRAFT
     catalog.published_at = None
     await db_session.commit()
 
@@ -93,3 +93,47 @@ async def test_a_not_recommended_catalog_is_readable_at_its_derived_id(
     assert response.status_code == 200
     assert response.json()["metadata"]["identifier"] == f"urn:uuid:{derived}"
     assert response.json()["metadata"]["country"] == "BE"
+
+
+@pytest.mark.parametrize(
+    ("status", "served"),
+    [
+        (CatalogStatus.PUBLISHED, True),
+        (CatalogStatus.UNPUBLISHED, True),
+        (CatalogStatus.DRAFT, False),
+        (CatalogStatus.ARCHIVED, False),
+    ],
+)
+async def test_the_direct_link_serves_published_and_unpublished_only(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    seeded_catalogs: int,
+    status: CatalogStatus,
+    served: bool,
+) -> None:
+    catalog = (await db_session.scalars(select(Catalog))).first()
+    assert catalog is not None
+    catalog.status = status
+    await db_session.commit()
+
+    response = await client.get(f"/catalogs/{catalog.id}")
+
+    assert response.status_code == (200 if served else 404)
+
+
+@pytest.mark.parametrize("status", [CatalogStatus.UNPUBLISHED, CatalogStatus.ARCHIVED])
+async def test_an_unpublished_or_archived_catalog_is_in_no_list(
+    client: AsyncClient, db_session: AsyncSession, seeded_catalogs: int, status: CatalogStatus
+) -> None:
+    """Unpublished is reachable by its direct link and nowhere else: not the feed, not search."""
+    catalog = (await db_session.scalars(select(Catalog))).first()
+    assert catalog is not None
+    title = catalog.title
+    catalog.status = status
+    await db_session.commit()
+
+    feed = (await client.get("/", headers={"Accept-Language": "*"})).json()
+    found = (await client.get("/search", params={"query": title})).json()
+
+    assert title not in [c["metadata"]["title"] for c in feed["catalogs"]]
+    assert title not in [c["metadata"]["title"] for c in found["catalogs"]]

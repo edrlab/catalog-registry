@@ -207,7 +207,7 @@ async def test_a_not_recommended_import_stays_out_of_the_feed_query(
     await db_session.commit()
 
     assert catalog.recommended is False
-    assert catalog.status is CatalogStatus.ACTIVE
+    assert catalog.status is CatalogStatus.PUBLISHED
     assert await CatalogRepository(db_session).fetch_recommended_catalogs() == []
     assert await CatalogRepository(db_session).fetch_catalog_by_id(catalog.id) is not None
 
@@ -351,7 +351,7 @@ async def test_the_country_check_constraint_is_what_refuses_a_lowercase_country(
                 text(
                     "INSERT INTO catalogs"
                     " (id, status, recommended, title, country_code, published_at)"
-                    " VALUES (gen_random_uuid(), 'active', false, 'Lower', 'zz', now())"
+                    " VALUES (gen_random_uuid(), 'published', false, 'Lower', 'zz', now())"
                 )
             )
 
@@ -430,7 +430,7 @@ async def test_two_catalogs_cannot_share_an_identity_href(
         db_session.add(
             Catalog(
                 title=title,
-                status=CatalogStatus.ACTIVE,
+                status=CatalogStatus.PUBLISHED,
                 published_at=func.now(),
                 recommended=True,
                 links=[Link(href="https://contested.example/opds", rel=rel)],
@@ -656,7 +656,7 @@ async def test_a_libraries_shaped_document_imports_through_the_validating_path(
     assert paris.country_code == "FR"
     assert [row.subdivision_code for row in paris.subdivisions] == ["FR-IDF"]
     assert paris.recommended is False
-    assert paris.status is CatalogStatus.ACTIVE
+    assert paris.status is CatalogStatus.PUBLISHED
     assert await CatalogRepository(db_session).fetch_recommended_catalogs() == []
 
 
@@ -688,7 +688,7 @@ async def test_the_real_libraries_file_imports(db_session: AsyncSession) -> None
         stored = await repository.fetch_catalog_by_identity_id(catalog_id)
         assert stored is not None
         assert stored.recommended is False
-        assert stored.status is CatalogStatus.ACTIVE
+        assert stored.status is CatalogStatus.PUBLISHED
 
     again = await seed_catalogs(db_session, libraries, recommended=False)
     assert again == (0, len(document["catalogs"]))
@@ -845,7 +845,7 @@ async def test_seeding_leaves_a_separately_added_catalog_alone(
 
 
 async def test_a_reactivated_catalog_gets_a_publication_date(db_session: AsyncSession) -> None:
-    """ck_catalogs_published_when_active. A suggested row has none, and activating it without
+    """ck_catalogs_published_when_published. A draft row has none, and publishing it without
     one fails the constraint at commit rather than in the code."""
     document = {
         "metadata": {
@@ -856,7 +856,7 @@ async def test_a_reactivated_catalog_gets_a_publication_date(db_session: AsyncSe
         "links": [{"href": "https://example.org/opds", "rel": "catalog"}],
     }
     catalog, _ = await import_catalog_document(db_session, document, recommended=False)
-    catalog.status = CatalogStatus.SUGGESTED
+    catalog.status = CatalogStatus.DRAFT
     catalog.published_at = None
     await db_session.commit()
 
@@ -866,8 +866,35 @@ async def test_a_reactivated_catalog_gets_a_publication_date(db_session: AsyncSe
     row = (
         await db_session.execute(select(Catalog).where(Catalog.title == "Was Suggested"))
     ).scalar_one()
-    assert row.status == CatalogStatus.ACTIVE
+    assert row.status == CatalogStatus.PUBLISHED
     assert row.published_at is not None
+
+
+@pytest.mark.parametrize("status", [CatalogStatus.UNPUBLISHED, CatalogStatus.ARCHIVED])
+async def test_a_reimport_does_not_undo_an_editor(
+    db_session: AsyncSession, status: CatalogStatus
+) -> None:
+    """A re-import publishes a draft, as it always activated a suggestion, but an unpublished or
+    archived catalog is somebody's decision and stays that way."""
+    document = {
+        "metadata": {
+            "title": "Withdrawn",
+            "identifier": "urn:uuid:0f3b6c1e-2d6a-4c52-8b8e-6f1d2f0a9b11",
+            "kind": ["public"],
+        },
+        "links": [{"href": "https://example.org/withdrawn", "rel": "catalog"}],
+    }
+    catalog, _ = await import_catalog_document(db_session, document, recommended=False)
+    catalog.status = status
+    await db_session.commit()
+
+    await import_catalog_document(db_session, document, recommended=True)
+    await db_session.commit()
+
+    row = (
+        await db_session.execute(select(Catalog).where(Catalog.title == "Withdrawn"))
+    ).scalar_one()
+    assert row.status == status
 
 
 async def test_a_rel_array_is_accepted(db_session: AsyncSession) -> None:

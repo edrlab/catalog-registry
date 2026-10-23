@@ -103,7 +103,7 @@ async def test_two_transactions_adding_different_subdivisions_both_end_up_in_the
                 await setup.execute(
                     text(
                         "INSERT INTO catalogs (id, title, status, published_at) "
-                        "VALUES (:c, 'Concurrency probe', 'active', now())"
+                        "VALUES (:c, 'Concurrency probe', 'published', now())"
                     ),
                     {"c": catalog_id},
                 )

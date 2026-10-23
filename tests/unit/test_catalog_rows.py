@@ -293,7 +293,7 @@ def test_an_extra_column_in_the_row_does_not_reach_the_value() -> None:
     """A new column added to the SELECT list cannot leak by accident: the mapper copies named
     fields, not the row's keys (R3)."""
     catalog = build_catalog_from_row(
-        make_row(status="suggested", recommended=True, submitter_email="a@b.example")
+        make_row(status="draft", recommended=True, submitter_email="a@b.example")
     )
 
     for name in ("status", "recommended", "submitter_email"):
