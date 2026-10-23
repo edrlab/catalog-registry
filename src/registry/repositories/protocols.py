@@ -11,6 +11,13 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from registry.db.models.catalog import Catalog
+from registry.domain.admin_models import (
+    AdminActor,
+    AdminCatalogPage,
+    AdminCatalogQuery,
+    AdminStats,
+    UsedPlaces,
+)
 from registry.domain.catalog_view import CatalogLike
 from registry.domain.restrictions import NO_RESTRICTIONS, Restrictions
 from registry.domain.search_query import ParsedQuery
@@ -44,3 +51,17 @@ class CatalogSearcher(Protocol):
         offset: int,
         restrictions: Restrictions = NO_RESTRICTIONS,
     ) -> SearchPage: ...
+
+
+class ActorStore(Protocol):
+    async def persist_actor_login(
+        self, *, email: str, name: str | None, issuer: str, subject: str | None
+    ) -> AdminActor: ...
+
+
+class AdminReader(Protocol):
+    async def fetch_admin_stats(self) -> AdminStats: ...
+
+    async def fetch_used_places(self) -> UsedPlaces: ...
+
+    async def fetch_admin_catalogs(self, query: AdminCatalogQuery) -> AdminCatalogPage: ...

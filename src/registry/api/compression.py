@@ -24,6 +24,7 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from registry.api.exception_handlers import build_problem_response
+from registry.api.middleware import is_admin_path
 
 #: In the server's order of preference, used to break a tie between equal q-values.
 OFFERED: Final = ("zstd", "br", "gzip")
@@ -125,8 +126,14 @@ def log_client_request(
 
     The console is not a reader. Its own pages (`/dev...`) and the requests it makes to the app on a
     visitor's behalf (marked in the scope by `call_app`) would pollute the count of real clients.
+    Nor is the back office: `/admin` is one known caller, and its refusals have their own line
+    (`api/admin_log.py`).
     """
-    if scope["path"].startswith("/dev") or scope.get("state", {}).get("dev_console"):
+    if (
+        scope["path"].startswith("/dev")
+        or is_admin_path(scope["path"])
+        or scope.get("state", {}).get("dev_console")
+    ):
         return
     _client_log.info(
         json.dumps(

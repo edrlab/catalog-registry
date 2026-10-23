@@ -12,6 +12,8 @@ class RegistryError(Exception):
 
     status_code = 500
     title = "Internal Server Error"
+    #: RFC 9457 `type`. `about:blank` says the status code is all there is to say.
+    problem_type = "about:blank"
 
 
 class NotFoundError(RegistryError):
@@ -29,3 +31,29 @@ class ReadTimeoutError(RegistryError):
 
     status_code = 503
     title = "Service Unavailable"
+
+
+class AuthenticationError(RegistryError):
+    """The caller did not prove who they are: no or wrong key, no or invalid token."""
+
+    status_code = 401
+    title = "Unauthorized"
+    problem_type = "https://registry.thoriumreader.com/problems/unauthorized"
+
+
+class PermissionDeniedError(RegistryError):
+    """The caller is known and not allowed: the wrong email domain, a deactivated actor, a role
+    without the permission."""
+
+    status_code = 403
+    title = "Forbidden"
+    problem_type = "https://registry.thoriumreader.com/problems/forbidden"
+
+
+class AdminUnavailableError(RegistryError):
+    """The admin API cannot answer safely: it is not configured, or the signing keys
+    could not be fetched. It fails closed rather than letting anything through."""
+
+    status_code = 503
+    title = "Service Unavailable"
+    problem_type = "https://registry.thoriumreader.com/problems/unavailable"
