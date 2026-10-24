@@ -91,3 +91,9 @@ def test_the_allowed_domains_are_split_and_lowercased() -> None:
         "edrlab.org",
         "example.com",
     )
+
+
+def test_a_missing_environment_is_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("REGISTRY_ENVIRONMENT", raising=False)
+
+    assert build().environment == "production"

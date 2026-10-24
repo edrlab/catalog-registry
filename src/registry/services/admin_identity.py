@@ -8,6 +8,7 @@ RS256 only, against the issuer's published keys; `iss`, `aud` and `exp` are requ
 
 import asyncio
 import hmac
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -17,6 +18,7 @@ import jwt
 from registry.core.errors import AdminUnavailableError, AuthenticationError, PermissionDeniedError
 
 CLOCK_SKEW_SECONDS = 60
+KEY_FETCH_RETRY_SECONDS = 15.0
 
 #: Finds the public key that signed a token. Injected so tests sign with a key of their own.
 SigningKeyResolver = Callable[[str], Awaitable[Any]]
@@ -37,14 +39,23 @@ def build_jwks_key_resolver(jwks_url: str) -> SigningKeyResolver:
     is 503, not 401: the caller did nothing wrong.
     """
     client = jwt.PyJWKClient(jwks_url, timeout=5)
+    failed_at: float | None = None
 
     async def resolve(token: str) -> Any:
+        nonlocal failed_at
+        # After a failed fetch, answer at once for a while: the client holds a lock during the
+        # fetch, so every request would otherwise wait out its own 5 s timeout, one after another.
+        if failed_at is not None and time.monotonic() - failed_at < KEY_FETCH_RETRY_SECONDS:
+            raise AdminUnavailableError("The signing keys could not be fetched.")
         try:
-            return (await asyncio.to_thread(client.get_signing_key_from_jwt, token)).key
+            key = (await asyncio.to_thread(client.get_signing_key_from_jwt, token)).key
         except jwt.PyJWKClientConnectionError as error:
+            failed_at = time.monotonic()
             raise AdminUnavailableError("The signing keys could not be fetched.") from error
         except jwt.PyJWTError as error:
             raise AuthenticationError("The token is not valid.") from error
+        failed_at = None
+        return key
 
     return resolve
 
@@ -84,7 +95,7 @@ async def verify_admin_token(
             options={"require": ["exp", "iss", "aud"]},
         )
     except jwt.PyJWTError as error:
-        raise AuthenticationError("The Access token is not valid.") from error
+        raise AuthenticationError("The token is not valid.") from error
 
     email = claims.get("email")
     if not isinstance(email, str) or not email:

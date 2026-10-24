@@ -44,6 +44,8 @@ SECRET_PLACEHOLDER = "change-me"
 #: deployment cannot silently fall back to a development DSN; helpful in the example.
 LOCAL_EXAMPLES = {
     "database_url": "postgresql+asyncpg://registry:registry@localhost:5432/registry",
+    # The code defaults to production; a developer's copy is local.
+    "environment": "local",
     # Blank on purpose: a shipped default would be a key everyone knows. /admin answers 503 until a
     # developer sets their own (`openssl rand -base64 32`).
     "service_keys": "",

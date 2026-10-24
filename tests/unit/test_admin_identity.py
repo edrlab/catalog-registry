@@ -12,6 +12,7 @@ from registry.core.errors import AdminUnavailableError, AuthenticationError, Per
 from registry.services.admin_identity import (
     AdminIdentity,
     build_identity,
+    build_jwks_key_resolver,
     verify_admin_token,
     verify_service_key,
 )
@@ -171,3 +172,22 @@ def test_the_dev_identity_skips_the_domain_check_but_is_lowercased() -> None:
 def test_an_identity_that_is_not_an_email_address_is_a_401(email: str) -> None:
     with pytest.raises(AuthenticationError):
         build_identity(email, allowed_domains=None, issuer="dev")
+
+
+async def test_a_failed_key_fetch_is_not_retried_by_the_next_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fetches: list[str] = []
+
+    def fail(_client: Any, token: str) -> Any:
+        fetches.append(token)
+        raise jwt.PyJWKClientConnectionError("down")
+
+    monkeypatch.setattr(jwt.PyJWKClient, "get_signing_key_from_jwt", fail)
+    resolve = build_jwks_key_resolver("https://issuer.example.test/keys")
+
+    for _ in range(3):
+        with pytest.raises(AdminUnavailableError):
+            await resolve("a.b.c")
+
+    assert len(fetches) == 1

@@ -1,6 +1,6 @@
 FROM python:3.13-slim AS base
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 UV_COMPILE_BYTECODE=1
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.12.6 /uv /usr/local/bin/uv
 WORKDIR /app
 
 # Dependencies before source: dependencies change rarely, source changes constantly, so a

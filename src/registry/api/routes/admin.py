@@ -9,7 +9,13 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import StringConstraints
 
 from registry.api.admin_dependencies import require_permission
-from registry.domain.admin_models import MAX_PER_PAGE, AdminActor, AdminCatalogQuery
+from registry.domain.admin_models import (
+    MAX_PAGE,
+    MAX_PER_PAGE,
+    MAX_QUERY_WORDS,
+    AdminActor,
+    AdminCatalogQuery,
+)
 from registry.domain.enums import CatalogKind, CatalogStatus, CoverageScope, PublicationType
 from registry.schemas.admin import (
     CatalogListResponse,
@@ -88,11 +94,11 @@ async def read_admin_catalogs(
     ] = None,
     recommended: bool | None = None,
     sort: Literal["name", "-name", "kind", "status"] = "name",
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
     per_page: Annotated[int, Query(ge=1, le=MAX_PER_PAGE)] = MAX_PER_PAGE,
 ) -> CatalogListResponse:
     query = AdminCatalogQuery(
-        words=(q or "").split(),
+        words=(q or "").split()[:MAX_QUERY_WORDS],
         statuses=status or DEFAULT_STATUSES,
         kinds=[value.value for value in kind or ()],
         coverages=[value.value for value in coverage or ()],

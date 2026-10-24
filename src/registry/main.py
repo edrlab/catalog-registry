@@ -90,7 +90,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.open_admin_reader = open_admin_reader
         app.state.open_actor_store = open_actor_store
         # None when no issuer is configured: a token then cannot be checked and is a 401.
-        app.state.resolve_access_key = (
+        app.state.resolve_admin_key = (
             build_jwks_key_resolver(resolved.admin_jwks_url) if resolved.admin_jwks_url else None
         )
         yield

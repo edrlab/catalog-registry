@@ -9,6 +9,10 @@ from registry.domain.enums import ActorRole, CatalogStatus
 #: `sort` values of the catalog list, and the page-size cap.
 SORT_VALUES: Final = ("name", "-name", "kind", "status")
 MAX_PER_PAGE: Final = 100
+#: A page number that would overflow the database's 64-bit offset is a 422, not a 500.
+MAX_PAGE: Final = 100_000
+#: Each word is a scan of every catalog, so a long search text is cut here.
+MAX_QUERY_WORDS: Final = 8
 
 
 @dataclass(frozen=True, slots=True)

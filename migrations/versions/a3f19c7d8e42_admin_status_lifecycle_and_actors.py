@@ -23,7 +23,7 @@ Also here:
   changed under them. Nothing increments it yet; the write endpoints do.
 * `actors`, the people allowed into the admin API, keyed by lowercased email. No rows are seeded
   here (the emails are not in the repository); the first admin is added with
-  `python -m registry.cli actor add`.
+  `python -m registry.cli actor set`.
 * `refresh_catalog_search` indexes `published` rather than `active`. The rows in
   `catalog_search` are unchanged, because the same catalogs qualify.
 

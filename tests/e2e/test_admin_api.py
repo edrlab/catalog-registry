@@ -236,7 +236,7 @@ def deployed(admin_app: Any) -> None:
     async def resolve(_token: str) -> Any:
         return SIGNING_KEY.public_key()
 
-    admin_app.state.resolve_access_key = resolve
+    admin_app.state.resolve_admin_key = resolve
 
 
 def access_headers(email: str) -> dict[str, str]:
@@ -436,6 +436,25 @@ async def test_a_bad_query_is_a_422_problem_that_names_the_field(admin_client: A
     assert body["type"] == f"{PROBLEMS}validation"
     assert {error["field"] for error in body["errors"]} == {"per_page", "status.0"}
     assert response.headers["cache-control"] == "no-store"
+
+
+async def test_a_page_past_the_cap_is_a_422_not_a_500(admin_client: AsyncClient) -> None:
+    response = await admin_client.get(
+        "/admin/catalogs", params={"page": 10**20}, headers=admin_headers()
+    )
+
+    assert response.status_code == 422
+    assert [error["field"] for error in response.json()["errors"]] == ["page"]
+
+
+async def test_a_long_search_text_is_cut_to_a_few_words(
+    admin_client: AsyncClient, searchable_catalogs: None
+) -> None:
+    word = (await list_catalogs(admin_client))["items"][0]["name"].split()[0]
+
+    body = await list_catalogs(admin_client, q=" ".join([word] * 8 + ["qqqqqq"]))
+
+    assert body["total"] > 0
 
 
 # --- stats -------------------------------------------------------------------------------------

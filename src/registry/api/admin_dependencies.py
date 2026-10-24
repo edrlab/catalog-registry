@@ -45,7 +45,7 @@ async def authenticate_admin_caller(request: Request) -> AdminIdentity:
     token = request.headers.get(HEADER_ADMIN_TOKEN)
     if not token:
         raise AuthenticationError("Missing token.")
-    resolve_key = request.app.state.resolve_access_key
+    resolve_key = request.app.state.resolve_admin_key
     issuer, audience = settings.admin_token_issuer, settings.admin_token_audience
     if resolve_key is None or not (issuer and audience):
         # Only reachable locally (Settings refuses this configuration when deployed): a token

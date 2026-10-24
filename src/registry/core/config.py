@@ -33,7 +33,10 @@ class Settings(BaseSettings):
         default=Path("data/recommended.json"),
         description="Feed-shaped document the seed command imports.",
     )
-    environment: Literal["local", "test", "staging", "production"] = "local"
+    environment: Literal["local", "test", "staging", "production"] = Field(
+        default="production",
+        description="Where this runs. A missing value means production, the strictest.",
+    )
     dev_fetch_token: SecretStr | None = Field(
         default=None,
         description=(
