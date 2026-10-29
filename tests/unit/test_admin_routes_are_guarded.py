@@ -32,7 +32,13 @@ def test_every_admin_route_requires_a_permission() -> None:
 
 def test_the_admin_router_is_mounted_on_the_app() -> None:
     """The scan above reads the router itself, so also prove the app serves what it scanned."""
-    app = create_app(Settings(database_url="postgresql+asyncpg://u:p@localhost/db", _env_file=None))
+    app = create_app(
+        Settings(
+            database_url="postgresql+asyncpg://u:p@localhost/db",
+            environment="local",
+            _env_file=None,
+        )
+    )
     served = {path for path in app.openapi()["paths"] if path.startswith("/admin")}
 
     assert served == {route.path for route in admin.router.routes if isinstance(route, APIRoute)}

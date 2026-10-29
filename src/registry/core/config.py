@@ -13,6 +13,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 #: What `.env.example` ships for the service key. Fine on a laptop, refused anywhere deployed.
 PLACEHOLDER_SERVICE_KEY = "change-me"
+#: A deployed key must be at least this long: `openssl rand -base64 32` gives 44 characters.
+MIN_SERVICE_KEY_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -81,8 +83,13 @@ class Settings(BaseSettings):
                 "REGISTRY_ADMIN_DEV_IDENTITY cannot be on while REGISTRY_ADMIN_TOKEN_ISSUER is set"
             )
         if deployed and self.service_key_values:
-            if PLACEHOLDER_SERVICE_KEY in self.service_key_values:
+            if any(key.lower() == PLACEHOLDER_SERVICE_KEY for key in self.service_key_values):
                 raise ValueError("REGISTRY_SERVICE_KEYS still holds a placeholder value")
+            if any(len(key) < MIN_SERVICE_KEY_LENGTH for key in self.service_key_values):
+                raise ValueError(
+                    f"REGISTRY_SERVICE_KEYS: every key needs {MIN_SERVICE_KEY_LENGTH}+ characters "
+                    "outside local"
+                )
             if not (self.admin_token_issuer and self.admin_token_audience and self.admin_jwks_url):
                 raise ValueError(
                     "REGISTRY_ADMIN_TOKEN_ISSUER, REGISTRY_ADMIN_TOKEN_AUDIENCE and "

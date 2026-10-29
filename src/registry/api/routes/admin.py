@@ -81,16 +81,16 @@ async def read_admin_catalogs(
     request: Request,
     actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
     *,
-    q: Annotated[str | None, Query(max_length=200)] = None,
+    q: Annotated[str | None, Query(max_length=200, pattern=r"^[^\x00]*$")] = None,
     status: Annotated[list[CatalogStatus] | None, Query()] = None,
     kind: Annotated[list[CatalogKind] | None, Query()] = None,
     coverage: Annotated[list[CoverageScope] | None, Query()] = None,
     publication_type: Annotated[list[PublicationType] | None, Query()] = None,
     country: Annotated[
-        list[Annotated[str, StringConstraints(min_length=2, max_length=2)]] | None, Query()
+        list[Annotated[str, StringConstraints(pattern=r"^[A-Za-z]{2}$")]] | None, Query()
     ] = None,
     language: Annotated[
-        list[Annotated[str, StringConstraints(min_length=1, max_length=35)]] | None, Query()
+        list[Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9-]{1,35}$")]] | None, Query()
     ] = None,
     recommended: bool | None = None,
     sort: Literal["name", "-name", "kind", "status"] = "name",

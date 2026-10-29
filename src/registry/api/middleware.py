@@ -4,6 +4,7 @@ One middleware rather than two. Both wrap `send` to add headers to the response,
 ASGI wrapper per request buys nothing but another frame.
 """
 
+import re
 import uuid
 
 from starlette.datastructures import Headers, MutableHeaders
@@ -27,6 +28,10 @@ SECURITY_HEADERS = {
 
 
 ADMIN_PATH_PREFIX = "/admin"
+
+#: A caller's request id is echoed into a header, a problem body and the log, so only a short,
+#: plain one is kept; anything else is replaced by a minted id.
+REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9._:-]{1,128}")
 
 
 def is_admin_path(path: str) -> bool:
@@ -56,7 +61,8 @@ class ResponseHeadersMiddleware:
             await self.app(scope, receive, send)
             return
 
-        request_id = Headers(scope=scope).get(HEADER_REQUEST_ID) or str(uuid.uuid4())
+        supplied = Headers(scope=scope).get(HEADER_REQUEST_ID) or ""
+        request_id = supplied if REQUEST_ID_PATTERN.fullmatch(supplied) else str(uuid.uuid4())
         no_store = is_admin_path(scope["path"])
         # For the problem document's `instance`, which is built where the response is.
         scope.setdefault("state", {})["request_id"] = request_id

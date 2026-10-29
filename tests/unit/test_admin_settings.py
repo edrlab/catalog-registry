@@ -10,6 +10,9 @@ from registry.core.config import PLACEHOLDER_SERVICE_KEY, Settings
 pytestmark = pytest.mark.unit
 
 DSN = "postgresql+asyncpg://u:p@localhost/db"
+#: Deployed keys need 32+ characters.
+KEY = "k" * 32
+NEXT_KEY = "n" * 32
 
 
 def build(**overrides: Any) -> Settings:
@@ -39,7 +42,7 @@ def test_a_deployed_keys_url_must_be_https() -> None:
     with pytest.raises(ValidationError, match="must be https"):
         build(
             environment="production",
-            service_keys=SecretStr("real"),
+            service_keys=SecretStr(KEY),
             admin_token_issuer="https://issuer.example.test",
             admin_token_audience="aud",
             admin_jwks_url="http://issuer.example.test/keys",
@@ -48,7 +51,7 @@ def test_a_deployed_keys_url_must_be_https() -> None:
 
 def test_a_deployed_service_key_needs_the_token_issuer_audience_and_keys_url() -> None:
     with pytest.raises(ValidationError, match="ADMIN_TOKEN_ISSUER"):
-        build(environment="production", service_keys=SecretStr("a-real-secret"))
+        build(environment="production", service_keys=SecretStr(KEY))
 
 
 def test_a_deployed_service_key_may_not_be_the_placeholder() -> None:
@@ -65,13 +68,13 @@ def test_a_deployed_service_key_may_not_be_the_placeholder() -> None:
 def test_a_fully_configured_deployment_starts() -> None:
     settings = build(
         environment="production",
-        service_keys=SecretStr("current, next"),
+        service_keys=SecretStr(f"{KEY}, {NEXT_KEY}"),
         admin_token_issuer="https://issuer.example.test",
         admin_jwks_url="https://issuer.example.test/keys",
         admin_token_audience="aud",
     )
 
-    assert settings.service_key_values == ("current", "next")
+    assert settings.service_key_values == (KEY, NEXT_KEY)
 
 
 def test_a_deployment_with_no_admin_configuration_still_starts() -> None:

@@ -49,7 +49,8 @@ def build_jwks_key_resolver(jwks_url: str) -> SigningKeyResolver:
             raise AdminUnavailableError("The signing keys could not be fetched.")
         try:
             key = (await asyncio.to_thread(client.get_signing_key_from_jwt, token)).key
-        except jwt.PyJWKClientConnectionError as error:
+        except (jwt.PyJWKClientConnectionError, ValueError) as error:
+            # ValueError: the key set is not JSON (a proxy's error page). Not the caller's fault.
             failed_at = time.monotonic()
             raise AdminUnavailableError("The signing keys could not be fetched.") from error
         except jwt.PyJWTError as error:
@@ -121,9 +122,14 @@ def build_identity(
 
     *allowed_domains* is None for the local dev identity, which is not tied to a domain.
     """
-    normalised = email.strip().lower()
-    local, at, domain = normalised.rpartition("@")
-    if not (local and at and domain):
+    normalised = email.lower()
+    local, _, domain = normalised.partition("@")
+    if (
+        normalised.count("@") != 1
+        or not local
+        or not domain
+        or any(c.isspace() for c in normalised)
+    ):
         raise AuthenticationError("The identity is not an email address.")
     if allowed_domains is not None and domain not in allowed_domains:
         raise PermissionDeniedError("This account can't use the admin API.")

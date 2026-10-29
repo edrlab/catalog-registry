@@ -154,14 +154,15 @@ async def test_every_problem_names_its_request_in_instance(
     assert response.headers["x-request-id"] == request_id
 
 
-async def test_instance_uses_the_minted_id_and_stays_a_valid_urn_for_odd_ids(
+async def test_instance_uses_the_minted_id_and_odd_ids_are_replaced(
     admin_client: AsyncClient,
 ) -> None:
     minted = await admin_client.get("/admin/me")
     odd = await admin_client.get("/admin/me", headers={"X-Request-Id": "a b/c"})
 
     assert minted.json()["instance"] == f"urn:uuid:{minted.headers['x-request-id']}"
-    assert odd.json()["instance"] == "urn:request-id:a%20b%2Fc"
+    assert odd.headers["x-request-id"] != "a b/c"
+    assert odd.json()["instance"] == f"urn:uuid:{odd.headers['x-request-id']}"
 
 
 async def test_an_unhandled_error_is_a_fixed_problem_that_never_shows_the_exception(

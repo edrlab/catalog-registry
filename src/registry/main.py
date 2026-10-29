@@ -98,7 +98,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await read_engine.dispose()
         await engine.dispose()
 
-    app = FastAPI(title="OPDS Catalog Registry", version="0.1.0", lifespan=lifespan)
+    # No trailing-slash redirects: Starlette builds them from the request's Host and scheme, which
+    # behind a proxy is plain http and whatever host the caller sent. `/search/` is a 404 instead.
+    app = FastAPI(
+        title="OPDS Catalog Registry", version="0.1.0", lifespan=lifespan, redirect_slashes=False
+    )
     # Innermost, so it compresses the finished body and the others see the final headers. Chooses
     # `br`, `gzip` or nothing from the client's `Accept-Encoding` and logs who asked (ADR-061).
     configure_client_log()
@@ -118,7 +122,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(catalogs.router)
     app.include_router(search.router)
     app.include_router(health.router)
-    app.include_router(admin.router)
+    # The admin routes are described in the schema only locally; deployed, /openapi.json is public.
+    app.include_router(admin.router, include_in_schema=resolved.environment == "local")
     # The console page and its simulator read only what the registry already serves publicly, so
     # they are mounted everywhere (ADR-063).
     app.include_router(dev.router)
