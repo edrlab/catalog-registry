@@ -10,6 +10,7 @@ from typing import Annotated, Final
 
 from fastapi import Depends, Request
 
+from registry.api.admin_log import ACTOR_STATE_KEY
 from registry.core.errors import AuthenticationError, PermissionDeniedError
 from registry.domain.admin_models import AdminActor
 from registry.domain.permissions import build_permissions
@@ -64,7 +65,10 @@ async def authenticate_admin_actor(
     request: Request, identity: Annotated[AdminIdentity, Depends(authenticate_admin_caller)]
 ) -> AdminActor:
     async with request.app.state.open_actor_store() as store:
-        return await resolve_admin_actor(store, identity)
+        actor = await resolve_admin_actor(store, identity)
+    # For the request's log line (`log_admin_request`): who did it, by id, never by email.
+    setattr(request.state, ACTOR_STATE_KEY, actor.id)
+    return actor
 
 
 def require_permission(permission: str) -> Callable[..., Awaitable[AdminActor]]:

@@ -1,5 +1,6 @@
 """Admin input, identity edge cases, redirects and request ids."""
 
+import json
 import time
 from typing import Any
 
@@ -8,8 +9,10 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from registry.api import admin_log
 from tests.conftest import ADMIN_SERVICE_KEY, admin_headers
 from tests.e2e.test_admin_api import AUDIENCE, ISSUER, SIGNING_KEY, count_actors, deployed
+from tests.unit.test_admin_log import Lines
 
 pytestmark = pytest.mark.e2e
 
@@ -135,3 +138,23 @@ async def test_a_trailing_slash_is_a_404_never_a_redirect(
 
     assert response.status_code == 404
     assert "location" not in response.headers
+
+
+async def test_each_admin_request_by_an_actor_leaves_one_log_line(
+    admin_client: AsyncClient,
+) -> None:
+    handler = Lines()
+    admin_log._log.addHandler(handler)
+    try:
+        await admin_client.get("/admin/stats", headers={**admin_headers(), "X-Request-Id": "web-7"})
+        await admin_client.get("/admin/stats")  # refused before any actor: not an audit line
+    finally:
+        admin_log._log.removeHandler(handler)
+
+    audit = [line for line in handler.lines if line["message"] == "admin request"]
+    assert len(audit) == 1
+    assert audit[0]["status"] == 200
+    assert audit[0]["request_id"] == "web-7"
+    assert audit[0]["path"] == "/admin/stats"
+    assert audit[0]["actor_id"]
+    assert "@" not in json.dumps(audit[0])

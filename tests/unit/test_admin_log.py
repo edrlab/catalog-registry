@@ -120,3 +120,49 @@ def test_admin_requests_stay_out_of_the_client_count() -> None:
         compression._client_log.removeHandler(handler)
 
     assert [line["path"] for line in handler.lines] == ["/search"]
+
+
+def admin_scope(**state: object) -> dict[str, object]:
+    return {
+        "type": "http",
+        "method": "GET",
+        "path": "/admin/catalogs",
+        "query_string": b"q=SECRET",
+        "state": {"request_id": "r-1", **state},
+    }
+
+
+def test_every_request_of_a_known_actor_is_logged_once(lines: Lines) -> None:
+    compression.log_client_request(
+        admin_scope(admin_actor_id="actor-1"), Headers({}), status=200, encoding=None
+    )
+
+    assert lines.lines == [
+        {
+            "severity": "INFO",
+            "message": "admin request",
+            "actor_id": "actor-1",
+            "method": "GET",
+            "path": "/admin/catalogs",
+            "status": 200,
+            "request_id": "r-1",
+        }
+    ]
+    assert "SECRET" not in json.dumps(lines.lines)
+
+
+def test_a_request_refused_before_the_actor_is_known_has_no_request_line(lines: Lines) -> None:
+    compression.log_client_request(admin_scope(), Headers({}), status=401, encoding=None)
+
+    assert lines.lines == []
+
+
+def test_a_known_actor_s_refusal_is_not_logged_twice(lines: Lines) -> None:
+    refused = Request({**admin_scope(admin_actor_id="actor-1"), "headers": []})
+
+    admin_log.log_admin_refusal(refused, status=403, reason="role")
+    compression.log_client_request(
+        admin_scope(admin_actor_id="actor-1"), Headers({}), status=403, encoding=None
+    )
+
+    assert [line["message"] for line in lines.lines] == ["admin request"]

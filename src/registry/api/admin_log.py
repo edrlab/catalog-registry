@@ -14,7 +14,8 @@ import json
 import logging
 import sys
 import time
-from typing import Final
+from collections.abc import MutableMapping
+from typing import Any, Final
 
 from fastapi import Request
 
@@ -39,8 +40,33 @@ def configure_admin_log() -> None:
     _log.propagate = False
 
 
+#: Where the authenticated actor's id is kept for the request's log line.
+ACTOR_STATE_KEY: Final = "admin_actor_id"
+
+
+def log_admin_request(scope: MutableMapping[str, Any], *, status: int) -> None:
+    """One line per `/admin` request made by an identified actor, whatever its status: the audit
+    trail of who read what. A request refused before the actor is known has the refusal line."""
+    state = scope.get("state", {})
+    actor_id = state.get(ACTOR_STATE_KEY)
+    if actor_id is None:
+        return
+    line = {
+        "severity": "ERROR" if status >= SERVER_ERROR_FROM else "INFO",
+        "message": "admin request",
+        "actor_id": actor_id,
+        "method": scope["method"],
+        "path": scope["path"],
+        "status": status,
+        "request_id": state.get("request_id", "-"),
+    }
+    _log.log(logging.ERROR if status >= SERVER_ERROR_FROM else logging.INFO, json.dumps(line))
+
+
 def log_admin_refusal(request: Request, *, status: int, reason: str) -> None:
     """Log one refused `/admin` request, unless an identical one was logged a moment ago."""
+    if request.scope.get("state", {}).get(ACTOR_STATE_KEY) is not None:
+        return  # an identified actor's request is logged by `log_admin_request`
     user_agent = request.headers.get("user-agent", "-")[:MAX_USER_AGENT_LENGTH]
     key = (status, reason, user_agent)
     now = time.monotonic()
