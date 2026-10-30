@@ -1,5 +1,7 @@
 """The admin API's wire contract. Whitelist projection (R3): a response lists its fields."""
 
+import datetime
+
 from pydantic import BaseModel, ConfigDict
 
 from registry.domain.enums import CatalogStatus
@@ -78,6 +80,38 @@ class CatalogListItem(AdminModel):
     version: int
     allowed_actions: list[str]
     public_url: str | None
+
+
+class LinkItem(AdminModel):
+    rel: str
+    href: str
+    type: str | None
+    title: str | None
+    templated: bool
+    authentication: bool
+
+
+class SubdivisionRef(AdminModel):
+    code: str
+    #: The English name, when the reference data has one.
+    name: str | None
+
+
+class Submitter(AdminModel):
+    name: str | None
+    email: str | None
+
+
+class CatalogDetail(CatalogListItem):
+    description: str | None
+    publication_types: list[str]
+    subdivisions: list[SubdivisionRef]
+    links: list[LinkItem]
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+    published_at: datetime.datetime | None
+    #: Only for a role that reviews submissions; otherwise null. It is a third party's email.
+    submitter: Submitter | None
 
 
 class CatalogListResponse(AdminModel):

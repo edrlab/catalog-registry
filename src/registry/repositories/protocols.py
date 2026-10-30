@@ -13,6 +13,7 @@ from typing import Any, Protocol
 from registry.db.models.catalog import Catalog
 from registry.domain.admin_models import (
     AdminActor,
+    AdminCatalogDetail,
     AdminCatalogPage,
     AdminCatalogQuery,
     AdminStats,
@@ -65,3 +66,5 @@ class AdminReader(Protocol):
     async def fetch_used_places(self) -> UsedPlaces: ...
 
     async def fetch_admin_catalogs(self, query: AdminCatalogQuery) -> AdminCatalogPage: ...
+
+    async def fetch_admin_catalog(self, catalog_id: str) -> AdminCatalogDetail | None: ...

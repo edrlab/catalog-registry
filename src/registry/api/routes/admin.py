@@ -18,6 +18,7 @@ from registry.domain.admin_models import (
 )
 from registry.domain.enums import CatalogKind, CatalogStatus, CoverageScope, PublicationType
 from registry.schemas.admin import (
+    CatalogDetail,
     CatalogListResponse,
     FilterOptionsResponse,
     MeResponse,
@@ -25,6 +26,7 @@ from registry.schemas.admin import (
     StatsResponse,
 )
 from registry.services.admin_service import (
+    resolve_admin_catalog_detail,
     resolve_admin_catalog_list,
     resolve_admin_me,
     resolve_admin_stats,
@@ -113,6 +115,22 @@ async def read_admin_catalogs(
     async with request.app.state.open_admin_reader() as reader:
         return await resolve_admin_catalog_list(
             reader, actor, query, base_url=request.app.state.settings.base_url
+        )
+
+
+@router.get(
+    "/catalogs/{catalog_id}",
+    summary="One catalog in any status, with everything the detail page shows",
+    responses={404: problem_response("No catalog with this id, or the id is not a UUID.")},
+)
+async def read_admin_catalog(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    catalog_id: str,
+) -> CatalogDetail:
+    async with request.app.state.open_admin_reader() as reader:
+        return await resolve_admin_catalog_detail(
+            reader, actor, catalog_id, base_url=request.app.state.settings.base_url
         )
 
 

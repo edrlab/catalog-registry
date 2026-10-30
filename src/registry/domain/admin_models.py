@@ -1,5 +1,6 @@
 """What the admin repositories return and the admin service reads. Plain data, no database types."""
 
+import datetime
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
@@ -57,6 +58,38 @@ class AdminCatalogRow:
     status: CatalogStatus
     recommended: bool
     version: int
+
+
+@dataclass(frozen=True, slots=True)
+class AdminCatalogLink:
+    rel: str
+    href: str
+    media_type: str | None
+    title: str | None
+    templated: bool
+    authentication: bool
+
+
+@dataclass(frozen=True, slots=True)
+class AdminSubdivision:
+    code: str
+    name: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class AdminCatalogDetail:
+    """One catalog for the detail page: the list row, and what only the detail shows."""
+
+    row: AdminCatalogRow
+    description: str | None
+    publication_types: Sequence[str]
+    subdivisions: Sequence[AdminSubdivision]
+    links: Sequence[AdminCatalogLink]
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+    published_at: datetime.datetime | None
+    submitter_name: str | None
+    submitter_email: str | None
 
 
 @dataclass(frozen=True, slots=True)
