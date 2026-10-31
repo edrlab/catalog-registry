@@ -150,3 +150,62 @@ async def test_upgrade_downgrade_upgrade_leaves_the_schema_and_the_search_rows_i
         assert await snapshot(engine, DATA_QUERIES) == data_before
     finally:
         await engine.dispose()
+
+
+async def test_the_status_migration_keeps_every_reader_s_view_and_downgrades_safely(
+    scratch_url: str,
+) -> None:
+    """`active` becomes `published` and `suggested` becomes `draft`, so no public reader sees a
+    change. The downgrade never makes a catalog more visible: `unpublished` and `archived` have no
+    old value and land on `suggested`, the hidden one."""
+    before_statuses = "6d2a91c5e7b3"
+    alembic(scratch_url, "upgrade", before_statuses)
+    engine = create_async_engine(scratch_url)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO catalogs (id, title, status, published_at, recommended) VALUES "
+                    "(gen_random_uuid(), 'Was active', 'active', now(), true), "
+                    "(gen_random_uuid(), 'Was suggested', 'suggested', NULL, false)"
+                )
+            )
+
+        alembic(scratch_url, "upgrade", "head")
+        async with engine.connect() as connection:
+            migrated = {
+                row[0]: row[1]
+                for row in await connection.execute(
+                    text("SELECT title, status::text FROM catalogs ORDER BY title")
+                )
+            }
+            versions = [
+                tuple(row)
+                for row in await connection.execute(text("SELECT DISTINCT version FROM catalogs"))
+            ]
+        assert migrated == {"Was active": "published", "Was suggested": "draft"}
+        assert versions == [(1,)]
+
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("UPDATE catalogs SET status = 'archived' WHERE title = 'Was active'")
+            )
+            await connection.execute(
+                text("UPDATE catalogs SET status = 'unpublished' WHERE title = 'Was suggested'")
+            )
+
+        alembic(scratch_url, "downgrade", before_statuses)
+        async with engine.connect() as connection:
+            downgraded = {
+                row[0]: row[1]
+                for row in await connection.execute(
+                    text("SELECT title, status::text FROM catalogs ORDER BY title")
+                )
+            }
+            searchable = (
+                await connection.execute(text("SELECT count(*) FROM catalog_search"))
+            ).scalar()
+        assert downgraded == {"Was active": "suggested", "Was suggested": "suggested"}
+        assert searchable == 0
+    finally:
+        await engine.dispose()

@@ -47,19 +47,20 @@ _RECOMMENDED = text(
     f"""
 SELECT {CATALOG_COLUMNS}
   FROM catalogs c
- WHERE c.recommended AND c.status = 'active'
+ WHERE c.recommended AND c.status = 'published'
  ORDER BY c.created_at DESC, c.title, c.id
 """
 )
 
-#: `status` is filtered because `GET /catalogs/{id}` is unauthenticated: a suggested catalog is
-#: somebody's unreviewed submission, and an id is not an access control. `recommended` is not: an
-#: active catalog that is simply not recommended is a real, published catalog.
-_ACTIVE_BY_ID = text(
+#: `status` is filtered because `GET /catalogs/{id}` is unauthenticated: a draft is somebody's
+#: unreviewed submission and an archived catalog was withdrawn, and an id is not an access control.
+#: An unpublished catalog is served on purpose: it is reachable by its direct link, never listed.
+#: `recommended` is not filtered: a published catalog that is simply not recommended is a real one.
+_VISIBLE_BY_ID = text(
     f"""
 SELECT {CATALOG_COLUMNS}
   FROM catalogs c
- WHERE c.id = :catalog_id AND c.status = 'active'
+ WHERE c.id = :catalog_id AND c.status IN ('published', 'unpublished')
 """
 )
 
@@ -98,7 +99,7 @@ class CatalogRepository:
     async def fetch_catalog_by_id(self, catalog_id: uuid.UUID) -> CatalogView | None:
         """Read one published catalog in one statement. None when it does not exist, or is not
         public."""
-        rows = await fetch_rows(self._session, _ACTIVE_BY_ID, {"catalog_id": catalog_id})
+        rows = await fetch_rows(self._session, _VISIBLE_BY_ID, {"catalog_id": catalog_id})
         return build_catalog_from_row(rows[0]) if rows else None
 
     async def fetch_registered_hosts(self) -> frozenset[str]:
@@ -117,8 +118,8 @@ class CatalogRepository:
     async def fetch_catalog_by_identity_id(self, catalog_id: uuid.UUID) -> Catalog | None:
         """The import's lookup for a document that names its own id. No `status` filter.
 
-        `fetch_catalog_by_id` is the *public* read and hides anything not `active`. Using it
-        here would make the seed unable to see a `suggested` row holding this id, so the import
+        `fetch_catalog_by_id` is the *public* read and hides anything not `published`. Using it
+        here would make the seed unable to see a draft row holding this id, so the import
         would try to insert a duplicate primary key rather than update it. The seed runs as the
         operator, not as a reader; `status` is its business.
         """

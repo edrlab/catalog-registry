@@ -90,7 +90,7 @@ clean:  ## Stop the stack and drop the database volume
 # Local process against the compose database. Ctrl-C to stop. Not the container, see
 # docker-run. Catalog JSON is read by `make seed`, not at request time, so no reload glob.
 run:  ## Run the API on the host instead of in Docker (needs make up)
-	uv run uvicorn registry.main:create_app --factory --reload --port $(PORT)
+	uv run uvicorn registry.main:create_app --factory --reload --port $(PORT) --no-access-log
 
 seed:  ## Import data/recommended.json into the database (needs make up)
 	uv run python -m registry.cli seed

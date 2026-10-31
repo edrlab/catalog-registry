@@ -52,7 +52,7 @@ async def test_fetch_recommended_catalogs_returns_the_seeded_set(
     assert [catalog.title for catalog in catalogs] == SEED_TITLES_IN_FILE_ORDER
 
 
-async def test_a_suggested_catalog_is_excluded_even_when_recommended(
+async def test_a_draft_catalog_is_excluded_even_when_recommended(
     db_session: AsyncSession, seeded_catalogs: int
 ) -> None:
     repository = CatalogRepository(db_session)
@@ -60,7 +60,7 @@ async def test_a_suggested_catalog_is_excluded_even_when_recommended(
     # The importer's attached object: the public read's are snapshots that change nothing.
     attached = await repository.fetch_catalog_by_identity_id(first.id)
     assert attached is not None
-    attached.status = CatalogStatus.SUGGESTED
+    attached.status = CatalogStatus.DRAFT
     attached.published_at = None
     await db_session.commit()
 
@@ -135,7 +135,7 @@ async def test_the_feed_is_one_select_whatever_the_number_of_catalogs(
         db_session.add(
             Catalog(
                 title=f"Bulk {index:02d}",
-                status=CatalogStatus.ACTIVE,
+                status=CatalogStatus.PUBLISHED,
                 published_at=datetime.datetime.now(datetime.UTC),
                 recommended=True,
                 color=CatalogColor.GRAY,

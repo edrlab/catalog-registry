@@ -59,7 +59,7 @@ def build_catalog(
     # Server defaults apply on INSERT, so a transient instance has to state them itself.
     catalog = Catalog(
         title=title,
-        status=CatalogStatus.ACTIVE,
+        status=CatalogStatus.PUBLISHED,
         recommended=True,
         color=CatalogColor.GRAY,
         coverage=CoverageScope.GLOBAL,

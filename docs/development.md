@@ -132,7 +132,7 @@ All settings are read in exactly one place, `registry.core.config.Settings`, and
 |---|---|---|
 | `REGISTRY_DATABASE_URL` | **required** | No default, so no deployment silently falls back to a development database |
 | `REGISTRY_SEED_FILE` | `data/recommended.json` | What `make seed` imports |
-| `REGISTRY_ENVIRONMENT` | `local` | `local\|test\|staging\|production` |
+| `REGISTRY_ENVIRONMENT` | `production` | `local\|test\|staging\|production`. `.env.example` sets `local` |
 | `REGISTRY_BASE_URL` | `http://localhost:8000` | Used to build absolute `self` links |
 
 Two rules that will bite you otherwise:

@@ -25,6 +25,7 @@ from urllib.parse import urlsplit
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
@@ -212,3 +213,48 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as async_client:
         yield async_client
+
+
+ADMIN_SERVICE_KEY = "test-service-key"
+
+
+@pytest.fixture
+async def admin_app(
+    settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    db_connection: AsyncConnection,
+) -> AsyncIterator[FastAPI]:
+    """The app as a developer runs it locally: a key, and the dev identity.
+
+    Reads and the actor store join the test's transaction, so a first login is rolled back with
+    everything else. The token path is covered with its own settings in the unit tests.
+    """
+    local = settings.model_copy(
+        update={
+            "environment": "local",
+            "service_keys": SecretStr(ADMIN_SERVICE_KEY),
+            "admin_dev_identity": True,
+            # A developer's own .env may configure tokens; the dev identity is off when it does.
+            "admin_token_issuer": None,
+            "admin_token_audience": None,
+            "admin_jwks_url": None,
+        }
+    )
+    built = create_app(local)
+    async with built.router.lifespan_context(built):
+        built.state.session_factory = session_factory
+        built.state.write_session_factory = session_factory
+        yield built
+
+
+@pytest.fixture
+async def admin_client(admin_app: FastAPI) -> AsyncIterator[AsyncClient]:
+    async with AsyncClient(
+        transport=ASGITransport(app=admin_app), base_url="http://testserver"
+    ) as async_client:
+        yield async_client
+
+
+def admin_headers(email: str = "viewer@edrlab.org") -> dict[str, str]:
+    """What a local caller sends: the key and a dev identity."""
+    return {"X-Registry-Service-Key": ADMIN_SERVICE_KEY, "X-Registry-Dev-Identity": email}

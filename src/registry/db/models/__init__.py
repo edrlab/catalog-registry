@@ -4,6 +4,7 @@ Alembic's `env.py` and the test harness both need the full metadata, and a model
 never imported is a table autogenerate silently proposes dropping.
 """
 
+from registry.db.models.actor import Actor
 from registry.db.models.catalog import (
     Catalog,
     CatalogKindRow,
@@ -23,6 +24,7 @@ from registry.db.models.reference import (
 from registry.db.models.search import CatalogSearch
 
 __all__ = [
+    "Actor",
     "Catalog",
     "CatalogKindRow",
     "CatalogLanguageRow",

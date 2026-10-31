@@ -173,7 +173,7 @@ def build_catalog(document: dict[str, Any], catalog_id: uuid.UUID, *, recommende
 
     return Catalog(
         id=catalog_id,
-        status=CatalogStatus.ACTIVE,
+        status=CatalogStatus.PUBLISHED,
         recommended=recommended,
         title=metadata["title"],
         description=metadata.get("description"),
@@ -185,7 +185,7 @@ def build_catalog(document: dict[str, Any], catalog_id: uuid.UUID, *, recommende
         # Absent means NULL, not `global`. Storing an undeclared coverage as
         # `global` would assert worldwide reach on the catalog's behalf.
         coverage=(CoverageScope(metadata["coverage"]) if metadata.get("coverage") else None),
-        # ck_catalogs_published_when_active: an active catalog must carry a publication date.
+        # ck_catalogs_published_when_published: a published catalog must carry a publication date.
         published_at=None,
         kinds=[CatalogKindRow(kind=CatalogKind(value)) for value in metadata["kind"]],
         publication_types=[
@@ -334,11 +334,14 @@ async def import_catalog_document(
     existing.city = built.city
     existing.coverage = built.coverage
     existing.recommended = recommended
-    # ck_catalogs_published_when_active. A row that was `suggested` has no publication date,
-    # and activating it without one fails the constraint at commit.
+    # ck_catalogs_published_when_published. A row that was a draft has no publication date,
+    # and publishing it without one fails the constraint at commit.
     if existing.published_at is None:
         existing.published_at = func.now()
-    existing.status = built.status
+    # A re-import publishes a draft, as it always activated a suggestion. It does not undo an
+    # editor: an unpublished or archived catalog stays that way.
+    if existing.status is CatalogStatus.DRAFT:
+        existing.status = built.status
     existing.created_at = ordered_at
     existing.kinds = built.kinds
     existing.publication_types = built.publication_types

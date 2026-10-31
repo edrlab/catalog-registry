@@ -60,7 +60,7 @@ async def orm_recommended(session: AsyncSession) -> list[Catalog]:
     """The feed's rows as the ORM loads them, in the order the feed promises."""
     statement = (
         select(Catalog)
-        .where(Catalog.recommended, Catalog.status == CatalogStatus.ACTIVE)
+        .where(Catalog.recommended, Catalog.status == CatalogStatus.PUBLISHED)
         .order_by(Catalog.created_at.desc(), Catalog.title)
         .options(*EAGER_COLLECTIONS)
     )
@@ -214,7 +214,7 @@ async def test_only_recommended_and_active_catalogs_are_in_the_feed(
     hidden, _ = await import_catalog_document(db_session, doc("Hidden"), recommended=True)
     await db_session.flush()
     await db_session.execute(
-        text("UPDATE catalogs SET status = 'suggested', published_at = NULL WHERE id = :i"),
+        text("UPDATE catalogs SET status = 'draft', published_at = NULL WHERE id = :i"),
         {"i": hidden.id},
     )
 
@@ -224,7 +224,7 @@ async def test_only_recommended_and_active_catalogs_are_in_the_feed(
     assert plain.id not in {c.id for c in found}
 
 
-async def test_a_recommended_catalog_set_to_suggested_disappears_on_the_next_read(
+async def test_a_recommended_catalog_set_to_draft_disappears_on_the_next_read(
     db_session: AsyncSession,
 ) -> None:
     """The public read is a snapshot: a change goes through the database and is seen by the next
@@ -235,7 +235,7 @@ async def test_a_recommended_catalog_set_to_suggested_disappears_on_the_next_rea
     before = await repository.fetch_recommended_catalogs()
 
     await db_session.execute(
-        text("UPDATE catalogs SET status = 'suggested', published_at = NULL WHERE id = :i"),
+        text("UPDATE catalogs SET status = 'draft', published_at = NULL WHERE id = :i"),
         {"i": catalog.id},
     )
     after = await repository.fetch_recommended_catalogs()
@@ -257,14 +257,14 @@ async def test_an_active_catalog_that_is_not_recommended_is_readable_by_id_but_n
     assert found is not None and found.title == "Plain"
 
 
-async def test_a_suggested_catalog_is_hidden_from_the_public_read_but_not_from_the_importer(
+async def test_a_draft_catalog_is_hidden_from_the_public_read_but_not_from_the_importer(
     db_session: AsyncSession,
 ) -> None:
     catalog, _ = await import_catalog_document(db_session, doc("Pending"), recommended=False)
     await db_session.flush()
     catalog_id = catalog.id
     await db_session.execute(
-        text("UPDATE catalogs SET status = 'suggested', published_at = NULL WHERE id = :i"),
+        text("UPDATE catalogs SET status = 'draft', published_at = NULL WHERE id = :i"),
         {"i": catalog_id},
     )
     db_session.expire_all()

@@ -18,6 +18,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     func,
@@ -48,15 +49,17 @@ class Catalog(Base):
         CheckConstraint("length(trim(title)) > 0", name="title_not_blank"),
         CheckConstraint("country_code = upper(country_code)", name="country_uppercase"),
         CheckConstraint(
-            "status <> 'active' OR published_at IS NOT NULL", name="published_when_active"
+            "status <> 'published' OR published_at IS NOT NULL", name="published_when_published"
         ),
+        CheckConstraint("version >= 1", name="version_positive"),
         # The top-level feed's only query. A partial index is the right shape over ten rows
         # and stays right as the table grows.
         Index(
             "ix_catalogs_recommended",
             "recommended",
-            postgresql_where=text("recommended AND status = 'active'"),
+            postgresql_where=text("recommended AND status = 'published'"),
         ),
+        Index("ix_catalogs_status", "status"),
         Index("ix_catalogs_country_code", "country_code"),
     )
 
@@ -71,8 +74,10 @@ class Catalog(Base):
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
     status: Mapped[CatalogStatus] = mapped_column(
-        _pg_enum(CatalogStatus, "catalog_status"), nullable=False, server_default="suggested"
+        _pg_enum(CatalogStatus, "catalog_status"), nullable=False, server_default="draft"
     )
+    #: Optimistic-lock counter the admin API returns and checks. The write endpoints increment it.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     recommended: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     title: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

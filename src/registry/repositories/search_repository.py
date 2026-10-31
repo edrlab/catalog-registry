@@ -82,7 +82,7 @@ trigram_hits AS (
 hits AS (
   SELECT h.catalog_id, h.tier, h.score, c.created_at
     FROM (SELECT * FROM word_hits UNION ALL SELECT * FROM trigram_hits) h
-    JOIN catalogs c ON c.id = h.catalog_id AND c.status = 'active'
+    JOIN catalogs c ON c.id = h.catalog_id AND c.status = 'published'
      AND (NOT CAST(:opds AS boolean) OR EXISTS (
            SELECT 1 FROM links k
             WHERE k.catalog_id = c.id AND k.rel = 'catalog'
