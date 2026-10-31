@@ -13,12 +13,11 @@ from contextlib import asynccontextmanager
 from functools import partial
 
 from fastapi import FastAPI
-from starlette.middleware.cors import CORSMiddleware
 
 from registry.api.compression import CompressionMiddleware, configure_client_log
 from registry.api.exception_handlers import register_exception_handlers
-from registry.api.middleware import ResponseHeadersMiddleware
-from registry.api.routes import catalogs, dev, feed, health, search
+from registry.api.middleware import PublicCorsMiddleware, ResponseHeadersMiddleware
+from registry.api.routes import admin, catalogs, dev, feed, health, search
 from registry.core.config import Settings
 from registry.db.session import (
     build_read_engine,
@@ -26,6 +25,8 @@ from registry.db.session import (
     check_database_connection,
     create_database_engine,
 )
+from registry.repositories.actor_repository import ActorRepository
+from registry.repositories.admin_repository import AdminRepository
 from registry.repositories.catalog_repository import (
     READ_CONNECTION_SETTINGS,
     CatalogRepository,
@@ -34,6 +35,7 @@ from registry.repositories.search_repository import (
     SEARCH_CONNECTION_SETTINGS,
     CatalogSearchRepository,
 )
+from registry.services.admin_identity import build_jwks_key_resolver
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -70,21 +72,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 yield CatalogSearchRepository(session)
 
         app.state.open_catalog_searcher = open_catalog_searcher
+
+        # The admin API. Its reads share the catalog read pool. A login is a write, so the actor
+        # store takes the main engine.
+        app.state.write_session_factory = build_session_factory(engine)
+
+        @asynccontextmanager
+        async def open_admin_reader() -> AsyncIterator[AdminRepository]:
+            async with app.state.session_factory() as session:
+                yield AdminRepository(session)
+
+        @asynccontextmanager
+        async def open_actor_store() -> AsyncIterator[ActorRepository]:
+            async with app.state.write_session_factory() as session:
+                yield ActorRepository(session)
+
+        app.state.open_admin_reader = open_admin_reader
+        app.state.open_actor_store = open_actor_store
+        # None when no issuer is configured: a token then cannot be checked and is a 401.
+        app.state.resolve_admin_key = (
+            build_jwks_key_resolver(resolved.admin_jwks_url) if resolved.admin_jwks_url else None
+        )
         yield
         await search_engine.dispose()
         await read_engine.dispose()
         await engine.dispose()
 
-    app = FastAPI(title="OPDS Catalog Registry", version="0.1.0", lifespan=lifespan)
+    # No trailing-slash redirects: Starlette builds them from the request's Host and scheme, which
+    # behind a proxy is plain http and whatever host the caller sent. `/search/` is a 404 instead.
+    app = FastAPI(
+        title="OPDS Catalog Registry", version="0.1.0", lifespan=lifespan, redirect_slashes=False
+    )
     # Innermost, so it compresses the finished body and the others see the final headers. Chooses
     # `br`, `gzip` or nothing from the client's `Accept-Encoding` and logs who asked (ADR-061).
     configure_client_log()
     app.add_middleware(CompressionMiddleware)
     # Public data, and browser-based readers are a legitimate
     # consumer. Read methods only, no credentials: `*` with credentials is what turns a public
-    # read into a session-riding write. The back office (v1.0) is same-origin.
+    # read into a session-riding write. `/admin` is excluded: it is never called from a browser.
     app.add_middleware(
-        CORSMiddleware,
+        PublicCorsMiddleware,
         allow_origins=["*"],
         allow_methods=["GET", "HEAD", "OPTIONS"],
         allow_credentials=False,
@@ -95,6 +122,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(catalogs.router)
     app.include_router(search.router)
     app.include_router(health.router)
+    # The admin routes are described in the schema only locally; deployed, /openapi.json is public.
+    app.include_router(admin.router, include_in_schema=resolved.environment == "local")
     # The console page and its simulator read only what the registry already serves publicly, so
     # they are mounted everywhere (ADR-063).
     app.include_router(dev.router)

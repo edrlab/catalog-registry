@@ -1,6 +1,6 @@
-FROM python:3.13-slim AS base
+FROM python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb AS base
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 UV_COMPILE_BYTECODE=1
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.12.6 /uv /usr/local/bin/uv
 WORKDIR /app
 
 # Dependencies before source: dependencies change rarely, source changes constantly, so a
@@ -15,7 +15,7 @@ RUN uv sync --frozen --no-install-project
 COPY . .
 RUN uv sync --frozen
 ENV PATH="/app/.venv/bin:$PATH"
-CMD ["uvicorn", "registry.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "registry.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
 
 FROM base AS runtime
 RUN useradd --create-home --uid 1000 app
@@ -32,4 +32,4 @@ USER app
 EXPOSE 8000
 # Shell form so $PORT expands: Cloud Run injects the port to listen on and a container that
 # ignores it never passes its health check. Defaults to 8000 everywhere else.
-CMD ["sh", "-c", "exec uvicorn registry.main:create_app --factory --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "exec uvicorn registry.main:create_app --factory --host 0.0.0.0 --port ${PORT:-8000} --no-access-log"]

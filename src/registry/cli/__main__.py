@@ -4,12 +4,17 @@ import sys
 from collections.abc import Callable, Sequence
 from urllib.parse import urlsplit
 
+from registry.cli.actor import main as actor_main
 from registry.cli.add import main as add_main
 from registry.cli.seed import main as seed_main
 from registry.core.config import Settings
 from registry.core.errors import RegistryError
 
-COMMANDS: dict[str, Callable[[Sequence[str]], int]] = {"seed": seed_main, "add": add_main}
+COMMANDS: dict[str, Callable[[Sequence[str]], int]] = {
+    "seed": seed_main,
+    "add": add_main,
+    "actor": actor_main,
+}
 
 
 def report_unreachable_database(error: OSError) -> int:

@@ -207,13 +207,13 @@ async def test_deactivating_a_catalog_deletes_its_row_and_reactivating_restores_
 ) -> None:
     before = await catalog_search_row(db_session, VALAIS)
 
-    await sql(db_session, "UPDATE catalogs SET status = 'suggested' WHERE title = :t", t=VALAIS)
+    await sql(db_session, "UPDATE catalogs SET status = 'draft' WHERE title = :t", t=VALAIS)
 
     assert await catalog_search_row(db_session, VALAIS) is None
     assert await found(db_session, "valais") == []
     assert await search_row_count(db_session) == len(ALL_TITLES) - 1
 
-    await sql(db_session, "UPDATE catalogs SET status = 'active' WHERE title = :t", t=VALAIS)
+    await sql(db_session, "UPDATE catalogs SET status = 'published' WHERE title = :t", t=VALAIS)
 
     assert await catalog_search_row(db_session, VALAIS) == before
     assert await found(db_session, "valais") == [VALAIS]
@@ -240,7 +240,7 @@ async def test_a_catalog_inserted_with_plain_sql_is_searchable_with_no_applicati
     await sql(
         db_session,
         "INSERT INTO catalogs (id, title, status, country_code, city, published_at) "
-        "VALUES (gen_random_uuid(), 'Handwritten insert', 'active', 'CH', 'Sion', now())",
+        "VALUES (gen_random_uuid(), 'Handwritten insert', 'published', 'CH', 'Sion', now())",
     )
 
     assert await found(db_session, "handwritten") == ["Handwritten insert"]
@@ -248,13 +248,13 @@ async def test_a_catalog_inserted_with_plain_sql_is_searchable_with_no_applicati
     assert "Handwritten insert" in await found(db_session, "sion")
 
 
-async def test_a_catalog_inserted_as_suggested_gets_no_row(
+async def test_a_catalog_inserted_as_draft_gets_no_row(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
     await sql(
         db_session,
         "INSERT INTO catalogs (id, title, status) "
-        "VALUES (gen_random_uuid(), 'Draft only', 'suggested')",
+        "VALUES (gen_random_uuid(), 'Draft only', 'draft')",
     )
 
     assert await found(db_session, "draft") == []
@@ -317,7 +317,7 @@ async def test_a_rebuild_removes_rows_of_catalogs_that_are_not_active(
 ) -> None:
     """The function also deletes: a stray row for an inactive catalog does not survive it."""
     valais = await catalog_id(db_session, VALAIS)
-    await sql(db_session, "UPDATE catalogs SET status = 'suggested' WHERE id = :c", c=valais)
+    await sql(db_session, "UPDATE catalogs SET status = 'draft' WHERE id = :c", c=valais)
     await sql(
         db_session,
         "INSERT INTO catalog_search (catalog_id, document, names) "

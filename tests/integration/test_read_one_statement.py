@@ -140,7 +140,7 @@ async def test_an_unknown_id_is_one_statement_and_none(
 async def test_an_inactive_catalog_is_one_statement_and_none(
     migrated_database: str, counted: tuple[AsyncEngine, Statements]
 ) -> None:
-    """A suggested catalog is somebody's unreviewed submission: not public, and no second query
+    """A draft catalog is somebody's unreviewed submission: not public, and no second query
     is spent finding that out."""
     engine, counter = counted
     async with committed_catalogs(
@@ -154,7 +154,7 @@ async def test_an_inactive_catalog_is_one_statement_and_none(
                         "UPDATE catalogs SET status = :s, published_at = NULL, recommended = true "
                         "WHERE id = :i"
                     ),
-                    {"s": CatalogStatus.SUGGESTED.value, "i": catalog_id},
+                    {"s": CatalogStatus.DRAFT.value, "i": catalog_id},
                 )
         finally:
             await admin.dispose()

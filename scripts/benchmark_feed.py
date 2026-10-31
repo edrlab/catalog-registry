@@ -124,7 +124,7 @@ async def populate(engine: AsyncEngine, count: int) -> None:
                 text(
                     "INSERT INTO catalogs"
                     " (id, status, recommended, title, color, country_code, published_at)"
-                    " VALUES (:id, 'active', true, :title, 'gray', :country, now())"
+                    " VALUES (:id, 'published', true, :title, 'gray', :country, now())"
                 ),
                 {
                     "id": catalog_id,
