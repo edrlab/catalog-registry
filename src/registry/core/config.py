@@ -61,7 +61,7 @@ class Settings(BaseSettings):
         default=None, description="Where the issuer's signing keys are published."
     )
     admin_token_audience: str | None = Field(
-        default=None, description="Token audience for admin requests."
+        default=None, description="Token audiences accepted for admin requests, comma separated."
     )
     admin_allowed_email_domains: str = Field(
         default="edrlab.org",
@@ -90,7 +90,7 @@ class Settings(BaseSettings):
                     f"REGISTRY_SERVICE_KEYS: every key needs {MIN_SERVICE_KEY_LENGTH}+ characters "
                     "outside local"
                 )
-            if not (self.admin_token_issuer and self.admin_token_audience and self.admin_jwks_url):
+            if not (self.admin_token_issuer and self.admin_token_audiences and self.admin_jwks_url):
                 raise ValueError(
                     "REGISTRY_ADMIN_TOKEN_ISSUER, REGISTRY_ADMIN_TOKEN_AUDIENCE and "
                     "REGISTRY_ADMIN_JWKS_URL are required once REGISTRY_SERVICE_KEYS is set "
@@ -104,6 +104,11 @@ class Settings(BaseSettings):
     def service_key_values(self) -> tuple[str, ...]:
         raw = self.service_keys.get_secret_value() if self.service_keys else ""
         return tuple(key.strip() for key in raw.split(",") if key.strip())
+
+    @property
+    def admin_token_audiences(self) -> tuple[str, ...]:
+        raw = self.admin_token_audience or ""
+        return tuple(aud.strip() for aud in raw.split(",") if aud.strip())
 
     @property
     def allowed_email_domains(self) -> tuple[str, ...]:

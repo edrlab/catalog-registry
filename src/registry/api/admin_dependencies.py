@@ -47,8 +47,8 @@ async def authenticate_admin_caller(request: Request) -> AdminIdentity:
     if not token:
         raise AuthenticationError("Missing token.")
     resolve_key = request.app.state.resolve_admin_key
-    issuer, audience = settings.admin_token_issuer, settings.admin_token_audience
-    if resolve_key is None or not (issuer and audience):
+    issuer, audiences = settings.admin_token_issuer, settings.admin_token_audiences
+    if resolve_key is None or not (issuer and audiences):
         # Only reachable locally (Settings refuses this configuration when deployed): a token
         # that cannot be checked is not a valid one, and it is not an outage.
         raise AuthenticationError("The token is not valid.")
@@ -56,7 +56,7 @@ async def authenticate_admin_caller(request: Request) -> AdminIdentity:
         token,
         resolve_key=resolve_key,
         issuer=issuer,
-        audience=audience,
+        audiences=audiences,
         allowed_domains=settings.allowed_email_domains,
     )
 

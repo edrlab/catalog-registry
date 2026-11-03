@@ -71,10 +71,22 @@ def test_a_fully_configured_deployment_starts() -> None:
         service_keys=SecretStr(f"{KEY}, {NEXT_KEY}"),
         admin_token_issuer="https://issuer.example.test",
         admin_jwks_url="https://issuer.example.test/keys",
-        admin_token_audience="aud",
+        admin_token_audience="aud, next-aud,",
     )
 
     assert settings.service_key_values == (KEY, NEXT_KEY)
+    assert settings.admin_token_audiences == ("aud", "next-aud")
+
+
+def test_a_blank_audience_list_counts_as_missing() -> None:
+    with pytest.raises(ValidationError, match="ADMIN_TOKEN_AUDIENCE"):
+        build(
+            environment="production",
+            service_keys=SecretStr(KEY),
+            admin_token_issuer="https://issuer.example.test",
+            admin_jwks_url="https://issuer.example.test/keys",
+            admin_token_audience=" , ",
+        )
 
 
 def test_a_deployment_with_no_admin_configuration_still_starts() -> None:
