@@ -79,7 +79,7 @@ async def verify_admin_token(
     *,
     resolve_key: SigningKeyResolver,
     issuer: str,
-    audience: str,
+    audiences: tuple[str, ...],
     allowed_domains: tuple[str, ...],
 ) -> AdminIdentity:
     if not token:
@@ -90,7 +90,7 @@ async def verify_admin_token(
             token,
             key,
             algorithms=["RS256"],
-            audience=audience,
+            audience=audiences,  # the token's `aud` must hold at least one of them
             issuer=issuer,
             leeway=CLOCK_SKEW_SECONDS,
             options={"require": ["exp", "iss", "aud"]},

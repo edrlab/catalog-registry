@@ -21,6 +21,7 @@ pytestmark = pytest.mark.unit
 
 ISSUER = "https://issuer.example.test"
 AUD = "aud-tag"
+OTHER_AUD = "other-aud-tag"
 DOMAINS = ("edrlab.org",)
 
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -50,7 +51,7 @@ async def verify(token: str | None) -> AdminIdentity:
         token,
         resolve_key=resolve_test_key,
         issuer=ISSUER,
-        audience=AUD,
+        audiences=(AUD, OTHER_AUD),
         allowed_domains=DOMAINS,
     )
 
@@ -87,6 +88,12 @@ async def test_a_valid_token_yields_the_lowercased_email() -> None:
     assert identity.name == "Roni"
     assert identity.issuer == ISSUER
     assert identity.subject == "access-subject"
+
+
+async def test_a_token_for_any_accepted_audience_is_valid() -> None:
+    identity = await verify(sign(aud=[OTHER_AUD]))
+
+    assert identity.email == "roni@edrlab.org"
 
 
 @pytest.mark.parametrize(
