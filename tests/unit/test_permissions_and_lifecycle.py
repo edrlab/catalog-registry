@@ -10,8 +10,6 @@ from registry.domain.lifecycle import (
     TRANSITIONS,
     UNDO_ACTIONS,
     build_allowed_actions,
-    resolve_transition_target,
-    resolve_undo_action,
 )
 from registry.domain.permissions import ROLE_PERMISSIONS, build_permissions
 
@@ -113,12 +111,12 @@ CONTRACT_TRANSITIONS = {
 def test_every_status_and_action_pair_matches_the_contract(
     status: CatalogStatus, action: str
 ) -> None:
-    assert resolve_transition_target(status, action) == CONTRACT_TRANSITIONS.get((status, action))
+    assert TRANSITIONS.get((status, action)) == CONTRACT_TRANSITIONS.get((status, action))
 
 
 def test_nothing_returns_to_draft_and_unarchive_never_publishes() -> None:
     assert D not in TRANSITIONS.values()
-    assert resolve_transition_target(A, "unarchive") is U
+    assert TRANSITIONS[(A, "unarchive")] is U
 
 
 def test_the_transitions_offered_are_exactly_the_ones_accepted() -> None:
@@ -143,9 +141,9 @@ def test_the_transitions_offered_are_exactly_the_ones_accepted() -> None:
 def test_the_undo_rule_matches_the_contract(
     status: CatalogStatus, action: str, undo: str | None
 ) -> None:
-    assert resolve_undo_action(status, action) == undo
+    assert UNDO_ACTIONS.get((status, action)) == undo
 
 
 def test_an_undo_always_lands_exactly_on_the_previous_status() -> None:
     for (status, action), undo in UNDO_ACTIONS.items():
-        assert resolve_transition_target(TRANSITIONS[(status, action)], undo) is status
+        assert TRANSITIONS[(TRANSITIONS[(status, action)], undo)] is status

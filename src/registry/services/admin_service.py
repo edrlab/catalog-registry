@@ -25,12 +25,7 @@ from registry.domain.labels import (
     PUBLICATION_TYPE_LABELS,
     STATUS_LABELS,
 )
-from registry.domain.lifecycle import (
-    UndoAction,
-    build_allowed_actions,
-    resolve_transition_target,
-    resolve_undo_action,
-)
+from registry.domain.lifecycle import TRANSITIONS, UNDO_ACTIONS, UndoAction, build_allowed_actions
 from registry.domain.permissions import build_permissions
 from registry.repositories.protocols import ActorStore, AdminReader, AdminWriter
 from registry.schemas.admin import (
@@ -179,14 +174,14 @@ async def apply_admin_transition(
     _require_catalog_permission(actor, action)
     normalised = _normalise_catalog_id(catalog_id)
     state = await _lock_seen_catalog(writer, normalised, version)
-    target = resolve_transition_target(state.status, action)
+    target = TRANSITIONS.get((state.status, action))
     if target is None:
         raise InvalidTransitionError(
             f"A {state.status.value} catalog cannot take the action {action}."
         )
     await writer.persist_catalog_status(normalised, target)
     await writer.commit_admin_write()
-    return normalised, resolve_undo_action(state.status, action)
+    return normalised, UNDO_ACTIONS.get((state.status, action))
 
 
 async def apply_admin_recommendation(

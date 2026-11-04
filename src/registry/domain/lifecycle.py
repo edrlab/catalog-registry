@@ -63,16 +63,6 @@ UNDO_ACTIONS: Final[Mapping[tuple[CatalogStatus, str], UndoAction]] = {
 }
 
 
-def resolve_transition_target(status: CatalogStatus, action: str) -> CatalogStatus | None:
-    """Where *action* takes a catalog in *status*, or None when the lifecycle refuses it."""
-    return TRANSITIONS.get((status, action))
-
-
-def resolve_undo_action(status: CatalogStatus, action: str) -> UndoAction | None:
-    """The action that reverses *action* taken from *status*, or None when nothing does."""
-    return UNDO_ACTIONS.get((status, action))
-
-
 def build_allowed_actions(status: CatalogStatus, permissions: frozenset[str]) -> list[str]:
     """Actions this caller may take on a catalog in *status* now: lifecycle ∩ role."""
     return [
