@@ -5,10 +5,12 @@ from typing import Any
 import pytest
 from httpx import AsyncClient, Response
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from registry.core.constants import PROBLEM_JSON_MEDIA_TYPE
 from registry.domain.lifecycle import TRANSITION_ACTIONS
+from registry.repositories.admin_repository import AdminCatalogWriter
 from tests.conftest import admin_headers
 from tests.e2e.test_admin_api import become, list_catalogs
 
@@ -175,6 +177,31 @@ async def test_two_writes_from_the_same_version_apply_once(
     assert problem_type(second) == "version-conflict"
 
 
+async def test_a_write_holds_the_catalog_until_it_commits(migrated_database: str) -> None:
+    """The lock is what turns two simultaneous clicks into one change and one conflict. The test
+    transaction is a single connection, where a lock never blocks, so this uses two real ones."""
+    engine = create_async_engine(migrated_database)
+    async with engine.connect() as setup:
+        catalog_id = (
+            await setup.execute(
+                text("INSERT INTO catalogs (title) VALUES ('lock') RETURNING id::text")
+            )
+        ).scalar_one()
+        await setup.commit()
+    try:
+        async with AsyncSession(engine) as first, AsyncSession(engine) as second:
+            assert await AdminCatalogWriter(first).lock_admin_catalog(catalog_id)
+            await second.execute(text("SET LOCAL lock_timeout = '200ms'"))
+            with pytest.raises(DBAPIError, match="lock"):
+                await AdminCatalogWriter(second).lock_admin_catalog(catalog_id)
+    finally:
+        async with engine.begin() as cleanup:
+            await cleanup.execute(
+                text("DELETE FROM catalogs WHERE id = CAST(:id AS uuid)"), {"id": catalog_id}
+            )
+        await engine.dispose()
+
+
 # --- recommended ---------------------------------------------------------------------------------
 
 
@@ -194,6 +221,18 @@ async def test_a_published_catalog_can_be_recommended_and_unrecommended(
     assert on.json()["recommended"] is True
     assert off.json()["recommended"] is False
     assert off.json()["version"] == published["version"] + 2
+
+
+async def test_recommending_what_is_already_recommended_keeps_the_version(
+    admin_client: AsyncClient, db_session: AsyncSession, editor: str, searchable_catalogs: None
+) -> None:
+    published = await a_catalog(admin_client, db_session, "published")
+    seen = {"recommended": published["recommended"], "version": published["version"]}
+
+    same = await recommend(admin_client, published["id"], seen)
+
+    assert same.status_code == 200, same.text
+    assert same.json()["version"] == published["version"]
 
 
 @pytest.mark.parametrize("status", ["draft", "unpublished", "archived"])

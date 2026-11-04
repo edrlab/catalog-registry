@@ -291,8 +291,11 @@ UPDATE catalogs
 """
 )
 
+#: Setting the value it already has changes nothing, so the version stays and nobody else who has
+#: the page open is told it changed.
 _SET_RECOMMENDED: Final = text(
-    "UPDATE catalogs SET recommended = :recommended, version = version + 1 WHERE id = CAST(:id AS uuid)"
+    "UPDATE catalogs SET recommended = :recommended, version = version + 1"
+    " WHERE id = CAST(:id AS uuid) AND recommended IS DISTINCT FROM :recommended"
 )
 
 
