@@ -149,6 +149,60 @@ class FilterOptionsResponse(AdminModel):
     languages: list[LanguageOption]
 
 
+class CountryListItem(AdminModel):
+    code: str
+    name: str
+    #: The total `/admin/catalogs?country=CODE` shows by default.
+    published_catalog_count: int
+
+
+class CountryListResponse(AdminModel):
+    items: list[CountryListItem]
+    total: int
+    page: int
+    per_page: int
+
+
+class SubdivisionTypeOption(AdminModel):
+    #: ISO 3166-2's type name, lowercase (ADR-055).
+    key: str
+    label: str
+
+
+class SubdivisionTypeCount(SubdivisionTypeOption):
+    subdivision_count: int
+    #: The subdivisions counted, by English name then code; as many as `subdivision_count`.
+    subdivisions: list[SubdivisionRef]
+
+
+class KindCounts(AdminModel):
+    """One field per `CatalogKind`, so generated clients get typed keys. A unit test keeps the
+    fields equal to the enum."""
+
+    open: int
+    public: int
+    academic: int
+    school: int
+    specialized: int
+
+
+class CountryKpis(AdminModel):
+    by_status: StatusCounts
+    #: Published and recommended.
+    recommended: int
+    #: Published catalogs; one with two kinds counts in both.
+    by_kind: KindCounts
+
+
+class CountryDetail(AdminModel):
+    code: str
+    name: str
+    official_languages: list[LanguageRef]
+    subdivision_types: list[SubdivisionTypeCount]
+    available_subdivision_types: list[SubdivisionTypeOption]
+    kpis: CountryKpis
+
+
 #: The version a writer last saw. Strict: `"3"` or `true` is a client bug, not a version.
 SeenVersion = Annotated[StrictInt, Field(ge=1)]
 

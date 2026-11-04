@@ -28,6 +28,13 @@ class CatalogNotFoundError(NotFoundError):
     problem_type = "https://registry.thoriumreader.com/problems/catalog-not-found"
 
 
+class CountryNotFoundError(NotFoundError):
+    """No active or historical country with this ISO 3166-1 alpha-2 code. Its own type for the
+    same reason as `CatalogNotFoundError`."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/country-not-found"
+
+
 class ConflictError(RegistryError):
     """The request is well formed but cannot apply to the catalog as it is now. Each case has its
     own `type` (admin API contract §2), so a caller can tell them apart."""

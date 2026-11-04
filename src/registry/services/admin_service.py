@@ -1,11 +1,13 @@
 """What the admin API says, assembled from what the repositories read."""
 
+import re
 import uuid
 from collections.abc import Mapping
 from typing import Any
 
 from registry.core.errors import (
     CatalogNotFoundError,
+    CountryNotFoundError,
     InvalidTransitionError,
     NotPublishedError,
     PermissionDeniedError,
@@ -17,7 +19,7 @@ from registry.domain.admin_models import (
     AdminCatalogRow,
     AdminCatalogState,
 )
-from registry.domain.enums import CatalogStatus
+from registry.domain.enums import CatalogKind, CatalogStatus
 from registry.domain.labels import (
     COLOR_LABELS,
     COVERAGE_LABELS,
@@ -32,9 +34,14 @@ from registry.schemas.admin import (
     CatalogDetail,
     CatalogListItem,
     CatalogListResponse,
+    CountryDetail,
+    CountryKpis,
+    CountryListItem,
+    CountryListResponse,
     CountryOption,
     CountryRef,
     FilterOptionsResponse,
+    KindCounts,
     LanguageOption,
     LanguageRef,
     LinkItem,
@@ -44,6 +51,8 @@ from registry.schemas.admin import (
     StatsResponse,
     StatusCounts,
     SubdivisionRef,
+    SubdivisionTypeCount,
+    SubdivisionTypeOption,
     Submitter,
 )
 from registry.services.admin_identity import AdminIdentity
@@ -51,6 +60,9 @@ from registry.services.language_names import build_language_name
 
 #: Who may see a submitter's name and email: the roles that review submissions by publishing them.
 SUBMITTER_PERMISSION = "catalog.publish"
+
+#: ISO 3166-1 alpha-2, either case.
+_COUNTRY_CODE = re.compile(r"[A-Za-z]{2}")
 
 #: A direct public link exists for the statuses the public API serves by id.
 _DIRECT_LINK_STATUSES = frozenset({CatalogStatus.PUBLISHED, CatalogStatus.UNPUBLISHED})
@@ -270,4 +282,64 @@ async def resolve_filter_options(reader: AdminReader) -> FilterOptionsResponse:
             key=lambda option: option.name.casefold(),
         ),
         languages=languages,
+    )
+
+
+async def resolve_admin_country_list(
+    reader: AdminReader, q: str | None, page: int, per_page: int
+) -> CountryListResponse:
+    result = await reader.fetch_admin_countries(q, page, per_page)
+    return CountryListResponse(
+        items=[
+            CountryListItem(
+                code=row.code, name=row.name, published_catalog_count=row.published_catalog_count
+            )
+            for row in result.rows
+        ],
+        total=result.total,
+        page=page,
+        per_page=per_page,
+    )
+
+
+def _label_subdivision_type(key: str) -> str:
+    """No label table: the key is ISO 3166-2's own type name, lowercased (ADR-055)."""
+    return key[:1].upper() + key[1:]
+
+
+async def resolve_admin_country_detail(reader: AdminReader, code: str) -> CountryDetail:
+    """One country by ISO 3166-1 alpha-2 code, either case. Anything else is simply not found, as a
+    malformed catalog id is."""
+    if not _COUNTRY_CODE.fullmatch(code):
+        raise CountryNotFoundError(f"No country with code {code}.")
+    detail = await reader.fetch_admin_country(code.upper())
+    if detail is None:
+        raise CountryNotFoundError(f"No country with code {code.upper()}.")
+    return CountryDetail(
+        code=detail.code,
+        name=detail.name,
+        official_languages=sorted(
+            (LanguageRef(tag=tag, name=build_language_name(tag)) for tag in detail.language_tags),
+            key=lambda language: language.name.casefold(),
+        ),
+        subdivision_types=[
+            SubdivisionTypeCount(
+                key=key,
+                label=_label_subdivision_type(key),
+                subdivision_count=len(subdivisions),
+                subdivisions=[SubdivisionRef(code=s.code, name=s.name) for s in subdivisions],
+            )
+            for key, subdivisions in detail.subdivision_types
+        ],
+        available_subdivision_types=[
+            SubdivisionTypeOption(key=key, label=_label_subdivision_type(key))
+            for key in detail.available_subdivision_types
+        ],
+        kpis=CountryKpis(
+            by_status=StatusCounts(**detail.by_status),
+            recommended=detail.recommended,
+            by_kind=KindCounts(
+                **{kind.value: detail.by_kind.get(kind.value, 0) for kind in CatalogKind}
+            ),
+        ),
     )
