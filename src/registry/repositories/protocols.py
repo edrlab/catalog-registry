@@ -16,10 +16,12 @@ from registry.domain.admin_models import (
     AdminCatalogDetail,
     AdminCatalogPage,
     AdminCatalogQuery,
+    AdminCatalogState,
     AdminStats,
     UsedPlaces,
 )
 from registry.domain.catalog_view import CatalogLike
+from registry.domain.enums import CatalogStatus
 from registry.domain.restrictions import NO_RESTRICTIONS, Restrictions
 from registry.domain.search_query import ParsedQuery
 
@@ -68,3 +70,15 @@ class AdminReader(Protocol):
     async def fetch_admin_catalogs(self, query: AdminCatalogQuery) -> AdminCatalogPage: ...
 
     async def fetch_admin_catalog(self, catalog_id: str) -> AdminCatalogDetail | None: ...
+
+
+class AdminWriter(Protocol):
+    """One write: lock the row, then change it, then commit. Leaving without a commit rolls back."""
+
+    async def lock_admin_catalog(self, catalog_id: str) -> AdminCatalogState | None: ...
+
+    async def persist_catalog_status(self, catalog_id: str, status: CatalogStatus) -> None: ...
+
+    async def persist_catalog_recommended(self, catalog_id: str, recommended: bool) -> None: ...
+
+    async def commit_admin_write(self) -> None: ...

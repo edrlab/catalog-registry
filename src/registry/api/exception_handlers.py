@@ -11,9 +11,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from registry.api.admin_log import configure_admin_log, log_admin_refusal
+from registry.api.admin_log import configure_admin_log, log_admin_refusal, log_unexpected_error
 from registry.api.middleware import SECURITY_HEADERS, is_admin_path
-from registry.core.constants import PROBLEM_JSON_MEDIA_TYPE
+from registry.core.constants import HEADER_REQUEST_ID, PROBLEM_JSON_MEDIA_TYPE
 from registry.core.errors import (
     AdminUnavailableError,
     AuthenticationError,
@@ -150,7 +150,7 @@ async def handle_validation_error(request: Request, exc: Exception) -> JSONRespo
     )
 
 
-async def handle_unexpected_error(_request: Request, _exc: Exception) -> JSONResponse:
+async def handle_unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
     """Anything not deliberately raised.
 
     Starlette's own handler answers `text/plain`, which breaks the contract that every error
@@ -159,15 +159,16 @@ async def handle_unexpected_error(_request: Request, _exc: Exception) -> JSONRes
     endpoint is public and unauthenticated. The request id in `X-Request-Id` is how the
     caller and the log are correlated instead.
     """
-    return _without_caching(
-        _request,
-        build_problem_response(
-            status=500,
-            title="Internal Server Error",
-            detail="An unexpected error occurred.",
-            instance=build_problem_instance(_request),
-        ),
+    log_unexpected_error(_request, exc)
+    response = build_problem_response(
+        status=500,
+        title="Internal Server Error",
+        detail="An unexpected error occurred.",
+        instance=build_problem_instance(_request),
     )
+    if request_id := _request.scope.get("state", {}).get("request_id"):
+        response.headers[HEADER_REQUEST_ID] = request_id
+    return _without_caching(_request, response)
 
 
 def register_exception_handlers(app: FastAPI) -> None:

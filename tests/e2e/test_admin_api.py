@@ -4,6 +4,8 @@ The app is built as a developer runs it locally (a key, a dev identity). The tok
 path is covered in `tests/unit/test_admin_identity.py`.
 """
 
+import json
+import logging
 import time
 from typing import Any
 
@@ -14,6 +16,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
+from registry.api import admin_log
 from registry.core.constants import PROBLEM_JSON_MEDIA_TYPE
 from tests.conftest import ADMIN_SERVICE_KEY, SEED_CATALOG_COUNT, admin_headers
 from tests.search_helpers import ALL_TITLES, add_synthetic_catalogs
@@ -172,9 +175,16 @@ async def test_an_unhandled_error_is_a_fixed_problem_that_never_shows_the_except
         raise RuntimeError("postgresql://user:hunter2@db/registry")
 
     admin_app.add_api_route("/admin/boom", boom)
+    lines: list[dict[str, Any]] = []
+    handler = logging.Handler()
+    handler.emit = lambda record: lines.append(json.loads(record.getMessage()))  # type: ignore[method-assign]
+    admin_log._log.addHandler(handler)
     transport = ASGITransport(app=admin_app, raise_app_exceptions=False)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.get("/admin/boom", headers={"X-Request-Id": "r-1"})
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.get("/admin/boom", headers={"X-Request-Id": "r-1"})
+    finally:
+        admin_log._log.removeHandler(handler)
 
     assert response.status_code == 500
     assert response.headers["content-type"].startswith(PROBLEM_JSON_MEDIA_TYPE)
@@ -187,6 +197,14 @@ async def test_an_unhandled_error_is_a_fixed_problem_that_never_shows_the_except
         "instance": "urn:request-id:r-1",
     }
     assert "hunter2" not in response.text
+    # The id in the body leads to the log line, the one place the exception is kept.
+    assert response.headers["x-request-id"] == "r-1"
+    [line] = [line for line in lines if line["message"] == "unexpected error"]
+    assert (line["request_id"], line["path"], line["error"]) == (
+        "r-1",
+        "/admin/boom",
+        "RuntimeError",
+    )
 
 
 async def test_a_401_says_how_to_authenticate(admin_client: AsyncClient) -> None:
@@ -203,12 +221,13 @@ async def test_the_openapi_document_describes_every_admin_problem(
     for path, operations in document["paths"].items():
         if not path.startswith("/admin"):
             continue
-        responses = operations["get"]["responses"]
-        for status in ("401", "403", "500", "503"):
-            content = responses[status]["content"]
-            assert content["application/problem+json"]["schema"]["$ref"].endswith(
-                "/ProblemDocument"
-            )
+        for method, operation in operations.items():
+            expected = ("401", "403", "500", "503") + (("409",) if method != "get" else ())
+            for status in expected:
+                content = operation["responses"][status]["content"]
+                assert content["application/problem+json"]["schema"]["$ref"].endswith(
+                    "/ProblemDocument"
+                ), (method, path, status)
     catalogs = document["paths"]["/admin/catalogs"]["get"]["responses"]["422"]
     assert "application/problem+json" in catalogs["content"]
     assert "errors" in document["components"]["schemas"]["ProblemDocument"]["properties"]

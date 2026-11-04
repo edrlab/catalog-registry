@@ -14,6 +14,7 @@ import json
 import logging
 import sys
 import time
+import traceback
 from collections.abc import MutableMapping
 from typing import Any, Final
 
@@ -91,3 +92,21 @@ def log_admin_refusal(request: Request, *, status: int, reason: str) -> None:
         "skipped_since_last_line": previous[1] if previous else 0,
     }
     _log.log(logging.ERROR if failing else logging.WARNING, json.dumps(line))
+
+
+def log_unexpected_error(request: Request, exc: BaseException) -> None:
+    """The one line that ties a 500 to its request, on any path. Starlette sends a 500 past every
+    middleware, so neither the request id nor the admin request line is logged otherwise. Method
+    and path only, never the query string or a header."""
+    state = request.scope.get("state", {})
+    line = {
+        "severity": "ERROR",
+        "message": "unexpected error",
+        "request_id": state.get("request_id", "-"),
+        "actor_id": state.get(ACTOR_STATE_KEY),
+        "method": request.method,
+        "path": request.url.path,
+        "error": type(exc).__name__,
+        "traceback": "".join(traceback.format_exception(exc)),
+    }
+    _log.error(json.dumps(line))

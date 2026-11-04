@@ -122,3 +122,12 @@ class UsedLanguage:
 class UsedPlaces:
     countries: Sequence[UsedCountry]
     languages: Sequence[UsedLanguage]
+
+
+@dataclass(frozen=True, slots=True)
+class AdminCatalogState:
+    """What a write checks before it applies: the status the lifecycle reads, the version the
+    caller must have seen."""
+
+    status: CatalogStatus
+    version: int

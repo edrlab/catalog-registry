@@ -1,6 +1,7 @@
 """The admin API: `/admin/*`. Server to server only; see `api/admin_dependencies.py`.
 
-Read-only for now. Every route depends on `require_permission(...)`.
+Every route depends on `require_permission(...)`. A write also checks the permission for its
+action in the service, where the action is known.
 """
 
 from typing import Annotated, Literal
@@ -23,9 +24,14 @@ from registry.schemas.admin import (
     FilterOptionsResponse,
     MeResponse,
     ProblemDocument,
+    RecommendedRequest,
     StatsResponse,
+    TransitionRequest,
+    TransitionResponse,
 )
 from registry.services.admin_service import (
+    apply_admin_recommendation,
+    apply_admin_transition,
     resolve_admin_catalog_detail,
     resolve_admin_catalog_list,
     resolve_admin_me,
@@ -54,6 +60,8 @@ router = APIRouter(
         503: problem_response("Not configured, or the signing keys cannot be fetched."),
     },
 )
+
+NOT_FOUND = "No catalog with this id, or the id is not a UUID (type `catalog-not-found`)."
 
 #: A catalog list that names no status shows what readers see.
 DEFAULT_STATUSES = (CatalogStatus.PUBLISHED,)
@@ -121,7 +129,7 @@ async def read_admin_catalogs(
 @router.get(
     "/catalogs/{catalog_id}",
     summary="One catalog in any status, with everything the detail page shows",
-    responses={404: problem_response("No catalog with this id, or the id is not a UUID.")},
+    responses={404: problem_response(NOT_FOUND)},
 )
 async def read_admin_catalog(
     request: Request,
@@ -140,3 +148,60 @@ async def read_filter_options(
 ) -> FilterOptionsResponse:
     async with request.app.state.open_admin_reader() as reader:
         return await resolve_filter_options(reader)
+
+
+@router.post(
+    "/catalogs/{catalog_id}/transitions",
+    summary="Publish, unpublish, archive or unarchive a catalog",
+    responses={
+        404: problem_response(NOT_FOUND),
+        409: problem_response(
+            "`version-conflict`: it changed since it was read. "
+            "`invalid-transition`: the lifecycle does not allow this action from its status."
+        ),
+        422: problem_response("The body is invalid; `errors` names each field."),
+    },
+)
+async def create_admin_catalog_transition(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    catalog_id: str,
+    body: TransitionRequest,
+) -> TransitionResponse:
+    async with request.app.state.open_admin_writer() as writer:
+        normalised, undo_action = await apply_admin_transition(
+            writer, actor, catalog_id, action=body.action, version=body.version
+        )
+    async with request.app.state.open_admin_reader() as reader:
+        catalog = await resolve_admin_catalog_detail(
+            reader, actor, normalised, base_url=request.app.state.settings.base_url
+        )
+    return TransitionResponse(catalog=catalog, undo_action=undo_action)
+
+
+@router.put(
+    "/catalogs/{catalog_id}/recommended",
+    summary="Recommend a published catalog, or stop recommending it",
+    responses={
+        404: problem_response(NOT_FOUND),
+        409: problem_response(
+            "`version-conflict`: it changed since it was read. "
+            "`not-published`: only a published catalog can change its recommendation."
+        ),
+        422: problem_response("The body is invalid; `errors` names each field."),
+    },
+)
+async def replace_admin_catalog_recommended(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    catalog_id: str,
+    body: RecommendedRequest,
+) -> CatalogDetail:
+    async with request.app.state.open_admin_writer() as writer:
+        normalised = await apply_admin_recommendation(
+            writer, actor, catalog_id, recommended=body.recommended, version=body.version
+        )
+    async with request.app.state.open_admin_reader() as reader:
+        return await resolve_admin_catalog_detail(
+            reader, actor, normalised, base_url=request.app.state.settings.base_url
+        )

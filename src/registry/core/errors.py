@@ -21,6 +21,39 @@ class NotFoundError(RegistryError):
     title = "Not Found"
 
 
+class CatalogNotFoundError(NotFoundError):
+    """No catalog with this id. Its own type, because a plain 404 is also what an unknown route
+    answers, and a caller must be able to tell "the catalog is gone" from "wrong address"."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/catalog-not-found"
+
+
+class ConflictError(RegistryError):
+    """The request is well formed but cannot apply to the catalog as it is now. Each case has its
+    own `type` (admin API contract §2), so a caller can tell them apart."""
+
+    status_code = 409
+    title = "Conflict"
+
+
+class VersionConflictError(ConflictError):
+    """The caller saw an older version: someone changed the catalog since."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/version-conflict"
+
+
+class InvalidTransitionError(ConflictError):
+    """The lifecycle does not allow this action from the catalog's status."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/invalid-transition"
+
+
+class NotPublishedError(ConflictError):
+    """Recommendation changes only on a published catalog (W21)."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/not-published"
+
+
 class ValidationError(RegistryError):
     status_code = 422
     title = "Unprocessable Entity"
