@@ -26,7 +26,7 @@ from registry.db.session import (
     create_database_engine,
 )
 from registry.repositories.actor_repository import ActorRepository
-from registry.repositories.admin_repository import AdminRepository
+from registry.repositories.admin_repository import AdminCatalogWriter, AdminRepository
 from registry.repositories.catalog_repository import (
     READ_CONNECTION_SETTINGS,
     CatalogRepository,
@@ -36,6 +36,31 @@ from registry.repositories.search_repository import (
     CatalogSearchRepository,
 )
 from registry.services.admin_identity import build_jwks_key_resolver
+
+
+def bind_admin_stores(app: FastAPI) -> None:
+    """The admin API's stores. Its reads share the catalog read pool; a login and a catalog change
+    are writes, so they take the main engine. Each looks the factory up when opened, so a test that
+    rebinds `session_factory` or `write_session_factory` after startup is followed."""
+
+    @asynccontextmanager
+    async def open_admin_reader() -> AsyncIterator[AdminRepository]:
+        async with app.state.session_factory() as session:
+            yield AdminRepository(session)
+
+    @asynccontextmanager
+    async def open_admin_writer() -> AsyncIterator[AdminCatalogWriter]:
+        async with app.state.write_session_factory() as session:
+            yield AdminCatalogWriter(session)
+
+    @asynccontextmanager
+    async def open_actor_store() -> AsyncIterator[ActorRepository]:
+        async with app.state.write_session_factory() as session:
+            yield ActorRepository(session)
+
+    app.state.open_admin_reader = open_admin_reader
+    app.state.open_admin_writer = open_admin_writer
+    app.state.open_actor_store = open_actor_store
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -73,22 +98,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         app.state.open_catalog_searcher = open_catalog_searcher
 
-        # The admin API. Its reads share the catalog read pool. A login is a write, so the actor
-        # store takes the main engine.
         app.state.write_session_factory = build_session_factory(engine)
-
-        @asynccontextmanager
-        async def open_admin_reader() -> AsyncIterator[AdminRepository]:
-            async with app.state.session_factory() as session:
-                yield AdminRepository(session)
-
-        @asynccontextmanager
-        async def open_actor_store() -> AsyncIterator[ActorRepository]:
-            async with app.state.write_session_factory() as session:
-                yield ActorRepository(session)
-
-        app.state.open_admin_reader = open_admin_reader
-        app.state.open_actor_store = open_actor_store
+        bind_admin_stores(app)
         # None when no issuer is configured: a token then cannot be checked and is a 401.
         app.state.resolve_admin_key = (
             build_jwks_key_resolver(resolved.admin_jwks_url) if resolved.admin_jwks_url else None

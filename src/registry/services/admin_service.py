@@ -4,8 +4,19 @@ import uuid
 from collections.abc import Mapping
 from typing import Any
 
-from registry.core.errors import NotFoundError, PermissionDeniedError
-from registry.domain.admin_models import AdminActor, AdminCatalogQuery, AdminCatalogRow
+from registry.core.errors import (
+    CatalogNotFoundError,
+    InvalidTransitionError,
+    NotPublishedError,
+    PermissionDeniedError,
+    VersionConflictError,
+)
+from registry.domain.admin_models import (
+    AdminActor,
+    AdminCatalogQuery,
+    AdminCatalogRow,
+    AdminCatalogState,
+)
 from registry.domain.enums import CatalogStatus
 from registry.domain.labels import (
     COLOR_LABELS,
@@ -14,9 +25,14 @@ from registry.domain.labels import (
     PUBLICATION_TYPE_LABELS,
     STATUS_LABELS,
 )
-from registry.domain.lifecycle import build_allowed_actions
+from registry.domain.lifecycle import (
+    UndoAction,
+    build_allowed_actions,
+    resolve_transition_target,
+    resolve_undo_action,
+)
 from registry.domain.permissions import build_permissions
-from registry.repositories.protocols import ActorStore, AdminReader
+from registry.repositories.protocols import ActorStore, AdminReader, AdminWriter
 from registry.schemas.admin import (
     CatalogDetail,
     CatalogListItem,
@@ -125,18 +141,80 @@ def _list_item_fields(
     }
 
 
+def _normalise_catalog_id(catalog_id: str) -> str:
+    try:
+        return str(uuid.UUID(catalog_id))
+    except ValueError:
+        raise CatalogNotFoundError(f"No catalog with id {catalog_id}.") from None
+
+
+def _require_catalog_permission(actor: AdminActor, action: str) -> None:
+    permission = f"catalog.{action}"
+    if permission not in build_permissions(actor.role):
+        raise PermissionDeniedError(f"Your role cannot do this ({permission}).")
+
+
+async def _lock_seen_catalog(
+    writer: AdminWriter, catalog_id: str, version: int
+) -> AdminCatalogState:
+    """The catalog, locked for this write, as long as the caller saw its current version."""
+    state = await writer.lock_admin_catalog(catalog_id)
+    if state is None:
+        raise CatalogNotFoundError(f"No catalog with id {catalog_id}.")
+    if state.version != version:
+        raise VersionConflictError(
+            f"The catalog is at version {state.version}, not {version}: it changed since."
+        )
+    return state
+
+
+async def apply_admin_transition(
+    writer: AdminWriter, actor: AdminActor, catalog_id: str, *, action: str, version: int
+) -> tuple[str, UndoAction | None]:
+    """Move a catalog through the lifecycle. Returns its id and the action that undoes this one.
+
+    Role, then version, then lifecycle: a role that may not act learns nothing about the catalog,
+    and a stale version is reported before a transition that may only be refused because of it.
+    """
+    _require_catalog_permission(actor, action)
+    normalised = _normalise_catalog_id(catalog_id)
+    state = await _lock_seen_catalog(writer, normalised, version)
+    target = resolve_transition_target(state.status, action)
+    if target is None:
+        raise InvalidTransitionError(
+            f"A {state.status.value} catalog cannot take the action {action}."
+        )
+    await writer.persist_catalog_status(normalised, target)
+    await writer.commit_admin_write()
+    return normalised, resolve_undo_action(state.status, action)
+
+
+async def apply_admin_recommendation(
+    writer: AdminWriter, actor: AdminActor, catalog_id: str, *, recommended: bool, version: int
+) -> str:
+    """Turn recommendation on or off. Published catalogs only (W21); the flag is kept through
+    unpublish and archive, but it is changed only while readers can see the catalog."""
+    _require_catalog_permission(actor, "recommend")
+    normalised = _normalise_catalog_id(catalog_id)
+    state = await _lock_seen_catalog(writer, normalised, version)
+    if state.status is not CatalogStatus.PUBLISHED:
+        raise NotPublishedError(
+            f"Only a published catalog can be recommended; this one is {state.status.value}."
+        )
+    await writer.persist_catalog_recommended(normalised, recommended)
+    await writer.commit_admin_write()
+    return normalised
+
+
 async def resolve_admin_catalog_detail(
     reader: AdminReader, actor: AdminActor, catalog_id: str, *, base_url: str
 ) -> CatalogDetail:
     """One catalog in any status. An id that is not a UUID is simply not found: it comes from a
     page URL, where a hand-edited link should read as "no such catalog"."""
-    try:
-        normalised = str(uuid.UUID(catalog_id))
-    except ValueError:
-        raise NotFoundError(f"No catalog with id {catalog_id}.") from None
+    normalised = _normalise_catalog_id(catalog_id)
     detail = await reader.fetch_admin_catalog(normalised)
     if detail is None:
-        raise NotFoundError(f"No catalog with id {normalised}.")
+        raise CatalogNotFoundError(f"No catalog with id {normalised}.")
     permissions = build_permissions(actor.role)
     return CatalogDetail(
         **_list_item_fields(detail.row, permissions, base_url),

@@ -203,12 +203,13 @@ async def test_the_openapi_document_describes_every_admin_problem(
     for path, operations in document["paths"].items():
         if not path.startswith("/admin"):
             continue
-        responses = operations["get"]["responses"]
-        for status in ("401", "403", "500", "503"):
-            content = responses[status]["content"]
-            assert content["application/problem+json"]["schema"]["$ref"].endswith(
-                "/ProblemDocument"
-            )
+        for method, operation in operations.items():
+            expected = ("401", "403", "500", "503") + (("409",) if method != "get" else ())
+            for status in expected:
+                content = operation["responses"][status]["content"]
+                assert content["application/problem+json"]["schema"]["$ref"].endswith(
+                    "/ProblemDocument"
+                ), (method, path, status)
     catalogs = document["paths"]["/admin/catalogs"]["get"]["responses"]["422"]
     assert "application/problem+json" in catalogs["content"]
     assert "errors" in document["components"]["schemas"]["ProblemDocument"]["properties"]

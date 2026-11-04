@@ -1,8 +1,9 @@
 """The admin API's wire contract. Whitelist projection (R3): a response lists its fields."""
 
 import datetime
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 from registry.domain.enums import CatalogStatus
 
@@ -146,3 +147,23 @@ class FilterOptionsResponse(AdminModel):
     colors: list[Option]
     countries: list[CountryOption]
     languages: list[LanguageOption]
+
+
+#: The version a writer last saw. Strict: `"3"` or `true` is a client bug, not a version.
+SeenVersion = Annotated[StrictInt, Field(ge=1)]
+
+
+class TransitionRequest(AdminModel):
+    action: Literal["publish", "unpublish", "archive", "unarchive"]
+    version: SeenVersion
+
+
+class TransitionResponse(AdminModel):
+    catalog: CatalogDetail
+    #: What reverses this change in one step, or null (the lifecycle contract's undo rule).
+    undo_action: Literal["publish", "unpublish", "unarchive"] | None
+
+
+class RecommendedRequest(AdminModel):
+    recommended: StrictBool
+    version: SeenVersion

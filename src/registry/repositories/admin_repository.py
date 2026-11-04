@@ -21,6 +21,7 @@ from registry.domain.admin_models import (
     AdminCatalogPage,
     AdminCatalogQuery,
     AdminCatalogRow,
+    AdminCatalogState,
     AdminStats,
     AdminSubdivision,
     UsedCountry,
@@ -269,3 +270,54 @@ class AdminRepository:
             submitter_name=row["submitter_name"],
             submitter_email=row["submitter_email"],
         )
+
+
+#: `FOR UPDATE` holds the row until the commit, so two editors acting at once are applied one after
+#: the other: the second sees the first's version and gets a conflict instead of overwriting it.
+_LOCK_CATALOG: Final = text(
+    "SELECT status::text AS status, version FROM catalogs WHERE id = CAST(:id AS uuid) FOR UPDATE"
+)
+
+#: `updated_at` is set by the `catalogs_set_updated_at` trigger, and `catalog_search` follows the
+#: status through `catalogs_refresh_search`. `published_at` is when it last went live; an
+#: unpublished or archived catalog keeps the date it had (`ck_catalogs_published_when_published`).
+_SET_STATUS: Final = text(
+    """
+UPDATE catalogs
+   SET status = CAST(:status AS catalog_status),
+       version = version + 1,
+       published_at = CASE WHEN CAST(:status AS catalog_status) = 'published' THEN now() ELSE published_at END
+ WHERE id = CAST(:id AS uuid)
+"""
+)
+
+_SET_RECOMMENDED: Final = text(
+    "UPDATE catalogs SET recommended = :recommended, version = version + 1 WHERE id = CAST(:id AS uuid)"
+)
+
+
+class AdminCatalogWriter:
+    """The admin API's catalog writes, on the main (read-write) engine. Status and recommendation
+    only; edits, creation and deletion arrive with their routes."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def lock_admin_catalog(self, catalog_id: str) -> AdminCatalogState | None:
+        row = (await self._session.execute(_LOCK_CATALOG, {"id": catalog_id})).first()
+        return (
+            AdminCatalogState(status=CatalogStatus(row.status), version=row.version)
+            if row
+            else None
+        )
+
+    async def persist_catalog_status(self, catalog_id: str, status: CatalogStatus) -> None:
+        await self._session.execute(_SET_STATUS, {"id": catalog_id, "status": status.value})
+
+    async def persist_catalog_recommended(self, catalog_id: str, recommended: bool) -> None:
+        await self._session.execute(
+            _SET_RECOMMENDED, {"id": catalog_id, "recommended": recommended}
+        )
+
+    async def commit_admin_write(self) -> None:
+        await self._session.commit()

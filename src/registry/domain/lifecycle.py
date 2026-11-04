@@ -13,7 +13,7 @@ A draft can be deleted; nothing else can. Unarchiving never lands on published.
 """
 
 from collections.abc import Mapping
-from typing import Final
+from typing import Final, Literal
 
 from registry.domain.enums import CatalogStatus
 
@@ -36,6 +36,41 @@ STATUS_ACTIONS: Final[Mapping[CatalogStatus, frozenset[str]]] = {
     CatalogStatus.UNPUBLISHED: frozenset({"edit", "publish", "archive"}),
     CatalogStatus.ARCHIVED: frozenset({"unarchive"}),
 }
+
+
+#: The actions `POST /admin/catalogs/{id}/transitions` takes; the others have their own routes.
+TRANSITION_ACTIONS: Final = ("publish", "unpublish", "archive", "unarchive")
+
+#: `(from, action) -> to`. Anything absent is refused as `invalid-transition`.
+TRANSITIONS: Final[Mapping[tuple[CatalogStatus, str], CatalogStatus]] = {
+    (CatalogStatus.DRAFT, "publish"): CatalogStatus.PUBLISHED,
+    (CatalogStatus.PUBLISHED, "unpublish"): CatalogStatus.UNPUBLISHED,
+    (CatalogStatus.PUBLISHED, "archive"): CatalogStatus.ARCHIVED,
+    (CatalogStatus.UNPUBLISHED, "publish"): CatalogStatus.PUBLISHED,
+    (CatalogStatus.UNPUBLISHED, "archive"): CatalogStatus.ARCHIVED,
+    (CatalogStatus.ARCHIVED, "unarchive"): CatalogStatus.UNPUBLISHED,
+}
+
+#: The undo rule of the lifecycle contract, as its table lists it: an action can be undone only
+#: when the inverse lands exactly on the previous status. Unarchive is left out on purpose: its
+#: inverse, archive, is a deliberate step the back office asks to confirm.
+UndoAction = Literal["publish", "unpublish", "unarchive"]
+
+UNDO_ACTIONS: Final[Mapping[tuple[CatalogStatus, str], UndoAction]] = {
+    (CatalogStatus.PUBLISHED, "unpublish"): "publish",
+    (CatalogStatus.UNPUBLISHED, "publish"): "unpublish",
+    (CatalogStatus.UNPUBLISHED, "archive"): "unarchive",
+}
+
+
+def resolve_transition_target(status: CatalogStatus, action: str) -> CatalogStatus | None:
+    """Where *action* takes a catalog in *status*, or None when the lifecycle refuses it."""
+    return TRANSITIONS.get((status, action))
+
+
+def resolve_undo_action(status: CatalogStatus, action: str) -> UndoAction | None:
+    """The action that reverses *action* taken from *status*, or None when nothing does."""
+    return UNDO_ACTIONS.get((status, action))
 
 
 def build_allowed_actions(status: CatalogStatus, permissions: frozenset[str]) -> list[str]:
