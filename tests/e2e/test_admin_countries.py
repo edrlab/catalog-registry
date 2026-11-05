@@ -31,6 +31,47 @@ async def read_country(client: AsyncClient, code: str) -> Any:
     return response.json()
 
 
+async def arrange_belgium(db_session: AsyncSession) -> None:
+    """Eight catalogs in Belgium, two per status (draft, published, unpublished, archived by
+    position), the rest without a country. Every Belgian catalog is `public`; the first published
+    one is also `school` and the first draft also `academic`. Recommended: the first published and
+    the first archived. So: published 2, recommended 1, public 2, school 1, academic 0."""
+    await db_session.execute(
+        text(
+            """
+UPDATE catalogs c
+   SET country_code = CASE WHEN r.n < 8 THEN 'BE' END,
+       status = CAST((ARRAY['draft', 'published', 'unpublished', 'archived'])[1 + r.n % 4]
+                     AS catalog_status),
+       published_at = coalesce(c.published_at, now()),
+       recommended = r.n IN (1, 3)
+  FROM (SELECT id, row_number() OVER (ORDER BY id) - 1 AS n FROM catalogs) r
+ WHERE r.id = c.id
+"""
+        )
+    )
+    await db_session.execute(
+        text(
+            "DELETE FROM catalog_kinds WHERE catalog_id IN "
+            "(SELECT id FROM catalogs WHERE country_code = 'BE')"
+        )
+    )
+    await db_session.execute(
+        text(
+            """
+INSERT INTO catalog_kinds (catalog_id, kind)
+SELECT id, CAST('public' AS catalog_kind) FROM catalogs WHERE country_code = 'BE'
+UNION ALL
+SELECT id, 'school' FROM catalogs WHERE country_code = 'BE' AND status = 'published' AND recommended
+UNION ALL
+SELECT id, 'academic' FROM (SELECT id FROM catalogs WHERE country_code = 'BE' AND status = 'draft'
+                             ORDER BY id LIMIT 1) d
+"""
+        )
+    )
+    await db_session.commit()
+
+
 async def test_only_countries_with_a_catalog_are_listed_most_published_first(
     admin_client: AsyncClient, db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
@@ -94,10 +135,9 @@ async def test_each_count_is_what_the_catalog_list_shows_for_that_country(
     await db_session.commit()
 
     items = (await list_countries(admin_client))["items"]
-    used = [item for item in items if item["published_catalog_count"] > 0]
 
-    assert any(item["code"] == busiest for item in used)
-    for item in used:
+    assert any(item["code"] == busiest for item in items)
+    for item in items:
         shown = await list_catalogs(admin_client, country=item["code"])
         assert item["published_catalog_count"] == shown["total"], item["code"]
 
@@ -109,6 +149,24 @@ async def test_a_name_in_any_language_without_accents_or_the_code_finds_a_countr
     codes = [item["code"] for item in (await list_countries(admin_client, q=q))["items"]]
 
     assert "BE" in codes
+
+
+@pytest.mark.parametrize("q", ["jp", "JP"])
+async def test_the_iso_code_alone_finds_a_country(
+    admin_client: AsyncClient, db_session: AsyncSession, searchable_catalogs: None, q: str
+) -> None:
+    """None of Japan's names contains "jp", so only the code match can find it."""
+    await db_session.execute(
+        text(
+            "UPDATE catalogs SET country_code = 'JP' "
+            "WHERE id = (SELECT id FROM catalogs ORDER BY id LIMIT 1)"
+        )
+    )
+    await db_session.commit()
+
+    codes = [item["code"] for item in (await list_countries(admin_client, q=q))["items"]]
+
+    assert codes == ["JP"]
 
 
 async def test_a_search_that_matches_nothing_is_an_empty_page(admin_client: AsyncClient) -> None:
@@ -181,26 +239,73 @@ async def test_a_country_with_no_catalogs_and_no_types_is_all_zeros(
     }
 
 
+async def test_the_list_counts_only_published_catalogs(
+    admin_client: AsyncClient, db_session: AsyncSession, searchable_catalogs: None
+) -> None:
+    await arrange_belgium(db_session)
+
+    body = await list_countries(admin_client)
+
+    assert body["items"] == [{"code": "BE", "name": "Belgium", "published_catalog_count": 2}]
+    assert body["total"] == 1
+
+
+async def test_a_country_counts_each_status_recommended_and_kind_exactly(
+    admin_client: AsyncClient, db_session: AsyncSession, searchable_catalogs: None
+) -> None:
+    await arrange_belgium(db_session)
+
+    kpis = (await read_country(admin_client, "BE"))["kpis"]
+
+    assert kpis == {
+        "by_status": {"draft": 2, "published": 2, "unpublished": 2, "archived": 2},
+        "recommended": 1,
+        "by_kind": {"open": 0, "public": 2, "academic": 0, "school": 1, "specialized": 0},
+    }
+
+
 async def test_a_country_kpis_agree_with_the_catalog_list(
     admin_client: AsyncClient, db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
-    await db_session.execute(
-        text(
-            "UPDATE catalogs SET status = 'archived' WHERE id = "
-            "(SELECT id FROM catalogs WHERE country_code = 'FR' ORDER BY id LIMIT 1)"
-        )
-    )
-    await db_session.commit()
+    await arrange_belgium(db_session)
 
-    kpis = (await read_country(admin_client, "FR"))["kpis"]
+    kpis = (await read_country(admin_client, "BE"))["kpis"]
 
     for status, count in kpis["by_status"].items():
-        assert count == (await list_catalogs(admin_client, country="FR", status=status))["total"]
-    assert kpis["by_status"]["archived"] == 1
-    recommended = await list_catalogs(admin_client, country="FR", recommended="true")
+        assert count == (await list_catalogs(admin_client, country="BE", status=status))["total"]
+    recommended = await list_catalogs(admin_client, country="BE", recommended="true")
     assert kpis["recommended"] == recommended["total"]
     for kind, count in kpis["by_kind"].items():
-        assert count == (await list_catalogs(admin_client, country="FR", kind=kind))["total"]
+        assert count == (await list_catalogs(admin_client, country="BE", kind=kind))["total"]
+
+
+async def test_a_search_only_finds_listed_countries(
+    admin_client: AsyncClient, searchable_catalogs: None
+) -> None:
+    body = await list_countries(admin_client, q="Iceland")
+
+    assert body["items"] == []
+    assert body["total"] == 0
+    assert (await read_country(admin_client, "IS"))["name"] == "Iceland"
+
+
+async def test_paging_one_by_one_visits_every_country_once_in_order(
+    admin_client: AsyncClient, db_session: AsyncSession, searchable_catalogs: None
+) -> None:
+    """Belgium drafted, so the count order (France, Switzerland, Belgium) is not the name order:
+    a page cut by name instead of by count would show up here."""
+    await db_session.execute(text("UPDATE catalogs SET status = 'draft' WHERE country_code = 'BE'"))
+    await db_session.commit()
+    whole = await list_countries(admin_client)
+    assert [item["code"] for item in whole["items"]][-1] == "BE"
+    pages = [
+        await list_countries(admin_client, page=page, per_page=1)
+        for page in range(1, whole["total"] + 1)
+    ]
+
+    assert [item for body in pages for item in body["items"]] == whole["items"]
+    assert {body["total"] for body in pages} == {whole["total"]}
+    assert whole["total"] >= 2
 
 
 @pytest.mark.parametrize("code", ["ZZ", "zz", "FRA", "F", "1A", "%20%20"])

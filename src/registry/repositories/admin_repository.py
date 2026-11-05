@@ -171,10 +171,10 @@ _DETAIL: Final = text(
 
 
 #: Every country some catalog uses (any status, as `filter-options`), with its published catalogs,
-#: in one statement (R4). `published` is the
-#: predicate `/admin/catalogs?country=XX` uses by default, so the two counts always agree. The
-#: search text matches a name in any language, folded (ADR-059), or the ISO code exactly. The
-#: English name is the alphabetically first, the rule the catalog columns use.
+#: in one statement (R4) and one pass over `catalogs`. `published` is the predicate
+#: `/admin/catalogs?country=XX` uses by default, so the two counts always agree. The search text
+#: matches a name in any language, folded (ADR-059), or the ISO code exactly. The English name is
+#: the alphabetically first, the rule the catalog columns use.
 _COUNTRIES: Final = text(
     """
 WITH matched AS (
@@ -182,11 +182,11 @@ WITH matched AS (
          coalesce((SELECT n.name FROM country_names n
                     WHERE n.country_code = k.alpha2 AND n.language_tag = 'en'
                     ORDER BY n.name LIMIT 1), k.alpha2) AS name,
-         (SELECT count(*) FROM catalogs c
-           WHERE c.country_code = k.alpha2 AND c.status = 'published') AS published
-    FROM countries k
-   WHERE EXISTS (SELECT 1 FROM catalogs c WHERE c.country_code = k.alpha2)
-     AND (CAST(:q AS text) IS NULL OR k.alpha2 = upper(CAST(:q AS text)) OR EXISTS (
+         u.published
+    FROM (SELECT country_code, count(*) FILTER (WHERE status = 'published') AS published
+            FROM catalogs WHERE country_code IS NOT NULL GROUP BY country_code) u
+    JOIN countries k ON k.alpha2 = u.country_code
+   WHERE (CAST(:q AS text) IS NULL OR k.alpha2 = upper(CAST(:q AS text)) OR EXISTS (
            SELECT 1 FROM country_names n
             WHERE n.country_code = k.alpha2
               AND strpos(public.fold(n.name), public.fold(CAST(:q AS text))) > 0))
