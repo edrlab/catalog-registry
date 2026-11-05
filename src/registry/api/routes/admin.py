@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import StringConstraints
 
 from registry.api.admin_dependencies import require_permission
+from registry.core.errors import ChecksBusyError
 from registry.domain.admin_models import (
     MAX_PAGE,
     MAX_PER_PAGE,
@@ -25,6 +26,8 @@ from registry.schemas.admin import (
     CatalogUpdateRequest,
     CountryDetail,
     CountryListResponse,
+    FeedCheckRequest,
+    FeedCheckResponse,
     FilterOptionsResponse,
     MeResponse,
     ProblemDocument,
@@ -47,6 +50,7 @@ from registry.services.admin_service import (
     resolve_admin_stats,
     resolve_filter_options,
 )
+from registry.services.feed_check_service import resolve_feed_check
 
 PROBLEM_CONTENT = {
     "application/problem+json": {"schema": {"$ref": "#/components/schemas/ProblemDocument"}}
@@ -337,3 +341,33 @@ async def delete_admin_catalog(
     async with request.app.state.open_admin_writer() as writer:
         await apply_admin_catalog_deletion(writer, actor, catalog_id, version=version)
     return Response(status_code=204)
+
+
+@router.post(
+    "/feed-checks",
+    summary="Check a feed or web page address and say what a catalog would get from it",
+    responses={
+        404: problem_response(NOT_FOUND),
+        422: problem_response(INVALID_BODY),
+        429: problem_response(
+            "`checks-busy`: the maximum of checks is running; try again after `Retry-After`."
+        ),
+    },
+)
+async def create_admin_feed_check(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    body: FeedCheckRequest,
+) -> FeedCheckResponse:
+    """One synchronous check, nothing stored (contract 0.8, ADR-066)."""
+    slots = request.app.state.feed_check_slots
+    if slots.locked():
+        raise ChecksBusyError("Too many feed checks are running. Try again in a few seconds.")
+    async with (
+        slots,
+        request.app.state.open_admin_reader() as reader,
+        request.app.state.open_feed_fetcher() as fetcher,
+    ):
+        return await resolve_feed_check(
+            fetcher, reader, actor, body.url, catalog_id=body.catalog_id
+        )

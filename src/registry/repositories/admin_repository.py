@@ -382,6 +382,10 @@ class AdminRepository:
             ],
         )
 
+    async def fetch_admin_catalog_by_href(self, href: str) -> tuple[str, str] | None:
+        row = (await self._session.execute(_CATALOG_BY_HREF, {"href": href})).first()
+        return (row.id, row.name) if row else None
+
     async def fetch_admin_country(self, code: str) -> AdminCountryDetail | None:
         rows = await fetch_rows(self._session, _COUNTRY, {"code": code})
         if not rows:
@@ -406,6 +410,17 @@ class AdminRepository:
             recommended=row["recommended"],
             by_kind=dict(_json(row["by_kind"])),
         )
+
+
+#: The catalog that already uses *href* as its identity (`catalog` or `shelf`), if any.
+_CATALOG_BY_HREF: Final = text(
+    """
+SELECT c.id::text AS id, c.title AS name
+  FROM links l JOIN catalogs c ON c.id = l.catalog_id
+ WHERE l.rel IN ('catalog', 'shelf') AND l.href = :href
+ LIMIT 1
+"""
+)
 
 
 #: `FOR UPDATE` holds the row until the commit, so two editors acting at once are applied one after

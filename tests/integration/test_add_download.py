@@ -1,13 +1,13 @@
-"""`make add`'s real fetch, over real sockets: `download_feed_document` and the redirect handler.
+"""`make add`'s real fetch, over real sockets: `download_feed_document` on the shared client.
 
 The rest of the `add` tests stub the download out, so what the command actually puts on the
 wire and does with what comes back was never exercised: the `Accept` header, the 2 MB cap, the
 timeout, redirects, and every way a hostile or broken origin can answer. This starts a throwaway
 HTTP server on loopback and fetches from it. Nothing leaves the machine.
 
-The public-address guard refuses loopback, which is the point of it, so the tests that need to
-reach this server patch it out; one test leaves it in and shows it stops the request before
-anything is sent.
+The public-address checks refuse loopback, which is the point of them, so the tests that need to
+reach this server open them for 127.0.0.1 only (URL policy and transport); one test leaves them in
+and shows they stop the request before anything is sent.
 """
 
 import contextlib
@@ -18,11 +18,16 @@ from collections.abc import Callable, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+import httpx
 import pytest
 
 from registry.cli import add as add_module
-from registry.cli.add import MAX_FEED_BYTES, download_feed_document, main
+from registry.cli.add import FEED_ACCEPT, MAX_FEED_BYTES, download_feed_document, main
 from registry.core.errors import ValidationError
+from registry.domain.fetching import FetchError
+from registry.domain.url_policy import validate_outbound_url
+from registry.network import safe_client as safe_client_module
+from registry.network.safe_client import SafeHttpClient
 
 pytestmark = pytest.mark.integration
 
@@ -111,17 +116,24 @@ def origin() -> Iterator[Origin]:
 
 @pytest.fixture
 def reachable(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Let loopback through the public-address guard, but still refuse `private.invalid`, so a
-    redirect to a 'private' host can be shown to be re-checked on its own hop."""
-    real = add_module.assert_publicly_reachable
+    """Let 127.0.0.1 through the URL policy and connect without the public-only backend, but still
+    refuse `private.invalid`, so a redirect to a 'private' host is shown to be re-checked on its own
+    hop. Everything else keeps the real policy."""
+    real = validate_outbound_url
 
-    def guard(url: str) -> None:
+    def policy(url: str) -> Any:
         if "private.invalid" in url:
-            raise ValidationError(f"{url} resolves to 10.0.0.5, which is not a public address")
-        if not url.startswith("http://127.0.0.1"):
-            real(url)
+            raise FetchError("url-unsafe", "The address points to a private or reserved network.")
+        if url.startswith("http://127.0.0.1"):
+            return None
+        return real(url)
 
-    monkeypatch.setattr(add_module, "assert_publicly_reachable", guard)
+    monkeypatch.setattr(safe_client_module, "validate_outbound_url", policy)
+    monkeypatch.setattr(
+        add_module,
+        "build_outbound_client",
+        lambda: SafeHttpClient(transport=httpx.AsyncHTTPTransport()),
+    )
 
 
 # --- what goes on the wire -----------------------------------------------------------------
@@ -136,7 +148,8 @@ def test_the_request_asks_for_opds_json(origin: Origin, reachable: None) -> None
 
     ((path, headers),) = origin.requests
     assert path == "/ok"
-    assert headers["Accept"] == "application/opds+json, application/json"
+    assert headers["Accept"] == FEED_ACCEPT
+    assert headers["User-Agent"].startswith("ThoriumCatalogRegistry/")
 
 
 # --- the size cap --------------------------------------------------------------------------
@@ -148,7 +161,7 @@ def test_a_body_of_exactly_the_limit_is_accepted(origin: Origin, reachable: None
 
 
 def test_one_byte_over_the_limit_is_refused(origin: Origin, reachable: None) -> None:
-    with pytest.raises(ValidationError, match="more than 2097152 bytes"):
+    with pytest.raises(ValidationError, match="larger than 2097152 bytes"):
         download_feed_document(f"{origin.base}/over")
 
 
@@ -162,8 +175,8 @@ def test_one_byte_over_the_limit_is_refused(origin: Origin, reachable: None) -> 
         ("/empty", "did not return JSON"),
         ("/list", "returned list, not an OPDS document"),
         ("/null", "returned NoneType, not an OPDS document"),
-        ("/404", "could not fetch"),
-        ("/500", "could not fetch"),
+        ("/404", "could not fetch.*answered 404"),
+        ("/500", "could not fetch.*answered 500"),
     ],
 )
 def test_an_unusable_answer_is_a_validation_error_not_a_crash(
@@ -205,25 +218,24 @@ def test_a_chain_of_redirects_is_followed(origin: Origin, reachable: None) -> No
 def test_a_redirect_to_ftp_is_refused_by_the_registrys_own_handler(
     origin: Origin, reachable: None
 ) -> None:
-    """urllib would follow `ftp:`; the handler is what stops it."""
-    with pytest.raises(ValidationError, match="refusing to follow a redirect to ftp://"):
+    """Every redirect target passes the URL policy, `ftp:` included."""
+    with pytest.raises(ValidationError, match=r"redirect.*Only http and https"):
         download_feed_document(f"{origin.base}/redirect-ftp")
 
 
 def test_a_redirect_to_a_local_file_is_refused_and_nothing_is_read(
     origin: Origin, reachable: None
 ) -> None:
-    """urllib itself refuses `file:` redirects (so the registry's handler never sees them); the
-    failure surfaces as a fetch error. What matters is that /etc/passwd is not read."""
-    with pytest.raises(ValidationError, match=r"could not fetch.*file:///etc/passwd.*not allowed"):
+    """What matters is that /etc/passwd is not read: the redirect is refused before any request."""
+    with pytest.raises(ValidationError, match=r"could not fetch.*Only http and https"):
         download_feed_document(f"{origin.base}/redirect-file")
 
 
 def test_a_redirect_to_a_private_address_is_refused_on_its_own_hop(
     origin: Origin, reachable: None
 ) -> None:
-    """A public host is free to redirect to a private one, so the guard runs on every hop."""
-    with pytest.raises(ValidationError, match="not a public address"):
+    """A public host is free to redirect to a private one, so the policy runs on every hop."""
+    with pytest.raises(ValidationError, match="private or reserved"):
         download_feed_document(f"{origin.base}/redirect-private")
 
 
@@ -233,7 +245,7 @@ def test_a_redirect_to_a_private_address_is_refused_on_its_own_hop(
 def test_loopback_is_refused_before_anything_is_sent(origin: Origin) -> None:
     """No `reachable` fixture: the real guard sees 127.0.0.1 and refuses it. The origin must not
     have received a single request, or the guard would be checking after the damage."""
-    with pytest.raises(ValidationError, match="not a public address"):
+    with pytest.raises(ValidationError, match="private or reserved"):
         download_feed_document(f"{origin.base}/ok")
 
     assert origin.requests == []
@@ -241,7 +253,7 @@ def test_loopback_is_refused_before_anything_is_sent(origin: Origin) -> None:
 
 @pytest.mark.parametrize("url", ["file:///etc/passwd", "ftp://files.example/feed", "gopher://x/"])
 def test_a_scheme_other_than_http_is_refused_without_touching_the_network(url: str) -> None:
-    with pytest.raises(ValidationError, match="is not an http"):
+    with pytest.raises(ValidationError, match="Only http and https"):
         download_feed_document(url)
 
 

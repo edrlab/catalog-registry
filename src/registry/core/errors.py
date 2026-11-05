@@ -80,6 +80,16 @@ class DuplicateCatalogError(ConflictError):
     problem_type = "https://registry.thoriumreader.com/problems/duplicate-catalog"
 
 
+class ChecksBusyError(RegistryError):
+    """This instance is already running its maximum of feed checks (ADR-066). Try again shortly."""
+
+    status_code = 429
+    title = "Too Many Requests"
+    problem_type = "https://registry.thoriumreader.com/problems/checks-busy"
+    #: Seconds, sent as `Retry-After`.
+    retry_after = 5
+
+
 class ValidationError(RegistryError):
     status_code = 422
     title = "Unprocessable Entity"

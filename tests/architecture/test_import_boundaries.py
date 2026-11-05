@@ -25,8 +25,19 @@ FORBIDDEN = {
         "registry.schemas",
         "registry.repositories",
         "registry.services",
+        "registry.network",
+        "httpx",
     },
-    "registry.services": {"sqlalchemy", "fastapi", "registry.api"},
+    # The network is reached through `FeedFetcher` only (ADR-066).
+    "registry.services": {"sqlalchemy", "fastapi", "registry.api", "registry.network", "httpx"},
+    "registry.network": {
+        "sqlalchemy",
+        "fastapi",
+        "registry.api",
+        "registry.services",
+        "registry.repositories",
+        "registry.schemas",
+    },
     "registry.api": {"sqlalchemy", "registry.repositories"},
     "registry.rendering": {"sqlalchemy", "fastapi"},
 }

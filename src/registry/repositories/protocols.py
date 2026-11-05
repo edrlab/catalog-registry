@@ -24,6 +24,7 @@ from registry.domain.admin_models import (
 )
 from registry.domain.catalog_view import CatalogLike
 from registry.domain.enums import CatalogStatus
+from registry.domain.fetching import FetchResult
 from registry.domain.restrictions import NO_RESTRICTIONS, Restrictions
 from registry.domain.search_query import ParsedQuery
 
@@ -78,6 +79,24 @@ class AdminReader(Protocol):
     ) -> AdminCountryPage: ...
 
     async def fetch_admin_country(self, code: str) -> AdminCountryDetail | None: ...
+
+    async def fetch_admin_catalog_by_href(self, href: str) -> tuple[str, str] | None: ...
+
+
+class FeedFetcher(Protocol):
+    """One outbound fetch with the registry's protections (`network/safe_client.py`, ADR-066).
+    Raises `FetchError`."""
+
+    async def fetch(
+        self,
+        url: str,
+        *,
+        accept: str,
+        max_bytes: int,
+        deadline: float,
+        method: str = "GET",
+        truncate: bool = False,
+    ) -> FetchResult: ...
 
 
 class AdminWriter(Protocol):

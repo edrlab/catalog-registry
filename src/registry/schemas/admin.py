@@ -320,3 +320,84 @@ class CatalogUpdateRequest(AdminModel):
         if value is None:
             raise PydanticCustomError("not_nullable", "Cannot be null")
         return value
+
+
+# --- feed checks (contract 0.8) ------------------------------------------------------------------
+
+
+class FeedCheckRequest(AdminModel):
+    url: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2048)]
+    #: Re-check an existing catalog: the report then carries `changes`.
+    catalog_id: str | None = None
+
+
+class FeedCheckStage(AdminModel):
+    key: Literal["address", "fetch", "feed", "links"]
+    label: str
+    state: Literal["passed", "warned", "failed", "skipped"]
+    duration_ms: int
+
+
+class FeedCheckFinding(AdminModel):
+    stage: Literal["address", "fetch", "feed", "links"]
+    severity: Literal["error", "warning", "info"]
+    code: str
+    message: str
+    rel: str | None = None
+    url: str | None = None
+    pointer: str | None = None
+
+
+class FeedCheckSummary(AdminModel):
+    errors: int
+    warnings: int
+    info: int
+
+
+class FeedCheckLink(AdminModel):
+    rel: str
+    href: str
+    type: str | None = None
+    title: str | None = None
+    templated: bool = False
+    #: True answered, False dead (unticked by default), None not checked (the cap).
+    active: bool | None
+
+
+class FeedCheckFields(AdminModel):
+    name: str | None
+    description: str | None
+    languages: list[str]
+    links: list[FeedCheckLink]
+
+
+class FeedCheckDuplicate(AdminModel):
+    id: str
+    name: str
+
+
+class FeedValueChange(AdminModel):
+    field: Literal["name", "description", "languages"]
+    catalog: str | list[str] | None
+    feed: str | list[str] | None
+
+
+class FeedLinksChange(AdminModel):
+    field: Literal["links"]
+    added: list[FeedCheckLink]
+    removed: list[FeedCheckLink]
+
+
+class FeedCheckResponse(AdminModel):
+    url: str
+    final_url: str | None
+    checked_at: datetime.datetime
+    duration_ms: int
+    verdict: Literal["ok", "warnings", "blocked"]
+    format: Literal["opds2", "html"] | None
+    stages: list[FeedCheckStage]
+    findings: list[FeedCheckFinding]
+    summary: FeedCheckSummary
+    feed: FeedCheckFields | None
+    duplicate: FeedCheckDuplicate | None
+    changes: list[FeedValueChange | FeedLinksChange] | None = None

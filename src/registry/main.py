@@ -8,6 +8,7 @@ A factory rather than a module-level ``app``: tests need to build an app with di
 settings, and a module-level instance makes that impossible without import tricks.
 """
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import partial
@@ -25,6 +26,7 @@ from registry.db.session import (
     check_database_connection,
     create_database_engine,
 )
+from registry.network.safe_client import SafeHttpClient
 from registry.repositories.actor_repository import ActorRepository
 from registry.repositories.admin_repository import AdminCatalogWriter, AdminRepository
 from registry.repositories.catalog_repository import (
@@ -36,6 +38,9 @@ from registry.repositories.search_repository import (
     CatalogSearchRepository,
 )
 from registry.services.admin_identity import build_jwks_key_resolver
+
+#: Feed checks one instance runs at once; more answer 429 `checks-busy` (ADR-066).
+FEED_CHECK_SLOTS = 4
 
 
 def bind_admin_stores(app: FastAPI) -> None:
@@ -59,6 +64,10 @@ def bind_admin_stores(app: FastAPI) -> None:
             yield ActorRepository(session)
 
     app.state.open_admin_reader = open_admin_reader
+    #: Feed checks request URLs editors type: one client per check, through `network/` (ADR-066),
+    #: and at most `FEED_CHECK_SLOTS` at once per instance.
+    app.state.open_feed_fetcher = SafeHttpClient
+    app.state.feed_check_slots = asyncio.Semaphore(FEED_CHECK_SLOTS)
     app.state.open_admin_writer = open_admin_writer
     app.state.open_actor_store = open_actor_store
 
@@ -140,8 +149,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(dev.router)
     if resolved.environment == "local":
         # Reading a library's own feed makes the server request a URL a visitor names, so it is
-        # never mounted in a deployed environment. Imported here so no other environment loads it,
-        # or the dev-only `httpx` it needs.
+        # never mounted in a deployed environment. Imported here so no other environment loads it.
         from registry.api.routes import dev_fetch  # noqa: PLC0415
 
         app.include_router(dev_fetch.router)

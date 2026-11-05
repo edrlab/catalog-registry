@@ -222,7 +222,11 @@ async def test_the_openapi_document_describes_every_admin_problem(
         if not path.startswith("/admin"):
             continue
         for method, operation in operations.items():
-            expected = ("401", "403", "500", "503") + (("409",) if method != "get" else ())
+            # Every write can conflict; a feed check writes nothing (contract 0.8), so it has 429.
+            writes = method != "get" and path != "/admin/feed-checks"
+            expected = ("401", "403", "500", "503") + (("409",) if writes else ())
+            if path == "/admin/feed-checks":
+                expected += ("429",)
             for status in expected:
                 content = operation["responses"][status]["content"]
                 assert content["application/problem+json"]["schema"]["$ref"].endswith(

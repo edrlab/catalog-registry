@@ -221,6 +221,7 @@ dependencies = [
     { name = "babel" },
     { name = "brotli" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "jsonschema" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -232,7 +233,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -248,6 +248,7 @@ requires-dist = [
     { name = "babel", specifier = ">=2.18.0" },
     { name = "brotli", specifier = ">=1.2.1,<2" },
     { name = "fastapi", specifier = ">=0.141.1,<0.142" },
+    { name = "httpx", specifier = ">=0.28.1,<0.29" },
     { name = "jsonschema", specifier = ">=4.26.0,<5" },
     { name = "pydantic", specifier = ">=2.13.4,<3" },
     { name = "pydantic-settings", specifier = ">=2.15.0,<3" },
@@ -259,7 +260,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.28.1,<0.29" },
     { name = "mypy", specifier = ">=1.14" },
     { name = "pytest", specifier = ">=9.1.1,<10" },
     { name = "pytest-asyncio", specifier = ">=1.4.0,<2" },

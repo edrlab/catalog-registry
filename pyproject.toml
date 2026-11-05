@@ -16,13 +16,14 @@ dependencies = [
     "zstandard>=0.25,<0.26",
     "pyjwt[crypto]>=2.15.1",
     "babel>=2.18.0",
+    # The feed check's one outbound client (`registry/network/`, ADR-066).
+    "httpx>=0.28.1,<0.29",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.1,<10",
     "pytest-asyncio>=1.4.0,<2",
-    "httpx>=0.28.1,<0.29",
     "ruff>=0.16.4,<0.17",
     "mypy>=1.14",
     "types-jsonschema>=4.26.0.20260518",
