@@ -1,23 +1,35 @@
 """What the admin API says, assembled from what the repositories read."""
 
+import json
 import re
 import uuid
 from collections.abc import Mapping
 from typing import Any
 
 from registry.core.errors import (
+    ArchivedReadOnlyError,
     CatalogNotFoundError,
     CountryNotFoundError,
+    FieldValidationError,
     InvalidTransitionError,
+    NotDeletableError,
     NotPublishedError,
     PermissionDeniedError,
     VersionConflictError,
 )
+from registry.core.schema_validation import build_catalog_validator
 from registry.domain.admin_models import (
     AdminActor,
     AdminCatalogQuery,
     AdminCatalogRow,
     AdminCatalogState,
+)
+from registry.domain.catalog_document import (
+    DocumentProblem,
+    build_catalog_id,
+    build_consistency_problems,
+    build_identity_href,
+    build_iso_code_problems,
 )
 from registry.domain.enums import CatalogKind, CatalogStatus
 from registry.domain.labels import (
@@ -27,6 +39,7 @@ from registry.domain.labels import (
     PUBLICATION_TYPE_LABELS,
     STATUS_LABELS,
 )
+from registry.domain.language import normalise_language_tag
 from registry.domain.lifecycle import TRANSITIONS, UNDO_ACTIONS, UndoAction, build_allowed_actions
 from registry.domain.permissions import build_permissions
 from registry.repositories.protocols import ActorStore, AdminReader, AdminWriter
@@ -211,6 +224,175 @@ async def apply_admin_recommendation(
     await writer.persist_catalog_recommended(normalised, recommended)
     await writer.commit_admin_write()
     return normalised
+
+
+#: Where each body field lives in the catalog document the seed reads (contract §4, field table).
+_DOCUMENT_PATHS: Mapping[str, tuple[str, ...]] = {
+    "name": ("metadata", "title"),
+    "description": ("metadata", "description"),
+    "color": ("metadata", "color"),
+    "kinds": ("metadata", "kind"),
+    "coverage": ("metadata", "coverage"),
+    "country": ("metadata", "country"),
+    "city": ("metadata", "city"),
+    "subdivisions": ("metadata", "subdivisions"),
+    "languages": ("metadata", "supportedLanguages"),
+    "publication_types": ("metadata", "publicationTypes"),
+    "links": ("links",),
+}
+_BODY_FIELDS = {path: field for field, path in _DOCUMENT_PATHS.items()}
+
+
+def _apply_fields(document: dict[str, Any], fields: Mapping[str, Any]) -> dict[str, Any]:
+    """*document* with *fields* (body names, JSON values) written in; `None` removes a field."""
+    result: dict[str, Any] = {
+        "metadata": dict(document["metadata"]),
+        "links": list(document["links"]),
+    }
+    for field, value in fields.items():
+        *parents, key = _DOCUMENT_PATHS[field]
+        container: dict[str, Any] = result["metadata"] if parents else result
+        if value is None:
+            container.pop(key, None)
+        elif field == "links":
+            container[key] = [
+                {name: item for name, item in link.items() if item not in (None, False)}
+                for link in value
+            ]
+        else:
+            container[key] = value
+    return result
+
+
+def _comparable(document: dict[str, Any]) -> tuple[Any, ...]:
+    """*document* with list order and language case ignored: an edit form sends every field back,
+    in its own order, and a save that changed nothing must keep the version."""
+    metadata = {
+        key: sorted(normalise_language_tag(tag) for tag in value)
+        if key == "supportedLanguages"
+        else sorted(value)
+        if isinstance(value, list)
+        else value
+        for key, value in document["metadata"].items()
+    }
+    links = sorted(json.dumps(link, sort_keys=True) for link in document["links"])
+    return json.dumps(metadata, sort_keys=True), links
+
+
+def _body_path(path: tuple[str | int, ...]) -> str:
+    """A document path as the body field it came from: `metadata.kind.0` is `kinds.0`."""
+    if path[:1] == ("metadata",) and len(path) > 1:
+        field = _BODY_FIELDS.get(("metadata", str(path[1])), str(path[1]))
+        return ".".join([field, *(str(part) for part in path[2:])])
+    return ".".join(str(part) for part in path)
+
+
+#: A sentence for the schema checks whose own message quotes a regex or a whole list.
+_SCHEMA_MESSAGES: Mapping[str, str] = {
+    "pattern": "{!r} is not in the expected format",
+    "uniqueItems": "The same item is listed twice",
+}
+
+
+def _validate_catalog_document(document: dict[str, Any]) -> None:
+    """The seed's checks on one catalog, reported field by field. Raises `FieldValidationError`."""
+    # The ISO check first: its message says what the code should be, where the schema's only
+    # says it does not match. It runs safely on any metadata.
+    iso = build_iso_code_problems(document["metadata"])
+    problems = [*iso] + [
+        DocumentProblem(
+            tuple(error.absolute_path),
+            _SCHEMA_MESSAGES[error.validator].format(error.instance)
+            if error.validator in _SCHEMA_MESSAGES
+            else error.message,
+        )
+        for error in build_catalog_validator().iter_errors(document)
+        if tuple(error.absolute_path) not in {problem.path for problem in iso}
+    ]
+    if not problems:
+        problems = build_consistency_problems(document)
+    if problems:
+        raise FieldValidationError(
+            [{"field": _body_path(p.path), "message": p.message} for p in problems]
+        )
+
+
+async def _validate_places(writer: AdminWriter, document: dict[str, Any]) -> None:
+    """Country and subdivisions must be codes the registry knows (both are foreign keys)."""
+    metadata = document["metadata"]
+    subdivisions = metadata.get("subdivisions") or []
+    country_known, unknown = await writer.fetch_unknown_places(
+        metadata.get("country"), subdivisions
+    )
+    errors = [] if country_known else [{"field": "country", "message": "Not a known country"}]
+    errors += [
+        {"field": f"subdivisions.{index}", "message": f"{code} is not a known subdivision"}
+        for index, code in enumerate(subdivisions)
+        if code in unknown
+    ]
+    if errors:
+        raise FieldValidationError(errors)
+
+
+async def apply_admin_catalog_creation(
+    writer: AdminWriter, actor: AdminActor, fields: Mapping[str, Any], *, publish: bool
+) -> str:
+    """A new catalog, as a draft or published (W16), checked as the seed checks one. Its id is
+    derived from its identity href, as the seed derives it (ADR-038). Returns the id."""
+    _require_catalog_permission(actor, "create")
+    if publish:
+        _require_catalog_permission(actor, "publish")
+    document = _apply_fields({"metadata": {}, "links": []}, fields)
+    _validate_catalog_document(document)
+    await _validate_places(writer, document)
+    identity_href = build_identity_href(document)
+    assert identity_href is not None  # `build_consistency_problems` refused a document without one
+    catalog_id = build_catalog_id(identity_href)
+    await writer.persist_new_catalog(document, catalog_id, publish=publish)
+    await writer.commit_admin_write()
+    return str(catalog_id)
+
+
+async def apply_admin_catalog_edit(
+    writer: AdminWriter,
+    actor: AdminActor,
+    catalog_id: str,
+    *,
+    version: int,
+    changes: Mapping[str, Any],
+) -> str:
+    """Change some fields of a catalog. The result is checked whole, as a new catalog would be.
+    An edit that changes nothing keeps the version. Archived catalogs are read-only (W20)."""
+    _require_catalog_permission(actor, "edit")
+    normalised = _normalise_catalog_id(catalog_id)
+    state = await _lock_seen_catalog(writer, normalised, version)
+    if state.status is CatalogStatus.ARCHIVED:
+        raise ArchivedReadOnlyError("An archived catalog cannot be edited; unarchive it first.")
+    current = await writer.fetch_catalog_document(normalised)
+    document = _apply_fields(current, changes)
+    if _comparable(document) == _comparable(current):
+        return normalised
+    _validate_catalog_document(document)
+    await _validate_places(writer, document)
+    await writer.persist_catalog_document(normalised, document)
+    await writer.commit_admin_write()
+    return normalised
+
+
+async def apply_admin_catalog_deletion(
+    writer: AdminWriter, actor: AdminActor, catalog_id: str, *, version: int
+) -> None:
+    """Delete a draft for good. Anything else was, or could have been, seen by readers, so it is
+    archived instead (409 `not-deletable`)."""
+    _require_catalog_permission(actor, "delete")
+    normalised = _normalise_catalog_id(catalog_id)
+    state = await _lock_seen_catalog(writer, normalised, version)
+    if state.status is not CatalogStatus.DRAFT:
+        raise NotDeletableError(
+            f"Only a draft can be deleted; this one is {state.status.value}. Archive it instead."
+        )
+    await writer.persist_catalog_deletion(normalised)
+    await writer.commit_admin_write()
 
 
 async def resolve_admin_catalog_detail(

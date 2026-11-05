@@ -61,9 +61,40 @@ class NotPublishedError(ConflictError):
     problem_type = "https://registry.thoriumreader.com/problems/not-published"
 
 
+class NotDeletableError(ConflictError):
+    """Only a draft can be deleted; anything a reader may have seen is archived instead."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/not-deletable"
+
+
+class ArchivedReadOnlyError(ConflictError):
+    """An archived catalog cannot be edited until it is unarchived (W20)."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/archived-read-only"
+
+
+class DuplicateCatalogError(ConflictError):
+    """Another catalog already has this `catalog`/`shelf` href, or the id derived from it: one
+    identity href is one catalog (`uq_links_identity_href`, ADR-038)."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/duplicate-catalog"
+
+
 class ValidationError(RegistryError):
     status_code = 422
     title = "Unprocessable Entity"
+
+
+class FieldValidationError(ValidationError):
+    """Invalid input, field by field, as the admin API's 422 `errors` (contract §2)."""
+
+    title = "Validation failed"
+    problem_type = "https://registry.thoriumreader.com/problems/validation"
+
+    def __init__(self, errors: list[dict[str, str]]) -> None:
+        plural = len(errors) != 1
+        super().__init__(f"{len(errors)} fields are invalid" if plural else "1 field is invalid")
+        self.errors = errors
 
 
 class ReadTimeoutError(RegistryError):

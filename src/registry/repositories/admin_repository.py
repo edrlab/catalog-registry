@@ -1,4 +1,4 @@
-"""The admin API's reads: counts, the filtered catalog list, what the filters can offer, and countries.
+"""The admin API's reads and writes. Reads: counts, the filtered catalog list, what the filters can offer, and countries.
 
 Each public method is one statement (R4): the list returns its page of catalogs with their places
 and languages, and the total, in a single round trip. Counting happens in SQL.
@@ -10,11 +10,16 @@ reach the statement as text.
 # ruff: noqa: E501 - SQL kept on the lines the statement reads best on
 
 import json
+import uuid
+from collections.abc import Sequence
 from typing import Any, Final
 
-from sqlalchemy import text
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from registry.core.errors import DuplicateCatalogError
+from registry.db.models.catalog import Catalog
 from registry.domain.admin_models import (
     AdminCatalogDetail,
     AdminCatalogLink,
@@ -32,6 +37,12 @@ from registry.domain.admin_models import (
     UsedPlaces,
 )
 from registry.domain.enums import CatalogStatus
+from registry.repositories.catalog_documents import (
+    build_catalog,
+    build_document_from_catalog,
+    persist_catalog_contents,
+)
+from registry.repositories.catalog_repository import EAGER_COLLECTIONS
 from registry.repositories.catalog_rows import fetch_rows
 
 _STATS: Final = text(
@@ -424,9 +435,29 @@ _SET_RECOMMENDED: Final = text(
 )
 
 
+#: Whether the country is known, and which subdivision codes are not, in one round trip. Both are
+#: foreign keys; checked first so the answer names the field rather than a constraint.
+_UNKNOWN_PLACES: Final = text(
+    """
+SELECT (CAST(:country AS text) IS NULL
+        OR EXISTS (SELECT 1 FROM countries WHERE alpha2 = CAST(:country AS text))) AS country_known,
+       coalesce((SELECT array_agg(c.code ORDER BY c.code)
+                   FROM unnest(CAST(:subdivisions AS text[])) AS c(code)
+                  WHERE NOT EXISTS (SELECT 1 FROM subdivisions s WHERE s.code = c.code)),
+                CAST('{}' AS text[])) AS unknown_subdivisions
+"""
+)
+
+_DELETE_CATALOG: Final = text("DELETE FROM catalogs WHERE id = CAST(:id AS uuid)")
+
+#: The constraints that mean "this catalog already exists": its id (derived from the identity
+#: href) or its identity href itself.
+_DUPLICATE_CONSTRAINTS: Final = ("pk_catalogs", "uq_links_identity_href")
+
+
 class AdminCatalogWriter:
-    """The admin API's catalog writes, on the main (read-write) engine. Status and recommendation
-    only; edits, creation and deletion arrive with their routes."""
+    """The admin API's catalog writes, on the main (read-write) engine. Rows are built by the
+    seed's own mapping (`repositories/catalog_documents.py`)."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -449,3 +480,53 @@ class AdminCatalogWriter:
 
     async def commit_admin_write(self) -> None:
         await self._session.commit()
+
+    async def fetch_unknown_places(
+        self, country: str | None, subdivisions: Sequence[str]
+    ) -> tuple[bool, list[str]]:
+        row = (
+            await self._session.execute(
+                _UNKNOWN_PLACES, {"country": country, "subdivisions": list(subdivisions)}
+            )
+        ).one()
+        return row.country_known, list(row.unknown_subdivisions)
+
+    async def persist_new_catalog(
+        self, document: dict[str, Any], catalog_id: uuid.UUID, *, publish: bool
+    ) -> None:
+        catalog = build_catalog(document, catalog_id, recommended=False)
+        catalog.status = CatalogStatus.PUBLISHED if publish else CatalogStatus.DRAFT
+        # ck_catalogs_published_when_published.
+        catalog.published_at = func.now() if publish else None
+        self._session.add(catalog)
+        await self._flush_catalog()
+
+    async def fetch_catalog_document(self, catalog_id: str) -> dict[str, Any]:
+        return build_document_from_catalog(await self._load_catalog(catalog_id))
+
+    async def persist_catalog_document(self, catalog_id: str, document: dict[str, Any]) -> None:
+        existing = await self._load_catalog(catalog_id)
+        built = build_catalog(document, existing.id, recommended=existing.recommended)
+        await persist_catalog_contents(self._session, existing, built)
+        existing.version = Catalog.version + 1
+        await self._flush_catalog()
+
+    async def persist_catalog_deletion(self, catalog_id: str) -> None:
+        await self._session.execute(_DELETE_CATALOG, {"id": catalog_id})
+
+    async def _load_catalog(self, catalog_id: str) -> Catalog:
+        # Already locked by `lock_admin_catalog` in this transaction.
+        statement = (
+            select(Catalog).where(Catalog.id == uuid.UUID(catalog_id)).options(*EAGER_COLLECTIONS)
+        )
+        return (await self._session.scalars(statement)).unique().one()
+
+    async def _flush_catalog(self) -> None:
+        try:
+            await self._session.flush()
+        except IntegrityError as error:
+            if any(name in str(error.orig) for name in _DUPLICATE_CONSTRAINTS):
+                raise DuplicateCatalogError(
+                    "Another catalog already has this catalog or shelf link."
+                ) from None
+            raise

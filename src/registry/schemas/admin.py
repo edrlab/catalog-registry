@@ -1,11 +1,26 @@
 """The admin API's wire contract. Whitelist projection (R3): a response lists its fields."""
 
 import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StringConstraints,
+    field_validator,
+)
+from pydantic_core import PydanticCustomError
 
-from registry.domain.enums import CatalogStatus
+from registry.domain.enums import (
+    CatalogColor,
+    CatalogKind,
+    CatalogStatus,
+    CoverageScope,
+    PublicationType,
+)
 
 
 class AdminModel(BaseModel):
@@ -221,3 +236,87 @@ class TransitionResponse(AdminModel):
 class RecommendedRequest(AdminModel):
     recommended: StrictBool
     version: SeenVersion
+
+
+#: No NUL: Postgres `text` cannot store it, and it would surface as a 500.
+_NO_NUL = r"^[^\x00]*$"
+CatalogName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300, pattern=_NO_NUL)
+]
+LongText = Annotated[str, StringConstraints(max_length=5000, pattern=_NO_NUL)]
+ShortText = Annotated[str, StringConstraints(max_length=300, pattern=_NO_NUL)]
+Href = Annotated[str, StringConstraints(min_length=1, max_length=2048, pattern=_NO_NUL)]
+#: Shape and case are checked by the shared document checks, which say what the code should be.
+PlaceCode = Annotated[str, StringConstraints(max_length=10, pattern=_NO_NUL)]
+LanguageTag = Annotated[str, StringConstraints(max_length=35, pattern=_NO_NUL)]
+
+
+class LinkInput(AdminModel):
+    #: `self` is the registry's own URL, built when the catalog is served.
+    rel: Literal["catalog", "shelf", "icon", "authenticate", "alternate", "profile", "search"]
+    href: Href
+    type: ShortText | None = None
+    title: ShortText | None = None
+    templated: StrictBool = False
+
+
+Kinds = Annotated[list[CatalogKind], Field(min_length=1, max_length=10)]
+Links = Annotated[list[LinkInput], Field(min_length=1, max_length=50)]
+PlaceCodes = Annotated[list[PlaceCode], Field(max_length=50)]
+LanguageTags = Annotated[list[LanguageTag], Field(max_length=50)]
+PublicationTypes = Annotated[list[PublicationType], Field(max_length=10)]
+
+
+class CatalogCreateRequest(AdminModel):
+    """A new catalog (contract §4, "Catalog fields"). The same checks as the seed follow."""
+
+    name: CatalogName
+    description: LongText | None = None
+    color: CatalogColor = CatalogColor.GRAY
+    kinds: Kinds
+    coverage: CoverageScope | None = None
+    country: PlaceCode | None = None
+    city: ShortText | None = None
+    subdivisions: PlaceCodes = []
+    languages: LanguageTags = []
+    publication_types: PublicationTypes = []
+    links: Links
+    publish: StrictBool = False
+
+
+#: Fields a PATCH may not set to `null`: required ones, and lists, which are emptied with `[]`.
+_NOT_NULLABLE = (
+    "name",
+    "color",
+    "kinds",
+    "subdivisions",
+    "languages",
+    "publication_types",
+    "links",
+)
+
+
+class CatalogUpdateRequest(AdminModel):
+    """Some fields of a catalog, and the version they were read at. An absent field is unchanged;
+    `null` clears an optional one; a list replaces the whole list."""
+
+    version: SeenVersion
+    name: CatalogName | None = None
+    description: LongText | None = None
+    color: CatalogColor | None = None
+    kinds: Kinds | None = None
+    coverage: CoverageScope | None = None
+    country: PlaceCode | None = None
+    city: ShortText | None = None
+    subdivisions: PlaceCodes | None = None
+    languages: LanguageTags | None = None
+    publication_types: PublicationTypes | None = None
+    links: Links | None = None
+
+    @field_validator(*_NOT_NULLABLE)
+    @classmethod
+    def _refuse_null(cls, value: Any) -> Any:
+        # Runs only on a value that was sent: an absent field keeps its default and is unchanged.
+        if value is None:
+            raise PydanticCustomError("not_nullable", "Cannot be null")
+        return value

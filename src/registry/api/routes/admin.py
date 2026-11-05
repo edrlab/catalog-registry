@@ -6,7 +6,7 @@ action in the service, where the action is known.
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import StringConstraints
 
 from registry.api.admin_dependencies import require_permission
@@ -19,8 +19,10 @@ from registry.domain.admin_models import (
 )
 from registry.domain.enums import CatalogKind, CatalogStatus, CoverageScope, PublicationType
 from registry.schemas.admin import (
+    CatalogCreateRequest,
     CatalogDetail,
     CatalogListResponse,
+    CatalogUpdateRequest,
     CountryDetail,
     CountryListResponse,
     FilterOptionsResponse,
@@ -32,6 +34,9 @@ from registry.schemas.admin import (
     TransitionResponse,
 )
 from registry.services.admin_service import (
+    apply_admin_catalog_creation,
+    apply_admin_catalog_deletion,
+    apply_admin_catalog_edit,
     apply_admin_recommendation,
     apply_admin_transition,
     resolve_admin_catalog_detail,
@@ -242,3 +247,93 @@ async def replace_admin_catalog_recommended(
         return await resolve_admin_catalog_detail(
             reader, actor, normalised, base_url=request.app.state.settings.base_url
         )
+
+
+INVALID_BODY = "The body is invalid; `errors` names each field."
+
+
+@router.post(
+    "/catalogs",
+    status_code=201,
+    summary="Add a catalog, as a draft or published",
+    responses={
+        409: problem_response(
+            "`duplicate-catalog`: another catalog already has this catalog or shelf link."
+        ),
+        422: problem_response(INVALID_BODY),
+    },
+)
+async def create_admin_catalog(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    body: CatalogCreateRequest,
+) -> CatalogDetail:
+    async with request.app.state.open_admin_writer() as writer:
+        catalog_id = await apply_admin_catalog_creation(
+            writer,
+            actor,
+            body.model_dump(mode="json", exclude={"publish"}),
+            publish=body.publish,
+        )
+    async with request.app.state.open_admin_reader() as reader:
+        return await resolve_admin_catalog_detail(
+            reader, actor, catalog_id, base_url=request.app.state.settings.base_url
+        )
+
+
+@router.patch(
+    "/catalogs/{catalog_id}",
+    summary="Change some fields of a catalog",
+    responses={
+        404: problem_response(NOT_FOUND),
+        409: problem_response(
+            "`version-conflict`: it changed since it was read. "
+            "`archived-read-only`: an archived catalog cannot be edited. "
+            "`duplicate-catalog`: another catalog already has this catalog or shelf link."
+        ),
+        422: problem_response(INVALID_BODY),
+    },
+)
+async def update_admin_catalog(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    catalog_id: str,
+    body: CatalogUpdateRequest,
+) -> CatalogDetail:
+    async with request.app.state.open_admin_writer() as writer:
+        normalised = await apply_admin_catalog_edit(
+            writer,
+            actor,
+            catalog_id,
+            version=body.version,
+            changes=body.model_dump(mode="json", exclude_unset=True, exclude={"version"}),
+        )
+    async with request.app.state.open_admin_reader() as reader:
+        return await resolve_admin_catalog_detail(
+            reader, actor, normalised, base_url=request.app.state.settings.base_url
+        )
+
+
+@router.delete(
+    "/catalogs/{catalog_id}",
+    status_code=204,
+    summary="Delete a draft",
+    responses={
+        404: problem_response(NOT_FOUND),
+        409: problem_response(
+            "`version-conflict`: it changed since it was read. "
+            "`not-deletable`: only a draft can be deleted."
+        ),
+        422: problem_response("`version` is missing or invalid."),
+    },
+)
+async def delete_admin_catalog(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    catalog_id: str,
+    # A query string is text, so not `SeenVersion`, whose strictness is for JSON bodies.
+    version: Annotated[int, Query(ge=1)],
+) -> Response:
+    async with request.app.state.open_admin_writer() as writer:
+        await apply_admin_catalog_deletion(writer, actor, catalog_id, version=version)
+    return Response(status_code=204)

@@ -17,6 +17,7 @@ from registry.core.constants import HEADER_REQUEST_ID, PROBLEM_JSON_MEDIA_TYPE
 from registry.core.errors import (
     AdminUnavailableError,
     AuthenticationError,
+    FieldValidationError,
     PermissionDeniedError,
     RegistryError,
 )
@@ -92,6 +93,7 @@ async def handle_registry_error(_request: Request, exc: Exception) -> JSONRespon
         title=exc.title,
         detail=str(exc),
         problem_type=exc.problem_type,
+        errors=exc.errors if isinstance(exc, FieldValidationError) else None,
         instance=build_problem_instance(_request),
     )
     if isinstance(exc, AuthenticationError):
