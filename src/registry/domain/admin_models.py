@@ -131,3 +131,32 @@ class AdminCatalogState:
 
     status: CatalogStatus
     version: int
+
+
+@dataclass(frozen=True, slots=True)
+class AdminCountryRow:
+    code: str
+    name: str
+    published_catalog_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class AdminCountryPage:
+    total: int
+    rows: Sequence[AdminCountryRow]
+
+
+@dataclass(frozen=True, slots=True)
+class AdminCountryDetail:
+    code: str
+    name: str
+    language_tags: Sequence[str]
+    #: `(type, its subdivisions in the country)`, for the types the back office offers. English
+    #: names, the rule the catalog detail uses.
+    subdivision_types: Sequence[tuple[str, Sequence[AdminSubdivision]]]
+    available_subdivision_types: Sequence[str]
+    #: Every status, 0 included, like `AdminStats.by_status`.
+    by_status: dict[str, int]
+    recommended: int
+    #: Published catalogs per kind; only kinds in use, the service fills the rest with 0.
+    by_kind: dict[str, int]

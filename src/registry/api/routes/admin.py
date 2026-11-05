@@ -21,6 +21,8 @@ from registry.domain.enums import CatalogKind, CatalogStatus, CoverageScope, Pub
 from registry.schemas.admin import (
     CatalogDetail,
     CatalogListResponse,
+    CountryDetail,
+    CountryListResponse,
     FilterOptionsResponse,
     MeResponse,
     ProblemDocument,
@@ -34,6 +36,8 @@ from registry.services.admin_service import (
     apply_admin_transition,
     resolve_admin_catalog_detail,
     resolve_admin_catalog_list,
+    resolve_admin_country_detail,
+    resolve_admin_country_list,
     resolve_admin_me,
     resolve_admin_stats,
     resolve_filter_options,
@@ -148,6 +152,39 @@ async def read_filter_options(
 ) -> FilterOptionsResponse:
     async with request.app.state.open_admin_reader() as reader:
         return await resolve_filter_options(reader)
+
+
+@router.get(
+    "/countries",
+    summary="Countries with at least one catalog, most published first",
+    responses={422: problem_response("A query parameter is invalid; `errors` names each field.")},
+)
+async def read_admin_countries(
+    request: Request,
+    _actor: Annotated[AdminActor, Depends(require_permission("country.view"))],
+    *,
+    q: Annotated[str | None, Query(max_length=200, pattern=r"^[^\x00]*$")] = None,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
+    per_page: Annotated[int, Query(ge=1, le=MAX_PER_PAGE)] = MAX_PER_PAGE,
+) -> CountryListResponse:
+    async with request.app.state.open_admin_reader() as reader:
+        return await resolve_admin_country_list(
+            reader, (q or "").strip() or None, page=page, per_page=per_page
+        )
+
+
+@router.get(
+    "/countries/{code}",
+    summary="One country: its languages, subdivision types and catalog counts",
+    responses={404: problem_response("No country with this code (type `country-not-found`).")},
+)
+async def read_admin_country(
+    request: Request,
+    _actor: Annotated[AdminActor, Depends(require_permission("country.view"))],
+    code: str,
+) -> CountryDetail:
+    async with request.app.state.open_admin_reader() as reader:
+        return await resolve_admin_country_detail(reader, code)
 
 
 @router.post(

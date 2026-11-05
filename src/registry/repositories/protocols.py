@@ -17,6 +17,8 @@ from registry.domain.admin_models import (
     AdminCatalogPage,
     AdminCatalogQuery,
     AdminCatalogState,
+    AdminCountryDetail,
+    AdminCountryPage,
     AdminStats,
     UsedPlaces,
 )
@@ -70,6 +72,12 @@ class AdminReader(Protocol):
     async def fetch_admin_catalogs(self, query: AdminCatalogQuery) -> AdminCatalogPage: ...
 
     async def fetch_admin_catalog(self, catalog_id: str) -> AdminCatalogDetail | None: ...
+
+    async def fetch_admin_countries(
+        self, q: str | None, page: int, per_page: int
+    ) -> AdminCountryPage: ...
+
+    async def fetch_admin_country(self, code: str) -> AdminCountryDetail | None: ...
 
 
 class AdminWriter(Protocol):

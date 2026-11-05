@@ -1,4 +1,4 @@
-"""The admin API's reads: counts, the filtered catalog list, and what the filters can offer.
+"""The admin API's reads: counts, the filtered catalog list, what the filters can offer, and countries.
 
 Each public method is one statement (R4): the list returns its page of catalogs with their places
 and languages, and the total, in a single round trip. Counting happens in SQL.
@@ -22,6 +22,9 @@ from registry.domain.admin_models import (
     AdminCatalogQuery,
     AdminCatalogRow,
     AdminCatalogState,
+    AdminCountryDetail,
+    AdminCountryPage,
+    AdminCountryRow,
     AdminStats,
     AdminSubdivision,
     UsedCountry,
@@ -167,6 +170,86 @@ _DETAIL: Final = text(
 )
 
 
+#: Every country some catalog uses (any status, as `filter-options`), with its published catalogs,
+#: in one statement (R4). `published` is the
+#: predicate `/admin/catalogs?country=XX` uses by default, so the two counts always agree. The
+#: search text matches a name in any language, folded (ADR-059), or the ISO code exactly. The
+#: English name is the alphabetically first, the rule the catalog columns use.
+_COUNTRIES: Final = text(
+    """
+WITH matched AS (
+  SELECT k.alpha2 AS code,
+         coalesce((SELECT n.name FROM country_names n
+                    WHERE n.country_code = k.alpha2 AND n.language_tag = 'en'
+                    ORDER BY n.name LIMIT 1), k.alpha2) AS name,
+         (SELECT count(*) FROM catalogs c
+           WHERE c.country_code = k.alpha2 AND c.status = 'published') AS published
+    FROM countries k
+   WHERE EXISTS (SELECT 1 FROM catalogs c WHERE c.country_code = k.alpha2)
+     AND (CAST(:q AS text) IS NULL OR k.alpha2 = upper(CAST(:q AS text)) OR EXISTS (
+           SELECT 1 FROM country_names n
+            WHERE n.country_code = k.alpha2
+              AND strpos(public.fold(n.name), public.fold(CAST(:q AS text))) > 0))
+), paged AS (
+  SELECT * FROM matched ORDER BY published DESC, name, code LIMIT :limit OFFSET :offset
+)
+SELECT (SELECT count(*) FROM matched) AS total, p.code, p.name, p.published
+  FROM (SELECT 1) AS one
+  LEFT JOIN paged p ON true
+ ORDER BY p.published DESC, p.name, p.code
+"""
+)
+
+#: One country with its languages, subdivision types and catalog counts, in one statement (R4).
+#: The available types are those the database knows for the country: the offered ones and those
+#: its subdivisions carry. ISO 3166-2's full vocabulary is not loaded yet (ADR-055).
+_COUNTRY: Final = text(
+    """
+SELECT k.alpha2 AS code,
+       coalesce((SELECT n.name FROM country_names n
+                  WHERE n.country_code = k.alpha2 AND n.language_tag = 'en'
+                  ORDER BY n.name LIMIT 1), k.alpha2) AS name,
+       (SELECT coalesce(array_agg(l.language_tag ORDER BY l.language_tag), '{}')
+          FROM country_languages l WHERE l.country_code = k.alpha2) AS language_tags,
+       (SELECT coalesce(jsonb_agg(jsonb_build_object(
+                 'key', t.subdivision_type,
+                 'subdivisions', (SELECT coalesce(jsonb_agg(jsonb_build_object('code', d.code, 'name', d.name)
+                                           ORDER BY d.name NULLS LAST, d.code), '[]'::jsonb)
+                                    FROM (SELECT s.code,
+                                                 (SELECT n.name FROM subdivision_names n
+                                                   WHERE n.subdivision_code = s.code AND n.language_tag = 'en'
+                                                   ORDER BY n.name LIMIT 1) AS name
+                                            FROM subdivisions s
+                                           WHERE s.country_alpha2 = k.alpha2
+                                             AND s.subdivision_type = t.subdivision_type) d))
+               ORDER BY t.subdivision_type), '[]'::jsonb)
+          FROM country_subdivision_types t WHERE t.country_code = k.alpha2) AS subdivision_types,
+       (SELECT coalesce(array_agg(x.key ORDER BY x.key), '{}')
+          FROM (SELECT t.subdivision_type AS key FROM country_subdivision_types t
+                 WHERE t.country_code = k.alpha2
+                UNION
+                SELECT s.subdivision_type FROM subdivisions s
+                 WHERE s.country_alpha2 = k.alpha2 AND s.subdivision_type IS NOT NULL) x)
+         AS available_subdivision_types,
+       s.draft, s.published, s.unpublished, s.archived, s.recommended,
+       (SELECT coalesce(jsonb_object_agg(y.kind, y.n), '{}'::jsonb)
+          FROM (SELECT ck.kind::text AS kind, count(*) AS n
+                  FROM catalog_kinds ck JOIN catalogs c ON c.id = ck.catalog_id
+                 WHERE c.country_code = k.alpha2 AND c.status = 'published'
+                 GROUP BY ck.kind) y) AS by_kind
+  FROM countries k
+  CROSS JOIN LATERAL (
+    SELECT count(*) FILTER (WHERE c.status = 'draft') AS draft,
+           count(*) FILTER (WHERE c.status = 'published') AS published,
+           count(*) FILTER (WHERE c.status = 'unpublished') AS unpublished,
+           count(*) FILTER (WHERE c.status = 'archived') AS archived,
+           count(*) FILTER (WHERE c.status = 'published' AND c.recommended) AS recommended
+      FROM catalogs c WHERE c.country_code = k.alpha2) s
+ WHERE k.alpha2 = :code
+"""
+)
+
+
 def _array_or_none(values: list[str] | Any) -> list[str] | None:
     """An empty filter means "no filter", which SQL sees as NULL."""
     return list(values) if values else None
@@ -269,6 +352,48 @@ class AdminRepository:
             published_at=row["published_at"],
             submitter_name=row["submitter_name"],
             submitter_email=row["submitter_email"],
+        )
+
+    async def fetch_admin_countries(
+        self, q: str | None, page: int, per_page: int
+    ) -> AdminCountryPage:
+        rows = await fetch_rows(
+            self._session,
+            _COUNTRIES,
+            {"q": q, "limit": per_page, "offset": (page - 1) * per_page},
+        )
+        return AdminCountryPage(
+            total=rows[0]["total"],
+            rows=[
+                AdminCountryRow(row["code"], row["name"], row["published"])
+                for row in rows
+                if row["code"] is not None
+            ],
+        )
+
+    async def fetch_admin_country(self, code: str) -> AdminCountryDetail | None:
+        rows = await fetch_rows(self._session, _COUNTRY, {"code": code})
+        if not rows:
+            return None
+        row = rows[0]
+        return AdminCountryDetail(
+            code=row["code"],
+            name=row["name"],
+            language_tags=list(row["language_tags"]),
+            subdivision_types=[
+                (
+                    item["key"],
+                    [
+                        AdminSubdivision(code=s["code"], name=s["name"])
+                        for s in item["subdivisions"]
+                    ],
+                )
+                for item in _json(row["subdivision_types"])
+            ],
+            available_subdivision_types=list(row["available_subdivision_types"]),
+            by_status={status.value: row[status.value] for status in CatalogStatus},
+            recommended=row["recommended"],
+            by_kind=dict(_json(row["by_kind"])),
         )
 
 
