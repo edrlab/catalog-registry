@@ -208,7 +208,23 @@ async def test_a_country_shows_its_languages_and_subdivision_types(
         {"tag": "de", "name": "German"},
     ]
     assert belgium["subdivision_types"] == [
-        {"key": "province", "label": "Province", "subdivision_count": 0, "subdivisions": []},
+        {
+            "key": "province",
+            "label": "Province",
+            "subdivision_count": 10,
+            "subdivisions": [
+                {"code": "BE-VAN", "name": "Antwerp"},
+                {"code": "BE-VOV", "name": "East Flanders"},
+                {"code": "BE-VBR", "name": "Flemish Brabant"},
+                {"code": "BE-WHT", "name": "Hainaut"},
+                {"code": "BE-VLI", "name": "Limburg"},
+                {"code": "BE-WLG", "name": "Liège"},
+                {"code": "BE-WLX", "name": "Luxembourg"},
+                {"code": "BE-WNA", "name": "Namur"},
+                {"code": "BE-WBR", "name": "Walloon Brabant"},
+                {"code": "BE-VWV", "name": "West Flanders"},
+            ],
+        },
         {
             "key": "region",
             "label": "Region",
@@ -229,7 +245,8 @@ async def test_a_country_shows_its_languages_and_subdivision_types(
 async def test_a_country_with_no_catalogs_and_no_types_is_all_zeros(
     admin_client: AsyncClient,
 ) -> None:
-    body = await read_country(admin_client, "IS")
+    """The Vatican has no ISO 3166-2 subdivisions, so nothing to offer and nothing to count."""
+    body = await read_country(admin_client, "VA")
 
     assert body["subdivision_types"] == body["available_subdivision_types"] == []
     assert body["kpis"] == {

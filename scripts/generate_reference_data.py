@@ -203,6 +203,75 @@ def generate_subdivision_types() -> list[tuple[str, str, int, int, str]]:
     ]
 
 
+def generate_all_subdivisions(iso: set[str]) -> list[tuple[str, str, str | None, str]]:
+    """Every ISO 3166-2 subdivision pycountry knows for a country in `countries`:
+    (code, country, parent code, type key), parents before children so a plain INSERT order
+    satisfies `subdivisions.parent_code`'s foreign key."""
+    import pycountry  # noqa: PLC0415 - only the generator needs it
+
+    known = {s.code: s for s in pycountry.subdivisions if s.country_code in iso}
+
+    def depth(code: str) -> int:
+        parent = known[code].parent_code
+        return 0 if not parent or parent not in known else 1 + depth(parent)
+
+    return sorted(
+        (
+            (
+                code,
+                s.country_code,
+                s.parent_code if s.parent_code in known else None,
+                s.type.lower(),
+            )
+            for code, s in known.items()
+        ),
+        key=lambda row: (depth(row[0]), row[0]),
+    )
+
+
+def _read_cldr_subdivisions(lang: str, cache: Path) -> dict[str, list[str]]:
+    """One CLDR subdivisions file as {cldr key: names}, alternates included. Empty if CLDR has
+    no subdivision names for *lang*."""
+    try:
+        xml = download_cached(f"{XML_BASE}/{lang}.xml", cache)
+    except FileNotFoundError:
+        return {}
+    names: dict[str, list[str]] = collections.defaultdict(list)
+    for match in re.finditer(
+        r'<subdivision type="([a-z0-9]+)"( alt="[^"]+")?[^>]*>([^<]+)</subdivision>', xml
+    ):
+        names[match.group(1)].append(SUPERSCRIPT.sub("", match.group(3)).strip())
+    return names
+
+
+def generate_all_subdivision_names(
+    subdivisions: Sequence[tuple[str, str, str | None, str]],
+    languages: dict[str, list[str]],
+    cache: Path,
+) -> list[tuple[str, str, str]]:
+    """Names for every subdivision: English plus its country's official languages from CLDR, the
+    overseas territory names, the hand-added ones, and pycountry's English name wherever CLDR has
+    no English name, so every subdivision can be shown and searched."""
+    import pycountry  # noqa: PLC0415
+
+    english = {s.code: s.name for s in pycountry.subdivisions}
+    files: dict[str, dict[str, list[str]]] = {}
+    rows: set[tuple[str, str, str]] = set(HAND_SUBDIVISION_NAMES)
+    for code, country, _parent, _type in subdivisions:
+        key = code.replace("-", "").lower()
+        for lang in ["en", *languages.get(country, [])]:
+            if lang not in files:
+                files[lang] = _read_cldr_subdivisions(lang, cache)
+            rows.update((code, lang, name) for name in files[lang].get(key, []))
+            if code in OVERSEAS_TERRITORY:
+                name = download_territory_names(lang, cache).get(OVERSEAS_TERRITORY[code])
+                if name:
+                    rows.add((code, lang, name))
+        if not any(row[0] == code and row[1] == "en" for row in rows):
+            rows.add((code, "en", english[code]))
+    return sorted(rows)
+
+
 def write_csv(path: Path, header: list[str], rows: Sequence[tuple[object, ...]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -214,6 +283,13 @@ def write_csv(path: Path, header: list[str], rows: Sequence[tuple[object, ...]])
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--python", action="store_true", help="print the rows as Python literals")
+    parser.add_argument(
+        "--full-subdivisions",
+        type=Path,
+        metavar="DIR",
+        help="also write every ISO 3166-2 subdivision and its names as CSV files into DIR "
+        "(the full-subdivisions data migration's data)",
+    )
     args = parser.parse_args()
 
     iso = extract_iso_countries()
@@ -248,6 +324,21 @@ def main() -> None:
         f"country_languages {len(language_rows)}, country_names {len(names)}, "
         f"subdivision_names {len(sub_names)}, subdivision types {len(types)}"
     )
+
+    if args.full_subdivisions:
+        every = generate_all_subdivisions(iso)
+        every_names = generate_all_subdivision_names(every, languages, CACHE)
+        write_csv(
+            args.full_subdivisions / "subdivisions.csv",
+            ["code", "country_alpha2", "parent_code", "subdivision_type"],
+            [(code, country, parent or "", kind) for code, country, parent, kind in every],
+        )
+        write_csv(
+            args.full_subdivisions / "subdivision_names.csv",
+            ["subdivision_code", "language_tag", "name"],
+            every_names,
+        )
+        print(f"all subdivisions {len(every)}, their names {len(every_names)}")
 
     if args.python:
         for name, rows in (

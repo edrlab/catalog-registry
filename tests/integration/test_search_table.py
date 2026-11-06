@@ -111,14 +111,14 @@ async def overseas_catalogs(db_session: AsyncSession, searchable_catalogs: None)
         text(
             "INSERT INTO subdivisions (code, country_alpha2, subdivision_type) VALUES "
             "('FR-NC', 'FR', 'overseas collectivity with special status'), "
-            "('FR-973', 'FR', 'overseas unique territorial collectivity')"
+            "('FR-973', 'FR', 'overseas unique territorial collectivity') ON CONFLICT DO NOTHING"
         )
     )
     await db_session.execute(
         text(
             "INSERT INTO subdivision_names (subdivision_code, language_tag, name) VALUES "
             "('FR-NC', 'fr', 'Nouvelle-Calédonie'), ('FR-NC', 'en', 'New Caledonia'), "
-            "('FR-973', 'fr', 'Guyane'), ('FR-973', 'en', 'French Guiana')"
+            "('FR-973', 'fr', 'Guyane'), ('FR-973', 'en', 'French Guiana') ON CONFLICT DO NOTHING"
         )
     )
     await add_overseas_catalog(db_session, OVERSEAS_NC, "FR-NC")

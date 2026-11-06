@@ -695,7 +695,7 @@ async def test_the_real_libraries_file_imports(db_session: AsyncSession) -> None
 
 
 async def test_an_unseeded_subdivision_is_a_readable_message(db_session: AsyncSession) -> None:
-    """`subdivisions` is not a full copy of ISO 3166-2, so a valid code can still be missing.
+    """A code the `subdivisions` table does not hold is refused with a readable message.
 
     It used to fail at flush as a raw `IntegrityError` naming
     `fk_catalog_subdivisions_subdivision_code_subdivisions`: not the code, not the catalog, not
@@ -711,14 +711,14 @@ async def test_an_unseeded_subdivision_is_a_readable_message(db_session: AsyncSe
                     "title": "Dutch Library",
                     "kind": ["public"],
                     "country": "NL",
-                    "subdivisions": ["NL-ZH", "NL-UT"],
+                    "subdivisions": ["NL-ZZ", "NL-QQ"],
                 },
                 "links": [{"href": "https://library.example/nl.opds2", "rel": "catalog"}],
             }
         ],
     }
 
-    with pytest.raises(ValidationError, match="NL-UT, NL-ZH"):
+    with pytest.raises(ValidationError, match="NL-QQ, NL-ZZ"):
         await import_feed_document(db_session, feed, source="test")
 
     assert await count(db_session, Catalog) == 0

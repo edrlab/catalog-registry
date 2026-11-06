@@ -90,7 +90,11 @@ async def add_subdivisions(session: AsyncSession, codes: list[str]) -> None:
     """Reference rows for the test's transaction only (the seeded table holds a handful)."""
     for code in codes:
         await session.execute(
-            text("INSERT INTO subdivisions (code, country_alpha2) VALUES (:c, 'FR')"), {"c": code}
+            text(
+                "INSERT INTO subdivisions (code, country_alpha2) VALUES (:c, 'FR') "
+                "ON CONFLICT DO NOTHING"
+            ),
+            {"c": code},
         )
 
 
