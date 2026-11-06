@@ -70,10 +70,9 @@ async def test_the_list_shows_everyone_with_what_the_admin_may_do(
 
 
 @pytest.mark.parametrize("email", [EDITOR, VIEWER])
-async def test_only_admins_see_or_change_people(
+async def test_only_admins_change_people(
     admin_client: AsyncClient, people: dict[str, str], email: str
 ) -> None:
-    assert (await users(admin_client, email)).status_code == 403
     assert (await set_role(admin_client, people[VIEWER], "admin", email)).status_code == 403
     assert (await access(admin_client, people[VIEWER], "deactivate", email)).status_code == 403
 
@@ -245,3 +244,28 @@ async def test_every_country_with_subdivisions_offers_them(
         "state": 28,
         "union territory": 8,
     }
+
+
+@pytest.mark.parametrize("email", [EDITOR, VIEWER])
+async def test_everyone_sees_the_active_team_but_cannot_act(
+    admin_client: AsyncClient, people: dict[str, str], email: str
+) -> None:
+    await access(admin_client, people[VIEWER if email == EDITOR else EDITOR], "deactivate")
+
+    response = await users(admin_client, email)
+
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    assert all(item["is_active"] for item in items)
+    assert all(item["allowed_actions"] == [] for item in items)
+    assert {ADMIN, email} <= {item["email"] for item in items}
+
+
+async def test_an_admin_also_sees_who_lost_access(
+    admin_client: AsyncClient, people: dict[str, str]
+) -> None:
+    await access(admin_client, people[VIEWER], "deactivate")
+
+    listed = {item["email"]: item for item in (await users(admin_client)).json()["items"]}
+
+    assert listed[VIEWER]["is_active"] is False

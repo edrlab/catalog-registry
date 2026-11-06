@@ -10,6 +10,7 @@ seed can still print one sentence.
 """
 
 import re
+import unicodedata
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -160,10 +161,43 @@ def build_link_problems(links: list[dict[str, Any]]) -> list[DocumentProblem]:
     return problems
 
 
+#: Besides letters and combining marks, a city name may hold these: "Saint-Étienne", "L'Aquila",
+#: "St. Gallen". Digits, parentheses, slashes and other symbols are refused.
+CITY_PUNCTUATION = frozenset(" -'\u2019.")  # \u2019 is the typographic apostrophe
+MAX_CITY_LENGTH = 100
+
+
+def build_city_problems(metadata: dict[str, Any]) -> list[DocumentProblem]:
+    """A city must read as a place name: letters (any script) and combining marks, with spaces,
+    hyphens, apostrophes and periods between them; it starts with a letter and has no double
+    spaces. One rule for the seed, `make add` and the admin API."""
+    city = metadata.get("city")
+    if city is None:
+        return []
+    path = ("metadata", "city")
+    if not isinstance(city, str) or not city.strip():
+        return [DocumentProblem(path, "The city cannot be blank.")]
+    if len(city) > MAX_CITY_LENGTH:
+        return [DocumentProblem(path, f"Use at most {MAX_CITY_LENGTH} characters.")]
+    letters_only = all(
+        unicodedata.category(char)[0] in "LM" or char in CITY_PUNCTUATION for char in city
+    )
+    if (
+        not letters_only
+        or unicodedata.category(city[0])[0] != "L"
+        or "  " in city
+        or city != city.strip()
+    ):
+        return [DocumentProblem(path, "Use letters only: no numbers or symbols.")]
+    return []
+
+
 def build_consistency_problems(document: dict[str, Any]) -> list[DocumentProblem]:
-    """Repeats and link rules: what the schema cannot see and the database would refuse."""
+    """Repeats, the city and link rules: what the schema cannot see and the database would
+    refuse or should not hold."""
     metadata = document["metadata"]
     return [
+        *build_city_problems(metadata),
         *_build_repeat_problems(metadata.get("kind") or (), ("metadata", "kind"), "kind"),
         *_build_repeat_problems(
             metadata.get("publicationTypes") or (),

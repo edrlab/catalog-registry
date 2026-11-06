@@ -565,3 +565,66 @@ async def test_the_openapi_document_has_the_write_routes(admin_client: AsyncClie
 
     assert {"post"} <= set(paths["/admin/catalogs"])
     assert {"get", "patch", "delete"} <= set(paths["/admin/catalogs/{catalog_id}"])
+
+
+@pytest.mark.parametrize(
+    "city",
+    ["Saint-Étienne", "L'Aquila", "L\u2019Aquila", "St. Gallen", "Tiruchirappalli", "東京", "मुंबई"],
+)
+async def test_a_city_in_letters_is_accepted(
+    admin_client: AsyncClient, editor: str, city: str
+) -> None:
+    response = await create(admin_client, new_catalog(city=f"  {city} "))
+
+    assert response.status_code == 201, response.text
+    assert response.json()["place"]["city"] == city
+
+
+@pytest.mark.parametrize(
+    ("city", "message"),
+    [
+        ("Paris 75", "Use letters only: no numbers or symbols."),
+        ("Frankfurt (Oder)", "Use letters only: no numbers or symbols."),
+        ("Namur/Liège", "Use letters only: no numbers or symbols."),
+        ("-Lyon", "Use letters only: no numbers or symbols."),
+        ("Two  Spaces", "Use letters only: no numbers or symbols."),
+        ("   ", "The city cannot be blank."),
+    ],
+)
+async def test_a_city_with_numbers_or_symbols_is_refused(
+    admin_client: AsyncClient, editor: str, city: str, message: str
+) -> None:
+    response = await create(admin_client, new_catalog(city=city))
+
+    assert response.json()["errors"] == [{"field": "city", "message": message}]
+
+
+async def test_an_edit_checks_the_city_too(admin_client: AsyncClient, editor: str) -> None:
+    catalog = (await create(admin_client, new_catalog())).json()
+
+    response = await edit(admin_client, catalog["id"], {"version": 1, "city": "Liège 4000"})
+
+    assert error_fields(response) == ["city"]
+
+
+@pytest.mark.parametrize(
+    ("changes", "field"),
+    [
+        ({"name": "x" * 201}, "name"),
+        ({"name": "tab\there"}, "name"),
+        ({"description": "d" * 2001}, "description"),
+        ({"city": "c" * 101}, "city"),
+        ({"links": [{"rel": "catalog", "href": HREF, "type": "t" * 256}]}, "links.0.type"),
+        ({"links": [{"rel": "catalog", "href": HREF, "title": "t" * 301}]}, "links.0.title"),
+    ],
+)
+async def test_the_length_limits_match_the_back_office_form(
+    admin_client: AsyncClient, editor: str, changes: dict[str, Any], field: str
+) -> None:
+    assert error_fields(await create(admin_client, new_catalog(**changes))) == [field]
+
+
+async def test_a_multi_line_description_is_accepted(admin_client: AsyncClient, editor: str) -> None:
+    response = await create(admin_client, new_catalog(description="First line.\n\tSecond line."))
+
+    assert response.status_code == 201, response.text

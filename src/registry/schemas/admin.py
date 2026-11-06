@@ -250,11 +250,18 @@ class RecommendedRequest(AdminModel):
 
 #: No NUL: Postgres `text` cannot store it, and it would surface as a 500.
 _NO_NUL = r"^[^\x00]*$"
+#: A one-line value: no control characters at all.
+_NO_CONTROL = r"^[^\x00-\x1f\x7f]*$"
 CatalogName = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300, pattern=_NO_NUL)
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200, pattern=_NO_CONTROL)
 ]
-LongText = Annotated[str, StringConstraints(max_length=5000, pattern=_NO_NUL)]
+#: Newlines and tabs are allowed in a description.
+LongText = Annotated[str, StringConstraints(max_length=2000, pattern=_NO_NUL)]
 ShortText = Annotated[str, StringConstraints(max_length=300, pattern=_NO_NUL)]
+#: A media type; parameters are allowed (`application/opds+json;profile=…`).
+MediaType = Annotated[str, StringConstraints(max_length=255, pattern=_NO_CONTROL)]
+#: Letters only is checked by the shared document checks, which the seed applies too.
+CityText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=100, pattern=_NO_NUL)]
 Href = Annotated[str, StringConstraints(min_length=1, max_length=2048, pattern=_NO_NUL)]
 #: Shape and case are checked by the shared document checks, which say what the code should be.
 PlaceCode = Annotated[str, StringConstraints(max_length=10, pattern=_NO_NUL)]
@@ -265,7 +272,7 @@ class LinkInput(AdminModel):
     #: `self` is the registry's own URL, built when the catalog is served.
     rel: Literal["catalog", "shelf", "icon", "authenticate", "alternate", "profile", "search"]
     href: Href
-    type: ShortText | None = None
+    type: MediaType | None = None
     title: ShortText | None = None
     templated: StrictBool = False
 
@@ -286,7 +293,7 @@ class CatalogCreateRequest(AdminModel):
     kinds: Kinds
     coverage: CoverageScope | None = None
     country: PlaceCode | None = None
-    city: ShortText | None = None
+    city: CityText | None = None
     subdivisions: PlaceCodes = []
     languages: LanguageTags = []
     publication_types: PublicationTypes = []
@@ -317,7 +324,7 @@ class CatalogUpdateRequest(AdminModel):
     kinds: Kinds | None = None
     coverage: CoverageScope | None = None
     country: PlaceCode | None = None
-    city: ShortText | None = None
+    city: CityText | None = None
     subdivisions: PlaceCodes | None = None
     languages: LanguageTags | None = None
     publication_types: PublicationTypes | None = None

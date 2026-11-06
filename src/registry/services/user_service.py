@@ -42,7 +42,11 @@ def _build_user_item(actor: AdminActor, user: AdminUser, active_admins: int) -> 
 
 
 async def resolve_admin_users(store: UserStore, actor: AdminActor) -> UserListResponse:
+    """Everyone with access. Admins (`user.view`) also see who lost it; everyone else sees active
+    people only, with no actions."""
     users = await store.fetch_admin_users()
+    if "user.view" not in build_permissions(actor.role):
+        users = [user for user in users if user.is_active]
     admins = sum(1 for user in users if user.role is ActorRole.ADMIN and user.is_active)
     return UserListResponse(items=[_build_user_item(actor, user, admins) for user in users])
 

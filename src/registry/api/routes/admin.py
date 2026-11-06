@@ -412,7 +412,7 @@ USER_CONFLICT = "`self-change`: not on yourself. `last-admin`: it would leave no
 @router.get("/users", summary="Everyone with access to the back office, and what you may do")
 async def read_admin_users(
     request: Request,
-    actor: Annotated[AdminActor, Depends(require_permission("user.view"))],
+    actor: Annotated[AdminActor, Depends(require_permission("backoffice.view"))],
 ) -> UserListResponse:
     async with request.app.state.open_actor_store() as store:
         return await resolve_admin_users(store, actor)
