@@ -121,3 +121,16 @@ def test_every_overseas_subdivision_has_a_territory_letter_code() -> None:
     assert generator.OVERSEAS_TERRITORY["FR-NC"] == "NC"
     assert generator.OVERSEAS_TERRITORY["FR-973"] == "GF"
     assert all(code.startswith("FR-") for code in generator.OVERSEAS_TERRITORY)
+
+
+@pytest.mark.parametrize(
+    ("raw", "clean"),
+    [
+        ("Brighton &amp; Hove", "Brighton & Hove"),
+        ("Île-de-France²", "Île-de-France"),
+        ("  Wallonie ", "Wallonie"),
+        ("Saint-Barth&#233;lemy", "Saint-Barthélemy"),
+    ],
+)
+def test_cldr_names_are_made_plain(raw: str, clean: str) -> None:
+    assert generator.clean_cldr_name(raw) == clean

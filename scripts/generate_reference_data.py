@@ -20,6 +20,7 @@ import argparse
 import ast
 import collections
 import csv
+import html
 import json
 import re
 import urllib.error
@@ -97,6 +98,12 @@ OVERSEAS_TERRITORY = {
     "FR-TF": "TF",
     "FR-WF": "WF",
 }
+
+
+def clean_cldr_name(raw: str) -> str:
+    """A name as CLDR's XML writes it, made plain: entities decoded (`&amp;` is `&`; the files are
+    read with a regex, not an XML parser) and the trailing footnote digit dropped."""
+    return SUPERSCRIPT.sub("", html.unescape(raw)).strip()
 
 
 def download_cached(url: str, cache: Path) -> str:
@@ -212,7 +219,7 @@ def generate_subdivision_names(
                 continue
             pattern = rf'<subdivision type="{cldr_key}"( alt="[^"]+")?[^>]*>([^<]+)</subdivision>'
             for match in re.finditer(pattern, xml):
-                rows.add((code, lang, SUPERSCRIPT.sub("", match.group(2)).strip()))
+                rows.add((code, lang, clean_cldr_name(match.group(2))))
             if code in OVERSEAS_TERRITORY:
                 name = download_territory_names(lang, cache).get(OVERSEAS_TERRITORY[code])
                 if name:
@@ -272,7 +279,7 @@ def _read_cldr_subdivisions(lang: str, cache: Path) -> dict[str, list[str]]:
     for match in re.finditer(
         r'<subdivision type="([a-z0-9]+)"( alt="[^"]+")?[^>]*>([^<]+)</subdivision>', xml
     ):
-        names[match.group(1)].append(SUPERSCRIPT.sub("", match.group(3)).strip())
+        names[match.group(1)].append(clean_cldr_name(match.group(3)))
     return names
 
 

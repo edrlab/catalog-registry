@@ -369,3 +369,14 @@ async def test_every_official_language_has_an_english_name(db_session: AsyncSess
     assert [tag for tag in tags if build_language_name(tag) == tag] == []
     assert build_language_name("kha") == "Khasi"
     assert build_language_name("cak") == "Kaqchikel"
+
+
+async def test_no_stored_name_carries_an_xml_entity(db_session: AsyncSession) -> None:
+    """CLDR's XML is read with a regex, so `&amp;` once reached the table ("Brighton &amp; Hove")."""
+    found = await rows(
+        db_session,
+        "SELECT name FROM subdivision_names WHERE name ~ '&(#?[a-z0-9]+);' "
+        "UNION ALL SELECT name FROM country_names WHERE name ~ '&(#?[a-z0-9]+);'",
+    )
+
+    assert found == []
