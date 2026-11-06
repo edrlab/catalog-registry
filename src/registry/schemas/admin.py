@@ -49,9 +49,17 @@ class MeResponse(AdminModel):
     #: The caller's actor id: the users page marks "you" with it (contract 0.9).
     id: str
     email: str
+    #: The chosen name, or the email's local part when none is chosen (`name_is_set`).
     name: str
+    name_is_set: bool
     role: str
     permissions: list[str]
+    is_active: bool
+    created_at: datetime.datetime | None
+    #: The previous request's time, not a sign-in: null on the first visit (contract 0.10).
+    last_seen_at: datetime.datetime | None
+    identity_issuer: str | None
+    identity_subject: str | None
 
 
 class StatusCounts(AdminModel):
@@ -434,3 +442,17 @@ class SubdivisionTypesRequest(AdminModel):
         list[Annotated[str, StringConstraints(max_length=100, pattern=_NO_NUL)]],
         Field(max_length=100),
     ]
+
+
+class MeUpdateRequest(AdminModel):
+    """Your own display name (contract 0.10). `null` or blank clears it."""
+
+    name: (
+        Annotated[
+            str,
+            StringConstraints(
+                strip_whitespace=True, max_length=100, pattern=r"^[^\x00-\x1f\x7f]*$"
+            ),
+        ]
+        | None
+    )

@@ -36,6 +36,7 @@ from registry.schemas.admin import (
     FeedCheckResponse,
     FilterOptionsResponse,
     MeResponse,
+    MeUpdateRequest,
     ProblemDocument,
     RecommendedRequest,
     StatsResponse,
@@ -50,6 +51,7 @@ from registry.services.admin_service import (
     apply_admin_catalog_creation,
     apply_admin_catalog_deletion,
     apply_admin_catalog_edit,
+    apply_admin_name,
     apply_admin_recommendation,
     apply_admin_transition,
     apply_country_subdivision_types,
@@ -101,6 +103,20 @@ async def read_admin_me(
     actor: Annotated[AdminActor, Depends(require_permission("backoffice.view"))],
 ) -> MeResponse:
     return resolve_admin_me(actor)
+
+
+@router.patch(
+    "/me",
+    summary="Change your own display name",
+    responses={422: problem_response("The name is invalid; `errors` names it.")},
+)
+async def update_admin_me(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("backoffice.view"))],
+    body: MeUpdateRequest,
+) -> MeResponse:
+    async with request.app.state.open_actor_store() as store:
+        return await apply_admin_name(store, actor, body.name)
 
 
 @router.get("/stats", summary="Catalog counts by status")

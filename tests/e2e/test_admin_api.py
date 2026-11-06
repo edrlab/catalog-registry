@@ -213,7 +213,11 @@ async def test_a_401_says_how_to_authenticate(admin_client: AsyncClient) -> None
     assert response.headers["www-authenticate"].startswith("Registry-Service-Key")
 
 
-NO_CONFLICT_PATHS = {"/admin/feed-checks", "/admin/countries/{code}/subdivision-types"}
+NO_CONFLICT_PATHS = {
+    "/admin/feed-checks",
+    "/admin/countries/{code}/subdivision-types",
+    "/admin/me",
+}
 
 
 async def test_the_openapi_document_describes_every_admin_problem(
@@ -361,13 +365,17 @@ async def test_a_first_visit_creates_a_viewer(
     stored = (
         await db_session.execute(text("SELECT id::text, role::text, last_seen_at FROM actors"))
     ).one()
-    assert response.json() == {
+    body = response.json()
+    assert {key: body[key] for key in ("id", "email", "name", "name_is_set", "role")} == {
         "id": stored[0],
         "email": "new.person@edrlab.org",
         "name": "new.person",
+        "name_is_set": False,
         "role": "viewer",
-        "permissions": ["backoffice.view", "catalog.view", "country.view"],
     }
+    assert body["permissions"] == ["backoffice.view", "catalog.view", "country.view"]
+    assert body["is_active"] is True
+    assert body["last_seen_at"] is None  # a first visit has no previous one
     assert stored[1] == "viewer"
     assert stored[2] is not None
 

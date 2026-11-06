@@ -13,6 +13,7 @@ from registry.domain.enums import ActorRole
 #: request is fine at this volume; if it ever is not, update `last_seen_at` only when it is stale.
 _PERSIST_LOGIN: Final = text(
     """
+WITH previous AS (SELECT last_seen_at FROM actors WHERE email = :email)
 INSERT INTO actors (email, name, identity_issuer, identity_subject, last_seen_at)
 VALUES (:email, :name, :issuer, :subject, now())
 ON CONFLICT (email) DO UPDATE
@@ -20,7 +21,8 @@ ON CONFLICT (email) DO UPDATE
        identity_issuer = EXCLUDED.identity_issuer,
        identity_subject = EXCLUDED.identity_subject,
        name = coalesce(actors.name, EXCLUDED.name)
-RETURNING id::text AS id, email, name, role::text AS role, is_active
+RETURNING id::text AS id, email, name, role::text AS role, is_active, created_at,
+          identity_issuer, identity_subject, (SELECT last_seen_at FROM previous) AS previous_seen_at
 """
 )
 
@@ -40,6 +42,7 @@ _LOCK_USER: Final = text(
 _SET_ROLE: Final = text(
     "UPDATE actors SET role = CAST(:role AS actor_role) WHERE id = CAST(:id AS uuid)"
 )
+_SET_NAME: Final = text("UPDATE actors SET name = :name WHERE id = CAST(:id AS uuid)")
 _SET_ACTIVE: Final = text("UPDATE actors SET is_active = :active WHERE id = CAST(:id AS uuid)")
 
 
@@ -79,7 +82,15 @@ class ActorRepository:
             name=row["name"],
             role=ActorRole(row["role"]),
             is_active=row["is_active"],
+            created_at=row["created_at"],
+            previous_seen_at=row["previous_seen_at"],
+            identity_issuer=row["identity_issuer"],
+            identity_subject=row["identity_subject"],
         )
+
+    async def persist_actor_name(self, actor_id: str, name: str | None) -> None:
+        await self._session.execute(_SET_NAME, {"id": actor_id, "name": name})
+        await self._session.commit()
 
     async def fetch_admin_users(self) -> list[AdminUser]:
         return [_build_user(row) for row in await self._session.execute(_USERS)]

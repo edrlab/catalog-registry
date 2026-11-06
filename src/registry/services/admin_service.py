@@ -1,5 +1,6 @@
 """What the admin API says, assembled from what the repositories read."""
 
+import dataclasses
 import json
 import re
 import uuid
@@ -42,7 +43,7 @@ from registry.domain.labels import (
 from registry.domain.language import normalise_language_tag
 from registry.domain.lifecycle import TRANSITIONS, UNDO_ACTIONS, UndoAction, build_allowed_actions
 from registry.domain.permissions import build_permissions
-from registry.repositories.protocols import ActorStore, AdminReader, AdminWriter
+from registry.repositories.protocols import ActorStore, AdminReader, AdminWriter, ProfileStore
 from registry.schemas.admin import (
     CatalogDetail,
     CatalogListItem,
@@ -100,9 +101,22 @@ def resolve_admin_me(actor: AdminActor) -> MeResponse:
         id=actor.id,
         email=actor.email,
         name=actor.name or actor.email.partition("@")[0],
+        name_is_set=bool(actor.name),
         role=actor.role.value,
         permissions=sorted(build_permissions(actor.role)),
+        is_active=actor.is_active,
+        created_at=actor.created_at,
+        last_seen_at=actor.previous_seen_at,
+        identity_issuer=actor.identity_issuer,
+        identity_subject=actor.identity_subject,
     )
+
+
+async def apply_admin_name(store: ProfileStore, actor: AdminActor, name: str | None) -> MeResponse:
+    """Set or clear the caller's own display name. Only the name is self-editable."""
+    chosen = name or None
+    await store.persist_actor_name(actor.id, chosen)
+    return resolve_admin_me(dataclasses.replace(actor, name=chosen))
 
 
 async def resolve_admin_stats(reader: AdminReader) -> StatsResponse:

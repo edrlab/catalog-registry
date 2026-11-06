@@ -66,6 +66,10 @@ class ActorStore(Protocol):
     ) -> AdminActor: ...
 
 
+class ProfileStore(Protocol):
+    async def persist_actor_name(self, actor_id: str, name: str | None) -> None: ...
+
+
 class UserStore(Protocol):
     """People, for admins. A change locks the active admins, then the person, then commits."""
 
