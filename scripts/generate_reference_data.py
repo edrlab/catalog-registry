@@ -35,7 +35,7 @@ CACHE = REPO_ROOT / ".cache" / "reference-data"
 OUT = CACHE / "out"
 #: The one place the CLDR release is pinned. `scripts/check_reference_sources.py` compares it with
 #: the latest published release; a bump is a new data migration carrying the difference.
-CLDR_VERSION = "48.2.0"
+CLDR_VERSION = "49.0.0"
 
 
 def build_cldr_xml_tag(version: str) -> str:
@@ -80,7 +80,7 @@ SUPERSCRIPT = re.compile(r"[²³¹⁰-⁹]+$")
 #: Everyday names CLDR lacks. Added by hand so a search for them finds the region.
 HAND_SUBDIVISION_NAMES = [("BE-VLG", "fr", "Flandre"), ("BE-VLG", "nl", "Vlaanderen")]
 
-#: French overseas subdivisions that are also CLDR territories (ADR-057). CLDR 48.2 has no
+#: French overseas subdivisions that are also CLDR territories (ADR-057). CLDR (48.2, 49) has no
 #: subdivision names for the letter-coded ones, and the territory names add everyday forms
 #: ("French Guiana"), so both sets are used.
 OVERSEAS_TERRITORY = {
