@@ -35,6 +35,12 @@ class CountryNotFoundError(NotFoundError):
     problem_type = "https://registry.thoriumreader.com/problems/country-not-found"
 
 
+class UserNotFoundError(NotFoundError):
+    """No person with this id (contract 0.9)."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/user-not-found"
+
+
 class ConflictError(RegistryError):
     """The request is well formed but cannot apply to the catalog as it is now. Each case has its
     own `type` (admin API contract §2), so a caller can tell them apart."""
@@ -65,6 +71,18 @@ class NotDeletableError(ConflictError):
     """Only a draft can be deleted; anything a reader may have seen is archived instead."""
 
     problem_type = "https://registry.thoriumreader.com/problems/not-deletable"
+
+
+class SelfChangeError(ConflictError):
+    """An admin cannot change their own role or deactivate themselves."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/self-change"
+
+
+class LastAdminError(ConflictError):
+    """The change would leave no active admin."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/last-admin"
 
 
 class ArchivedReadOnlyError(ConflictError):

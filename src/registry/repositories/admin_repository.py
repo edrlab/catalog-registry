@@ -465,6 +465,23 @@ SELECT (CAST(:country AS text) IS NULL
 
 _DELETE_CATALOG: Final = text("DELETE FROM catalogs WHERE id = CAST(:id AS uuid)")
 
+#: Concurrent changes to one country's types are applied one after the other.
+_LOCK_COUNTRY: Final = text("SELECT alpha2 FROM countries WHERE alpha2 = :code FOR UPDATE")
+#: The types a country may offer: those it offers now, and those its subdivisions have.
+_AVAILABLE_TYPES: Final = text(
+    """
+SELECT subdivision_type FROM country_subdivision_types WHERE country_code = :code
+ UNION
+SELECT subdivision_type FROM subdivisions
+ WHERE country_alpha2 = :code AND subdivision_type IS NOT NULL
+"""
+)
+_CLEAR_TYPES: Final = text("DELETE FROM country_subdivision_types WHERE country_code = :code")
+_ADD_TYPES: Final = text(
+    "INSERT INTO country_subdivision_types (country_code, subdivision_type) "
+    "SELECT :code, unnest(CAST(:keys AS text[]))"
+)
+
 #: The constraints that mean "this catalog already exists": its id (derived from the identity
 #: href) or its identity href itself.
 _DUPLICATE_CONSTRAINTS: Final = ("pk_catalogs", "uq_links_identity_href")
@@ -525,6 +542,16 @@ class AdminCatalogWriter:
         await persist_catalog_contents(self._session, existing, built)
         existing.version = Catalog.version + 1
         await self._flush_catalog()
+
+    async def lock_country_types(self, code: str) -> list[str] | None:
+        """The types *code* may offer, with the country locked; None if no such country."""
+        if (await self._session.execute(_LOCK_COUNTRY, {"code": code})).first() is None:
+            return None
+        return list((await self._session.execute(_AVAILABLE_TYPES, {"code": code})).scalars())
+
+    async def persist_country_types(self, code: str, keys: Sequence[str]) -> None:
+        await self._session.execute(_CLEAR_TYPES, {"code": code})
+        await self._session.execute(_ADD_TYPES, {"code": code, "keys": list(keys)})
 
     async def persist_catalog_deletion(self, catalog_id: str) -> None:
         await self._session.execute(_DELETE_CATALOG, {"id": catalog_id})

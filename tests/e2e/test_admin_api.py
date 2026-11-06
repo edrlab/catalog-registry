@@ -213,6 +213,9 @@ async def test_a_401_says_how_to_authenticate(admin_client: AsyncClient) -> None
     assert response.headers["www-authenticate"].startswith("Registry-Service-Key")
 
 
+NO_CONFLICT_PATHS = {"/admin/feed-checks", "/admin/countries/{code}/subdivision-types"}
+
+
 async def test_the_openapi_document_describes_every_admin_problem(
     admin_client: AsyncClient,
 ) -> None:
@@ -222,8 +225,9 @@ async def test_the_openapi_document_describes_every_admin_problem(
         if not path.startswith("/admin"):
             continue
         for method, operation in operations.items():
-            # Every write can conflict; a feed check writes nothing (contract 0.8), so it has 429.
-            writes = method != "get" and path != "/admin/feed-checks"
+            # Every catalog or user change can conflict. A feed check writes nothing (it has 429),
+            # and a country's types are last-write-wins (contract 0.8, 0.9).
+            writes = method != "get" and path not in NO_CONFLICT_PATHS
             expected = ("401", "403", "500", "503") + (("409",) if writes else ())
             if path == "/admin/feed-checks":
                 expected += ("429",)
@@ -354,15 +358,18 @@ async def test_a_first_visit_creates_a_viewer(
     response = await admin_client.get("/admin/me", headers=admin_headers("New.Person@EDRLab.org"))
 
     assert response.status_code == 200
+    stored = (
+        await db_session.execute(text("SELECT id::text, role::text, last_seen_at FROM actors"))
+    ).one()
     assert response.json() == {
+        "id": stored[0],
         "email": "new.person@edrlab.org",
         "name": "new.person",
         "role": "viewer",
         "permissions": ["backoffice.view", "catalog.view", "country.view"],
     }
-    stored = (await db_session.execute(text("SELECT role::text, last_seen_at FROM actors"))).one()
-    assert stored[0] == "viewer"
-    assert stored[1] is not None
+    assert stored[1] == "viewer"
+    assert stored[2] is not None
 
 
 async def test_the_same_person_in_another_case_is_the_same_actor(

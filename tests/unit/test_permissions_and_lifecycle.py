@@ -147,3 +147,48 @@ def test_the_undo_rule_matches_the_contract(
 def test_an_undo_always_lands_exactly_on_the_previous_status() -> None:
     for (status, action), undo in UNDO_ACTIONS.items():
         assert TRANSITIONS[(TRANSITIONS[(status, action)], undo)] is status
+
+
+# --- what an admin may do to a person (contract 0.9) ---------------------------------------------
+
+
+def _user_actions(**overrides: object) -> list[str]:
+    from registry.domain.permissions import (  # noqa: PLC0415
+        ADMIN_PERMISSIONS,
+        build_user_actions,
+    )
+
+    arguments: dict[str, object] = {
+        "user_id": "them",
+        "user_role": ActorRole.EDITOR,
+        "user_is_active": True,
+        "active_admins": 2,
+    } | overrides
+    caller_permissions = arguments.pop("caller_permissions", ADMIN_PERMISSIONS)
+    return build_user_actions("me", caller_permissions, **arguments)  # type: ignore[arg-type]
+
+
+def test_an_admin_may_change_and_deactivate_an_active_person() -> None:
+    assert _user_actions() == ["change_role", "deactivate"]
+
+
+def test_an_inactive_person_can_be_reactivated_not_deactivated() -> None:
+    assert _user_actions(user_is_active=False) == ["change_role", "reactivate"]
+
+
+def test_nothing_on_yourself() -> None:
+    assert _user_actions(user_id="me") == []
+
+
+def test_the_last_active_admin_keeps_role_and_access() -> None:
+    assert _user_actions(user_role=ActorRole.ADMIN, active_admins=1) == []
+    assert _user_actions(user_role=ActorRole.ADMIN, active_admins=2) == [
+        "change_role",
+        "deactivate",
+    ]
+
+
+def test_an_editor_may_do_nothing_to_people() -> None:
+    from registry.domain.permissions import EDITOR_PERMISSIONS  # noqa: PLC0415
+
+    assert _user_actions(caller_permissions=EDITOR_PERMISSIONS) == []

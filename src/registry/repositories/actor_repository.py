@@ -1,11 +1,11 @@
 """The admin API's people. Writes: a login records itself, and a first login creates a viewer."""
 
-from typing import Final
+from typing import Any, Final
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from registry.domain.admin_models import AdminActor
+from registry.domain.admin_models import AdminActor, AdminUser
 from registry.domain.enums import ActorRole
 
 #: One statement for "find or create, and note the login". `role` is never in the update list, so a
@@ -23,6 +23,36 @@ ON CONFLICT (email) DO UPDATE
 RETURNING id::text AS id, email, name, role::text AS role, is_active
 """
 )
+
+
+_USER_COLUMNS: Final = (
+    "id::text AS id, email, name, role::text AS role, is_active, last_seen_at, created_at"
+)
+_USERS: Final = text(f"SELECT {_USER_COLUMNS} FROM actors ORDER BY is_active DESC, email")
+#: Every change locks the active admins first, always in id order, then counts them in the same
+#: transaction: two admins demoting each other cannot both succeed (contract 0.9).
+_LOCK_ACTIVE_ADMINS: Final = text(
+    "SELECT id::text FROM actors WHERE role = 'admin' AND is_active ORDER BY id FOR UPDATE"
+)
+_LOCK_USER: Final = text(
+    f"SELECT {_USER_COLUMNS} FROM actors WHERE id = CAST(:id AS uuid) FOR UPDATE"
+)
+_SET_ROLE: Final = text(
+    "UPDATE actors SET role = CAST(:role AS actor_role) WHERE id = CAST(:id AS uuid)"
+)
+_SET_ACTIVE: Final = text("UPDATE actors SET is_active = :active WHERE id = CAST(:id AS uuid)")
+
+
+def _build_user(row: Any) -> AdminUser:
+    return AdminUser(
+        id=row.id,
+        email=row.email,
+        name=row.name,
+        role=ActorRole(row.role),
+        is_active=row.is_active,
+        last_seen_at=row.last_seen_at,
+        created_at=row.created_at,
+    )
 
 
 class ActorRepository:
@@ -50,3 +80,22 @@ class ActorRepository:
             role=ActorRole(row["role"]),
             is_active=row["is_active"],
         )
+
+    async def fetch_admin_users(self) -> list[AdminUser]:
+        return [_build_user(row) for row in await self._session.execute(_USERS)]
+
+    async def lock_active_admins(self) -> list[str]:
+        return list((await self._session.execute(_LOCK_ACTIVE_ADMINS)).scalars())
+
+    async def lock_admin_user(self, user_id: str) -> AdminUser | None:
+        row = (await self._session.execute(_LOCK_USER, {"id": user_id})).first()
+        return _build_user(row) if row else None
+
+    async def persist_user_role(self, user_id: str, role: ActorRole) -> None:
+        await self._session.execute(_SET_ROLE, {"id": user_id, "role": role.value})
+
+    async def persist_user_active(self, user_id: str, active: bool) -> None:
+        await self._session.execute(_SET_ACTIVE, {"id": user_id, "active": active})
+
+    async def commit_user_change(self) -> None:
+        await self._session.commit()

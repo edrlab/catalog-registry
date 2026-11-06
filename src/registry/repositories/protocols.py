@@ -20,10 +20,11 @@ from registry.domain.admin_models import (
     AdminCountryDetail,
     AdminCountryPage,
     AdminStats,
+    AdminUser,
     UsedPlaces,
 )
 from registry.domain.catalog_view import CatalogLike
-from registry.domain.enums import CatalogStatus
+from registry.domain.enums import ActorRole, CatalogStatus
 from registry.domain.fetching import FetchResult
 from registry.domain.restrictions import NO_RESTRICTIONS, Restrictions
 from registry.domain.search_query import ParsedQuery
@@ -63,6 +64,22 @@ class ActorStore(Protocol):
     async def persist_actor_login(
         self, *, email: str, name: str | None, issuer: str, subject: str | None
     ) -> AdminActor: ...
+
+
+class UserStore(Protocol):
+    """People, for admins. A change locks the active admins, then the person, then commits."""
+
+    async def fetch_admin_users(self) -> list[AdminUser]: ...
+
+    async def lock_active_admins(self) -> list[str]: ...
+
+    async def lock_admin_user(self, user_id: str) -> AdminUser | None: ...
+
+    async def persist_user_role(self, user_id: str, role: ActorRole) -> None: ...
+
+    async def persist_user_active(self, user_id: str, active: bool) -> None: ...
+
+    async def commit_user_change(self) -> None: ...
 
 
 class AdminReader(Protocol):
@@ -121,5 +138,9 @@ class AdminWriter(Protocol):
     async def persist_catalog_document(self, catalog_id: str, document: dict[str, Any]) -> None: ...
 
     async def persist_catalog_deletion(self, catalog_id: str) -> None: ...
+
+    async def lock_country_types(self, code: str) -> list[str] | None: ...
+
+    async def persist_country_types(self, code: str, keys: Sequence[str]) -> None: ...
 
     async def commit_admin_write(self) -> None: ...

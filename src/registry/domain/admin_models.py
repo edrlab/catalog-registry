@@ -160,3 +160,16 @@ class AdminCountryDetail:
     recommended: int
     #: Published catalogs per kind; only kinds in use, the service fills the rest with 0.
     by_kind: dict[str, int]
+
+
+@dataclass(frozen=True, slots=True)
+class AdminUser:
+    """One person in `actors`, as the users page shows them."""
+
+    id: str
+    email: str
+    name: str | None
+    role: ActorRole
+    is_active: bool
+    last_seen_at: datetime.datetime | None
+    created_at: datetime.datetime

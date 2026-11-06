@@ -39,3 +39,33 @@ ROLE_PERMISSIONS: Final[Mapping[ActorRole, frozenset[str]]] = {
 
 def build_permissions(role: ActorRole) -> frozenset[str]:
     return ROLE_PERMISSIONS[role]
+
+
+#: What an admin may do to another person (contract 0.9 `allowed_actions`).
+USER_ACTIONS: Final = ("change_role", "deactivate", "reactivate")
+
+
+def build_user_actions(
+    caller_id: str,
+    caller_permissions: frozenset[str],
+    *,
+    user_id: str,
+    user_role: ActorRole,
+    user_is_active: bool,
+    active_admins: int,
+) -> list[str]:
+    """What the caller may do to this user now. Never to yourself; never demote or deactivate the
+    last active admin; deactivate only someone active, reactivate only someone not. The endpoints
+    enforce the same rules; this is what the UI builds its menu from."""
+    if user_id == caller_id:
+        return []
+    last_admin = user_role is ActorRole.ADMIN and user_is_active and active_admins <= 1
+    actions = []
+    if "user.change_role" in caller_permissions and not last_admin:
+        actions.append("change_role")
+    if "user.deactivate" in caller_permissions:
+        if user_is_active and not last_admin:
+            actions.append("deactivate")
+        if not user_is_active:
+            actions.append("reactivate")
+    return actions

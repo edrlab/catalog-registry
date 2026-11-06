@@ -18,7 +18,13 @@ from registry.domain.admin_models import (
     AdminActor,
     AdminCatalogQuery,
 )
-from registry.domain.enums import CatalogKind, CatalogStatus, CoverageScope, PublicationType
+from registry.domain.enums import (
+    ActorRole,
+    CatalogKind,
+    CatalogStatus,
+    CoverageScope,
+    PublicationType,
+)
 from registry.schemas.admin import (
     CatalogCreateRequest,
     CatalogDetail,
@@ -33,8 +39,12 @@ from registry.schemas.admin import (
     ProblemDocument,
     RecommendedRequest,
     StatsResponse,
+    SubdivisionTypesRequest,
     TransitionRequest,
     TransitionResponse,
+    UserItem,
+    UserListResponse,
+    UserRoleRequest,
 )
 from registry.services.admin_service import (
     apply_admin_catalog_creation,
@@ -42,6 +52,7 @@ from registry.services.admin_service import (
     apply_admin_catalog_edit,
     apply_admin_recommendation,
     apply_admin_transition,
+    apply_country_subdivision_types,
     resolve_admin_catalog_detail,
     resolve_admin_catalog_list,
     resolve_admin_country_detail,
@@ -51,6 +62,11 @@ from registry.services.admin_service import (
     resolve_filter_options,
 )
 from registry.services.feed_check_service import resolve_feed_check
+from registry.services.user_service import (
+    apply_user_activation,
+    apply_user_role_change,
+    resolve_admin_users,
+)
 
 PROBLEM_CONTENT = {
     "application/problem+json": {"schema": {"$ref": "#/components/schemas/ProblemDocument"}}
@@ -371,3 +387,83 @@ async def create_admin_feed_check(
         return await resolve_feed_check(
             fetcher, reader, actor, body.url, catalog_id=body.catalog_id
         )
+
+
+USER_NOT_FOUND = "No user with this id, or the id is not a UUID (type `user-not-found`)."
+USER_CONFLICT = "`self-change`: not on yourself. `last-admin`: it would leave no active admin."
+
+
+@router.get("/users", summary="Everyone with access to the back office, and what you may do")
+async def read_admin_users(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("user.view"))],
+) -> UserListResponse:
+    async with request.app.state.open_actor_store() as store:
+        return await resolve_admin_users(store, actor)
+
+
+@router.patch(
+    "/users/{user_id}",
+    summary="Change someone's role",
+    responses={
+        404: problem_response(USER_NOT_FOUND),
+        409: problem_response(USER_CONFLICT),
+        422: problem_response(INVALID_BODY),
+    },
+)
+async def update_admin_user(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("user.change_role"))],
+    user_id: str,
+    body: UserRoleRequest,
+) -> UserItem:
+    async with request.app.state.open_actor_store() as store:
+        return await apply_user_role_change(store, actor, user_id, ActorRole(body.role))
+
+
+@router.post(
+    "/users/{user_id}/deactivate",
+    summary="Remove someone's access",
+    responses={404: problem_response(USER_NOT_FOUND), 409: problem_response(USER_CONFLICT)},
+)
+async def create_admin_user_deactivation(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("user.deactivate"))],
+    user_id: str,
+) -> UserItem:
+    async with request.app.state.open_actor_store() as store:
+        return await apply_user_activation(store, actor, user_id, active=False)
+
+
+@router.post(
+    "/users/{user_id}/reactivate",
+    summary="Give someone their access back",
+    responses={404: problem_response(USER_NOT_FOUND), 409: problem_response(USER_CONFLICT)},
+)
+async def create_admin_user_reactivation(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("user.deactivate"))],
+    user_id: str,
+) -> UserItem:
+    async with request.app.state.open_actor_store() as store:
+        return await apply_user_activation(store, actor, user_id, active=True)
+
+
+@router.put(
+    "/countries/{code}/subdivision-types",
+    summary="Choose which subdivision types a country offers",
+    responses={
+        404: problem_response("No country with this code (type `country-not-found`)."),
+        422: problem_response("A key is not one of the country's types; `errors` names it."),
+    },
+)
+async def replace_admin_country_subdivision_types(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("country.manage_subdivisions"))],
+    code: str,
+    body: SubdivisionTypesRequest,
+) -> CountryDetail:
+    async with request.app.state.open_admin_writer() as writer:
+        normalised = await apply_country_subdivision_types(writer, actor, code, body.keys)
+    async with request.app.state.open_admin_reader() as reader:
+        return await resolve_admin_country_detail(reader, normalised)

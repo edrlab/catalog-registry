@@ -46,6 +46,8 @@ class ProblemDocument(BaseModel):
 
 
 class MeResponse(AdminModel):
+    #: The caller's actor id: the users page marks "you" with it (contract 0.9).
+    id: str
     email: str
     name: str
     role: str
@@ -401,3 +403,34 @@ class FeedCheckResponse(AdminModel):
     feed: FeedCheckFields | None
     duplicate: FeedCheckDuplicate | None
     changes: list[FeedValueChange | FeedLinksChange] | None = None
+
+
+# --- users (contract 0.9) -------------------------------------------------------------------------
+
+
+class UserItem(AdminModel):
+    id: str
+    email: str
+    name: str | None
+    role: Literal["viewer", "editor", "admin"]
+    is_active: bool
+    last_seen_at: datetime.datetime | None
+    created_at: datetime.datetime
+    allowed_actions: list[Literal["change_role", "deactivate", "reactivate"]]
+
+
+class UserListResponse(AdminModel):
+    items: list[UserItem]
+
+
+class UserRoleRequest(AdminModel):
+    role: Literal["viewer", "editor", "admin"]
+
+
+class SubdivisionTypesRequest(AdminModel):
+    """The types a country offers, from its `available_subdivision_types` (contract 0.9)."""
+
+    keys: Annotated[
+        list[Annotated[str, StringConstraints(max_length=100, pattern=_NO_NUL)]],
+        Field(max_length=100),
+    ]

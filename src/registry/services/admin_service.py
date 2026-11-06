@@ -97,6 +97,7 @@ async def resolve_admin_actor(store: ActorStore, identity: AdminIdentity) -> Adm
 
 def resolve_admin_me(actor: AdminActor) -> MeResponse:
     return MeResponse(
+        id=actor.id,
         email=actor.email,
         name=actor.name or actor.email.partition("@")[0],
         role=actor.role.value,
@@ -482,6 +483,34 @@ async def resolve_admin_country_list(
         page=page,
         per_page=per_page,
     )
+
+
+async def apply_country_subdivision_types(
+    writer: AdminWriter, actor: AdminActor, code: str, keys: list[str]
+) -> str:
+    """Replace the types *code* offers with *keys* (contract 0.9). Each must be one the country
+    may offer; `[]` offers none. Catalogs keep the subdivisions they use. Returns the code."""
+    if "country.manage_subdivisions" not in build_permissions(actor.role):
+        raise PermissionDeniedError("Your role cannot do this (country.manage_subdivisions).")
+    if not _COUNTRY_CODE.fullmatch(code):
+        raise CountryNotFoundError(f"No country with code {code}.")
+    normalised = code.upper()
+    available = await writer.lock_country_types(normalised)
+    if available is None:
+        raise CountryNotFoundError(f"No country with code {normalised}.")
+    errors = []
+    for index, key in enumerate(keys):
+        if key in keys[:index]:
+            errors.append({"field": f"keys.{index}", "message": f"{key!r} is listed twice"})
+        elif key not in available:
+            errors.append(
+                {"field": f"keys.{index}", "message": f"{key!r} is not a type this country has"}
+            )
+    if errors:
+        raise FieldValidationError(errors)
+    await writer.persist_country_types(normalised, keys)
+    await writer.commit_admin_write()
+    return normalised
 
 
 def _label_subdivision_type(key: str) -> str:
