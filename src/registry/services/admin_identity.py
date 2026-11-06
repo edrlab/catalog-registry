@@ -61,17 +61,23 @@ def build_jwks_key_resolver(jwks_url: str) -> SigningKeyResolver:
     return resolve
 
 
-def verify_service_key(presented: str | None, accepted: tuple[str, ...]) -> None:
-    """Constant-time comparison against every accepted key, so a rotation can overlap."""
-    if not accepted:
+def verify_service_key(
+    presented: str | None, accepted: tuple[str, ...], read_only: tuple[str, ...] = ()
+) -> bool:
+    """Constant-time comparison against every accepted key, so a rotation can overlap. Returns
+    True when the key is one of the *read_only* keys."""
+    if not accepted and not read_only:
         raise AdminUnavailableError("The admin API is not configured.")
     candidate = (presented or "").encode()
-    matched = False
+    full = limited = False
+    # No short circuit over either list: the time taken must not reveal which key matched.
     for key in accepted:
-        # No short circuit: the time taken must not reveal which key matched.
-        matched |= hmac.compare_digest(candidate, key.encode())
-    if not matched:
+        full |= hmac.compare_digest(candidate, key.encode())
+    for key in read_only:
+        limited |= hmac.compare_digest(candidate, key.encode())
+    if not (full or limited):
         raise AuthenticationError("Missing or invalid service key.")
+    return limited and not full
 
 
 async def verify_admin_token(

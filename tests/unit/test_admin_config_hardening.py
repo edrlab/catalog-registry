@@ -60,6 +60,17 @@ def test_a_weak_service_key_refuses_to_start_when_deployed(weak: str) -> None:
         Settings(service_keys=weak, **DEPLOYED)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("weak", ["k", "CHANGE-ME", "k" * 31])
+def test_a_weak_read_only_key_refuses_to_start_when_deployed(weak: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(service_keys="k" * 32, read_only_service_keys=weak, **DEPLOYED)  # type: ignore[arg-type]
+
+
+def test_a_key_cannot_be_both_full_and_read_only() -> None:
+    with pytest.raises(ValidationError, match="both"):
+        Settings(service_keys="k" * 32, read_only_service_keys="k" * 32, **DEPLOYED)  # type: ignore[arg-type]
+
+
 def close_failed_response(error: BaseException | None) -> None:
     """urllib keeps the socket of an HTTP error response open until it is closed; close it here."""
     while error is not None:

@@ -198,3 +198,14 @@ async def test_a_failed_key_fetch_is_not_retried_by_the_next_request(
             await resolve("a.b.c")
 
     assert len(fetches) == 1
+
+
+def test_a_read_only_key_is_accepted_and_reported() -> None:
+    assert verify_service_key("preview", ("full",), ("preview",)) is True
+    assert verify_service_key("full", ("full",), ("preview",)) is False
+
+
+def test_only_read_only_keys_still_configure_the_api() -> None:
+    assert verify_service_key("preview", (), ("preview",)) is True
+    with pytest.raises(AuthenticationError):
+        verify_service_key("wrong", (), ("preview",))
