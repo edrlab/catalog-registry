@@ -1,4 +1,4 @@
-"""`validate_outbound_url`: what the registry refuses to request before any lookup (ADR-066)."""
+"""`validate_outbound_url`: what the registry refuses to request before any lookup."""
 
 import ipaddress
 

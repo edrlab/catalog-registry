@@ -1,4 +1,4 @@
-"""Your own profile (contract 0.10): `GET /admin/me` in full, and `PATCH /admin/me {name}`."""
+"""Your own profile: `GET /admin/me` in full, and `PATCH /admin/me {name}`."""
 
 from typing import Any
 

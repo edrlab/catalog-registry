@@ -33,8 +33,9 @@ class Subdivision(Base):
     subdivision_type: Mapped[str | None] = mapped_column(nullable=True)
 
 
-# v0.2 search (ADR-052, ADR-053, ADR-055, ADR-057). Loaded by a data migration from pinned CLDR
-# 48.2 and ISO 3166-2 snapshots; there is no write path from the application.
+# Reference data for search. Loaded by data migrations from pinned CLDR and ISO 3166-2 snapshots
+# (the pins are in `scripts/generate_reference_data.py` and the Makefile); there is no write path
+# from the application.
 
 
 class CountryLanguage(Base):

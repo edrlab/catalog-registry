@@ -1,4 +1,4 @@
-"""The feed check (contract 0.8, ADR-066): one request, four stages, a report.
+"""The feed check: one request, four stages, a report.
 
 `address` → `fetch` → `feed` → `links`. A stage that finds an error stops the ones after it; `links`
 never blocks. Everything runs inside one budget, so the report always comes back, with whatever did

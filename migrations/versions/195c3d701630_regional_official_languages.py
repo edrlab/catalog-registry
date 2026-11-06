@@ -1,9 +1,9 @@
 """Every language official anywhere in a country, and the names in them
 
-ADR-053 counted only CLDR's country-wide `official` status, so India had 2 languages of its 22
-and South Africa 1 of 11; 41 countries were missing 146 languages that CLDR marks official in a
-region (`official_regional`) or de facto. Roni widened the rule on 2026-11-06: every CLDR
-official status counts, plus the few official languages CLDR misses, each with its source
+The earlier rule counted only CLDR's country-wide `official` status, so India had 2 languages of
+its 22 and South Africa 1 of 11; 41 countries were missing 146 languages that CLDR marks official
+in a region (`official_regional`) or de facto. The rule is now that every CLDR official status
+counts, plus the few official languages CLDR misses, each with its source
 (`HAND_COUNTRY_LANGUAGES` in `scripts/generate_reference_data.py`: India's Bodo, Dogri and
 Manipuri, from the Eighth Schedule of the Constitution).
 

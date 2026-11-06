@@ -44,7 +44,7 @@ setup:  ## Install dependencies and create .env if it is missing
 
 # Database, migrations, API. Deliberately *not* the seed: `make up` is run constantly, and a
 # command you run constantly must not keep reinstating rows you removed on purpose. Run
-# `make seed` when you want Hadrien's four back.
+# `make seed` when you want the recommended catalogs (data/recommended.json) back.
 up:  ## Start db + API in Docker and migrate (no seed)
 	@# A busy host port makes Docker fail *while* wiring the container up, leaving it created
 	@# but attached to no network. Its healthcheck still passes, because pg_isready runs
@@ -107,7 +107,7 @@ add:  ## Import one catalog from its live feed URL: make add ARGS="<url> --kind 
 	uv run python -m registry.cli add $(ARGS)
 
 # Invented catalogs covering the regional-English cases a browser actually sends. Not
-# Hadrien's data and not a fixture any test reads, it exists to be looked at by hand.
+# the published recommended list and not a fixture any test reads, it exists to be looked at by hand.
 seed-sample:  ## Import data/dev-sample.json to try ranking out
 	REGISTRY_SEED_FILE=data/dev-sample.json uv run python -m registry.cli seed
 
@@ -144,7 +144,7 @@ schema-check:  ## Validate schema/ and every fixture under demo/ and data/
 reference-data:  ## Regenerate search reference data from pinned CLDR/ISO sources (offline-cached)
 	uv run --with pycountry==26.2.16 python scripts/generate_reference_data.py $(if $(PY),--python)
 
-# One number for how good search is, against the plan's ideal answers (docs/search-test-cases.md).
+# One number for how good search is, against the agreed search test cases (docs/search-test-cases.md).
 # Read-only. `make search-score ARGS="--save before.json"`, tweak, then `ARGS="--baseline before.json"`.
 search-score:  ## Score the running server's search: make search-score ARGS="--url http://... -v"
 	uv run python scripts/score_search.py $(ARGS)
@@ -155,7 +155,7 @@ URL ?= http://localhost:8000
 live-check:  ## Check a running or deployed registry end to end: make live-check URL=https://...
 	uv run python scripts/live_check.py --url $(URL) $(ARGS)
 
-# The page for Hadrien comes from the same data as the tests; a test fails when it is stale.
+# The human-readable page comes from the same data as the tests; a test fails when it is stale.
 search-cases:  ## Regenerate docs/search-test-cases.md from tests/search_cases.py
 	uv run python scripts/write_search_cases_doc.py
 

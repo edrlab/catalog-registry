@@ -23,7 +23,7 @@ class AdminActor:
     name: str | None
     role: ActorRole
     is_active: bool
-    #: For the person's own profile (contract 0.10). Absent where an actor is built without a login.
+    #: For the person's own profile. Absent where an actor is built without a login.
     created_at: datetime.datetime | None = None
     #: The request before this one: the registry sees requests, not sign-ins.
     previous_seen_at: datetime.datetime | None = None

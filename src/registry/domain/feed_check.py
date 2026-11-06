@@ -1,6 +1,6 @@
 """The feed check's vocabulary and its rules about OPDS documents. Pure. Stdlib only.
 
-What lives here: the stages and finding codes of contract 0.8 (one table, so a code, its stage, its
+What lives here: the feed check's stages and finding codes (one table, so a code, its stage, its
 severity and its fallback sentence cannot drift apart), and what a feed or a web page means to the
 registry: which links are kept and under which rel, and what the metadata gives a catalog. The
 network and the order of the stages are `services/feed_check_service.py`'s business.
@@ -48,7 +48,7 @@ class FindingKind:
     template: str
 
 
-#: Every finding code (contract 0.8). The UI keys its own wording on the code; this sentence is the
+#: Every finding code. The UI keys its own wording on the code; this sentence is the
 #: fallback. `stage` None means "whichever stage was running".
 FINDINGS: Mapping[str, FindingKind] = {
     "url-invalid": FindingKind(Stage.ADDRESS, Severity.ERROR, "{detail}"),
@@ -278,13 +278,13 @@ class FeedLink:
     type: str | None = None
     title: str | None = None
     templated: bool = False
-    #: True answered, False dead, None not checked (contract 0.8).
+    #: True answered, False dead, None not checked.
     active: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class FeedFields:
-    """What a feed gives a catalog: contract 0.8 `feed`."""
+    """What a feed gives a catalog: the check report's `feed`."""
 
     #: None when the source has none (a web page without `<title>`): the editor types one.
     name: str | None

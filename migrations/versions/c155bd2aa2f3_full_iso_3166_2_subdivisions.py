@@ -2,12 +2,12 @@
 
 Until now `subdivisions` held only the five codes some catalog used, so the back office could not
 offer the regions of most countries (India had none). This loads the 5,043 subdivisions pycountry
-26.2.16 knows for the countries in `countries` (all but the three French ones ADR-055 leaves out),
+26.2.16 knows for the countries in `countries` (all but the three French ones in `LEFT_OUT`),
 with their parents and lowercase type keys; their names from CLDR 48.2 in English and each
 country's official languages (pycountry's English name where CLDR has none); and one
 `country_subdivision_types` row per (country, type), so every country offers all of its ISO types
-until an admin narrows them (Roni, 2026-11-06: "add all the things"). France keeps the seven types
-ADR-055 chose until Hadrien's shorter list (Q15).
+until an admin narrows them. France keeps the seven types `2eb49a8f4664` gave it; whether France
+should offer fewer is still undecided.
 
 The rows are in `migrations/data/c155bd2aa2f3/` as CSV rather than literals: about 14,000 rows.
 They were written by `scripts/generate_reference_data.py --full-subdivisions <dir>` (with pycountry
@@ -45,9 +45,10 @@ DATA = Path(__file__).resolve().parents[1] / "data" / revision
 #: Added by earlier revisions (`c8e1b73f2d04`, `b41f7c9ade52`); never removed here.
 EARLIER_SUBDIVISIONS = ("BE-BRU", "BE-VLG", "BE-WAL", "CH-VS", "FR-IDF")
 
-#: ADR-055 leaves three French types out ("no libraries expected"): overseas territory (FR-TF),
-#: dependency (FR-CP) and European collectivity (FR-6AE). Their subdivisions are not loaded, so
-#: every stored subdivision's type stays one its country offers.
+#: Three French types are left out because no library is expected to file under them: overseas
+#: territory (FR-TF), dependency (FR-CP) and European collectivity (FR-6AE, Alsace, which its
+#: departments FR-67 and FR-68 already cover). Their subdivisions are not loaded, so every stored
+#: subdivision's type stays one its country offers.
 LEFT_OUT = frozenset({"FR-TF", "FR-CP", "FR-6AE"})
 
 
@@ -86,7 +87,8 @@ def upgrade() -> None:
         ),
         _read("subdivision_names.csv"),
     )
-    # Every type a stored subdivision has is offered. France's seven (ADR-055) are already there.
+    # Every type a stored subdivision has is offered. France's seven (`2eb49a8f4664`) are already
+    # there.
     op.execute(
         "INSERT INTO country_subdivision_types (country_code, subdivision_type) "
         "SELECT DISTINCT country_alpha2, subdivision_type FROM subdivisions "

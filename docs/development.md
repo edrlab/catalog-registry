@@ -335,7 +335,7 @@ instead of drifting quietly.
 `.env.example` also has a test asserting the committed copy matches, so a stale one fails
 `make test` locally too, not only in CI.
 
-Add a field to `Settings`, or Hadrien edits a schema → run the matching target, commit both
+Add a field to `Settings`, or a schema changes upstream → run the matching target, commit both
 the source and the generated file in the same change.
 
 ---
@@ -389,7 +389,7 @@ at a throwaway database**, it writes.
 It asserts nothing and cannot fail the build: an invented threshold produces flaky builds and no
 information. It exists to answer "what happens at n" and to give a change a measured before. It is
 **local**: no network between the app and the database, so it shows the application's own work.
-Hadrien's target for search (under 100 ms warm from Europe) is judged with the numbers in
+The target for search (under 100 ms warm from Europe) is judged with the numbers in
 [`performance.md`](performance.md) and the Cloud Run metrics tab, not with this script alone.
 
 The feed is one database statement, so the time it takes grows with the number of

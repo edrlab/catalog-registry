@@ -1,6 +1,6 @@
 """Confirm a database is usable by this service before anything depends on it.
 
-Written for the Phase 0 connectivity task: point `REGISTRY_DATABASE_URL` at Cloud SQL
+Written to check connectivity before v0.2 work began: point `REGISTRY_DATABASE_URL` at Cloud SQL
 (through the Auth Proxy) and run it. Enabling an extension on Cloud SQL is an administrative
 action someone else performs, so discovering a missing one at the start of v0.2 costs a
 round trip, this makes that discovery cheap and early.

@@ -58,7 +58,7 @@ def build_catalog(document: dict[str, Any], catalog_id: uuid.UUID, *, recommende
         ],
         # Languages are the one field still folded, and deliberately: BCP-47 writes a language
         # subtag lowercase and a region subtag uppercase, `Accept-Language` arrives lowercase, and
-        # the published pattern accepts either case because the spec does (R2). Country and
+        # the published pattern accepts either case because the spec does. Country and
         # subdivision codes are *not* folded; their patterns admit uppercase only.
         languages=[
             CatalogLanguageRow(language_tag=normalise_language_tag(value))

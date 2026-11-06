@@ -59,7 +59,7 @@ from registry.repositories.catalog_repository import CatalogRepository
 RECOMMENDED_AT_LAUNCH = True
 
 
-# ponytail: href match, and only the fallback now - a catalog with no `metadata.identifier`
+# Limit: the href match is only the fallback now, but a catalog with no `metadata.identifier`
 # that changes its feed URL inserts a second row instead of updating the first. The fix is to
 # give it an identifier, which `resolve_existing_catalog` then matches on.
 def resolve_identity_href(document: dict[str, Any]) -> str:
@@ -106,7 +106,7 @@ def resolve_catalog_id(document: dict[str, Any], identity_href: str) -> uuid.UUI
                 f"{document['metadata']['title']} has an identifier that is not a UUID: "
                 f"{identifier!r}"
             ) from error
-    # ponytail: derived from the href, so it inherits the href's instability - a catalog that
+    # Limit: derived from the href, so it inherits the href's instability: a catalog that
     # moves its feed URL gets a new id as well as a new row. Supplying `metadata.identifier`
     # is the escape hatch, and is what to reach for if that becomes a problem.
     return build_catalog_id(identity_href)
@@ -123,9 +123,9 @@ async def resolve_existing_catalog(
     `metadata.identifier`. That is a hard failure that aborts the whole seed transaction, so
     the other catalogs in the file are not updated either.
 
-    It is also the point of the field. Hadrien assigned those identifiers so that "a library
-    moving pre-prod to prod" stays one row (the Project Gutenberg case); matching on them is
-    what finally delivers that. See ADR-038.
+    It is also the point of the field. The identifiers exist so that a library moving from
+    pre-production to production stays one row (the Project Gutenberg case); matching on them
+    is what delivers that.
 
     The href lookup remains, and remains the fallback, for the two cases where it is the only
     identity available: `data/libraries.json`, which supplies no identifiers, and a catalog
@@ -207,7 +207,7 @@ async def import_catalog_document(
     # Imported here, not at module level: only the write path needs it.
     from sqlalchemy import func  # noqa: PLC0415
 
-    # ponytail: created_at doubles as the sort key, so a row's position is spelled as a time
+    # Limit: created_at doubles as the sort key, so a row's position is spelled as a time
     # it was not created at. An explicit ordering column is the upgrade if the feed ever
     # needs an order the seed file cannot express.
     if ordered_at is None:
@@ -403,7 +403,7 @@ async def seed_from_file(
 def build_seed_parser() -> argparse.ArgumentParser:
     """Separate from `main` so the flags are testable without a database.
 
-    `--no-recommended` is the one that matters: getting it wrong seeds Hadrien's library data
+    `--no-recommended` is the one that matters: getting it wrong seeds `data/libraries.json`
     straight into the top-level feed, which is silent and wrong rather than loud and wrong.
     """
     parser = argparse.ArgumentParser(

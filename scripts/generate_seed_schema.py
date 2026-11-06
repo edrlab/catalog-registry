@@ -7,7 +7,7 @@ authoring time. The service synthesises those at render time, and the contract t
 the output, which is where it matters.
 
 The relaxed variant is **derived, not hand-written**, so it cannot drift from the published
-schema when Hadrien edits it. Four relaxations, and nothing else:
+schema when upstream edits it. Four relaxations, and nothing else:
 
 1. feed-level `links` is not required
 2. the feed's "must contain a `self` link" constraint is dropped
@@ -20,16 +20,16 @@ from the identity href when the document omits an identifier, and rendered back 
 Supplying one is still allowed, and still wins.
 
 It is **input-only, and belongs here rather than in `schema/catalog.schema.json`**. That file is
-upstream's contract (`docs/schemas.md`: "Hadrien owns. Never edit here"), it is what validates
+upstream's contract (`docs/schemas.md`: "Upstream owns. Never edit here"), it is what validates
 *rendered output*, and every rendered catalog does carry an identifier. Relaxing it there would
 delete a working output tripwire and be undone by the next `git merge upstream/main`.
 
 **Case is deliberately not relaxed.** `country` and `subdivisions` are uppercase on input as well
-as on output. Hadrien, 2026-09-29: ISO 3166-2 is officially uppercase, and "it is better to enforce
-this at import than convert". So a lowercase code is rejected here, by the published pattern, with
-a message naming the field; `cli/seed.py` does no case folding for either. `supportedLanguages` is
+as on output: ISO 3166-2 codes are officially uppercase, and the case is better enforced at
+import than converted. So a lowercase code is rejected here, by the published pattern, with a
+message naming the field; `cli/seed.py` does no case folding for either. `supportedLanguages` is
 the exception and stays lowercase-normalised, because BCP-47 writes languages lowercase and regions
-uppercase, and `Accept-Language` arrives lowercase (R2).
+uppercase, and `Accept-Language` arrives lowercase.
 
 Everything else the published schemas assert. Enums, the BCP-47 pattern, `minItems` on
 `kind`, `additionalProperties: false` on `metadata`, still applies.

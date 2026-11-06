@@ -105,7 +105,7 @@ class AdminReader(Protocol):
 
 
 class FeedFetcher(Protocol):
-    """One outbound fetch with the registry's protections (`network/safe_client.py`, ADR-066).
+    """One outbound fetch with the registry's protections (`network/safe_client.py`).
     Raises `FetchError`."""
 
     async def fetch(

@@ -1,4 +1,4 @@
-"""What the trigram half can and cannot find, measured instead of assumed (ADR-051).
+"""What the trigram half can and cannot find, measured instead of assumed.
 
 The hand-picked typo rows in the search table prove a handful of cases work. They say nothing
 about *how far* the fuzziness reaches, so these tests derive it from first principles: take every
@@ -312,7 +312,7 @@ async def test_a_catalog_is_listed_once_even_when_both_halves_match_it(
 async def test_capitals_and_accents_do_not_change_a_fuzzy_result(
     db_session: AsyncSession, searchable_catalogs: None, typed: str, same_as: str
 ) -> None:
-    """Folding happens in the database for typed and stored text alike (ADR-059)."""
+    """Folding happens in the database for typed and stored text alike."""
     folded = unicodedata.normalize("NFD", typed).encode("ascii", "ignore").decode().lower()
     assert folded == same_as, "the pair must be the same word once folded"
 

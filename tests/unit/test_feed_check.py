@@ -28,7 +28,7 @@ from registry.domain.feed_check import (
 
 FEED_URL = "https://feeds.example.org/opds/"
 
-#: The codes contract 0.8 lists; the UI keys its wording on them, so the set must not drift.
+#: The codes the admin API documents; the UI keys its wording on them, so the set must not drift.
 CONTRACT_CODES = {
     "url-invalid", "url-unsafe", "host-unresolvable", "duplicate-catalog",
     "fetch-failed", "fetch-timed-out", "fetch-status", "fetch-too-large", "redirect-unsafe",

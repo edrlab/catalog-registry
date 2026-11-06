@@ -55,7 +55,7 @@ def link_rels(link: dict[str, Any]) -> list[LinkRel]:
 
 def build_identity_href(document: dict[str, Any]) -> str | None:
     """The href of the first `catalog` link, else of the first `shelf` link: what the catalog is
-    recognised by across seeds (ADR-038). None when it has neither."""
+    recognised by across seeds. None when it has neither."""
     for rel in IDENTITY_RELS:
         for link in document["links"]:
             if rel in link_rels(link):
@@ -65,7 +65,7 @@ def build_identity_href(document: dict[str, Any]) -> str | None:
 
 def build_catalog_id(identity_href: str) -> uuid.UUID:
     """`uuid5(NAMESPACE_URL, href)`, a name-based UUID (RFC 9562 §5.5): the same catalog gets the
-    same id in every environment, whoever creates it (ADR-038)."""
+    same id in every environment, whoever creates it."""
     return uuid.uuid5(uuid.NAMESPACE_URL, identity_href)
 
 

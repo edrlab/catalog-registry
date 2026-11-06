@@ -1,4 +1,4 @@
-"""Which coding the client gets, worked out from its `Accept-Encoding` alone (ADR-061)."""
+"""Which coding the client gets, worked out from its `Accept-Encoding` alone."""
 
 import pytest
 

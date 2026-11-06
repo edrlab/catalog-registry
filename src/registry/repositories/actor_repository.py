@@ -32,7 +32,7 @@ _USER_COLUMNS: Final = (
 )
 _USERS: Final = text(f"SELECT {_USER_COLUMNS} FROM actors ORDER BY is_active DESC, email")
 #: Every change locks the active admins first, always in id order, then counts them in the same
-#: transaction: two admins demoting each other cannot both succeed (contract 0.9).
+#: transaction: two admins demoting each other cannot both succeed.
 _LOCK_ACTIVE_ADMINS: Final = text(
     "SELECT id::text FROM actors WHERE role = 'admin' AND is_active ORDER BY id FOR UPDATE"
 )

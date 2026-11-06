@@ -355,7 +355,7 @@ async def test_each_country_read_is_one_statement(
     db_connection: AsyncConnection,
     searchable_catalogs: None,
 ) -> None:
-    """R4. The login is one more statement."""
+    """One statement per read. The login is one more statement."""
     await become(db_session, "count@edrlab.org", "viewer")
     seen: list[str] = []
 

@@ -1,7 +1,7 @@
 """What an outbound fetch returns, and how it fails. Pure data. Stdlib only.
 
 `network/` produces these; services read them through the `FeedFetcher` protocol, so nothing above
-`network/` knows which HTTP client is used (ADR-066).
+`network/` knows which HTTP client is used.
 """
 
 from collections.abc import Mapping
@@ -38,7 +38,7 @@ class FetchResult:
 
 @dataclass(slots=True)
 class FetchError(Exception):
-    """A fetch that produced no usable response. `code` is a finding code (contract 0.8):
+    """A fetch that produced no usable response. `code` is a finding code (`feed_check.FINDINGS`):
     `url-invalid`, `url-unsafe`, `host-unresolvable`, `fetch-failed`, `fetch-timed-out`,
     `fetch-too-large`, `redirect-unsafe` or `redirect-loop`. `detail` is a fixed sentence that
     never quotes a response body."""

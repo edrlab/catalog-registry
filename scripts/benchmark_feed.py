@@ -16,8 +16,8 @@ For a deployed instance read the Cloud Run metrics tab: `request_latencies` is t
 container, `e2e_latencies` adds Google's network in front; the difference from what a client sees is
 its own distance. `make search-score ARGS="--url https://..."` runs the search cases against it.
 
-Hadrien's target for search is under 100 ms warm from Europe, 150 ms acceptable; the script prints
-it beside the numbers and still asserts nothing: an invented threshold produces flaky builds.
+The project's target for search is under 100 ms warm from Europe, 150 ms acceptable; the script
+prints it beside the numbers and still asserts nothing: an invented threshold produces flaky builds.
 
 **It writes.** Synthetic rows are titled `ZZ Bench …` and deleted in a `finally`; point
 `REGISTRY_DATABASE_URL` at a throwaway database.
@@ -110,7 +110,7 @@ SEARCH_QUERIES = [
     ("no match", "zzzzqqq"),
 ]
 
-#: Hadrien, 1 October: under 100 ms warm from Europe, 150 ms acceptable.
+#: The search target: under 100 ms warm from Europe, 150 ms acceptable.
 TARGET_MS = 100
 
 

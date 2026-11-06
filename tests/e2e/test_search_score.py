@@ -39,7 +39,7 @@ async def test_every_search_returns_what_the_page_says_for_it_and_a_valid_feed(
     client: AsyncClient, searchable_catalogs: None
 ) -> None:
     """One pass over every search: what a client sees (titles in order, the total), and every
-    response a valid feed of valid catalogs (R7). A regression names the queries."""
+    response a valid feed of valid catalogs. A regression names the queries."""
     expected = today_titles()
     wrong: dict[str, tuple[list[str], list[str]]] = {}
     for case in QUALITY_CASES:

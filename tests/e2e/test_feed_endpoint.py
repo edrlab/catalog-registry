@@ -70,7 +70,7 @@ async def test_a_language_bucket_keeps_the_seed_file_order(
 ) -> None:
     """Within one language, position in `data/recommended.json` is the order, top to bottom.
 
-    Hadrien asked for a particular order among the French catalogs. Rather than encode his
+    The French catalogs are listed in a deliberate order. Rather than encode that
     list here, this reads the order out of the file, so the file stays the single place it is
     stated and reordering it is what changes the feed.
     """
@@ -171,7 +171,7 @@ async def test_coverage_is_omitted_when_it_was_never_declared(
 
 
 async def test_color_is_always_emitted(client: AsyncClient, seeded_catalogs: int) -> None:
-    """Hadrien writes `"color": "gray"` explicitly in his own data."""
+    """The seed data writes even the default `"color": "gray"` explicitly, so it is emitted."""
     for catalog in (await client.get("/")).json()["catalogs"]:
         assert catalog["metadata"]["color"]
 

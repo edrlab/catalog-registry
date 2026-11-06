@@ -1,4 +1,4 @@
-"""Scoring a search implementation against the plan's ideal answers, and the page built from it.
+"""Scoring a search implementation against the agreed ideal answers, and the page built from it.
 
 `score_case` turns one search into numbers by comparing what came back with what should have:
 
@@ -28,7 +28,7 @@ from tests.search_cases import (
 
 NDCG_DEPTH = 10
 
-#: How the plan names catalogs in its tables.
+#: Short names for catalogs in the page's tables.
 SHORT_NAMES = {
     PARIS: "BnParis",
     OPENBARE: "De Openbare",
@@ -70,7 +70,7 @@ def _dcg(gains: list[float]) -> float:
 
 
 def score_case(case: Case, returned: list[str]) -> CaseScore | None:
-    """Score one search, or `None` when the plan gives no judgement for it."""
+    """Score one search, or `None` when the case gives no judgement for it."""
     if case.expected is None:
         return None
     if not case.expected:
@@ -109,11 +109,11 @@ def summarise(scored: list[tuple[Case, list[str], CaseScore | None]]) -> Summary
 
 
 def today_titles() -> dict[str, list[str]]:
-    """What the plan says search returns today, as plain titles in rank order."""
+    """What the cases record search returns today (`Case.today`), as titles in rank order."""
     return {case.query: [title for title, _tier in case.today] for case in QUALITY_CASES}
 
 
-# --- the page for Hadrien --------------------------------------------------------------------
+# --- the test-case page ----------------------------------------------------------------------
 
 
 def _name(title: str) -> str:

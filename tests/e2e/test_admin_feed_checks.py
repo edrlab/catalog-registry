@@ -1,4 +1,4 @@
-"""`POST /admin/feed-checks` (contract 0.8): through the app, with the library servers mocked.
+"""`POST /admin/feed-checks`: through the app, with the library servers mocked.
 
 The app's fetcher is swapped for the real `SafeHttpClient` on an `httpx.MockTransport`, so the URL
 policy, redirects, caps and retries all run; only the sockets are fake.

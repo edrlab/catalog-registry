@@ -1,14 +1,14 @@
 """CLDR 49: the names it adds
 
 CLDR 49.0 (22 October 2026) changes little for the registry: seven country names and five
-subdivision names (four stored: FR-TF is not loaded, ADR-055), mostly renamings ("U.S. Virgin
-Islands", "Papua Pegunungan" with its spelling fixed, Nauru as "Naoero"). No official language
-changes. Found by
+subdivision names (four stored: FR-TF is not loaded, see `c155bd2aa2f3`), mostly renamings
+("U.S. Virgin Islands", "Papua Pegunungan" with its spelling fixed, Nauru as "Naoero"). No official
+language changes. Found by
 `scripts/check_reference_sources.py`; the rows are `generate_reference_data.py --update` with
 `CLDR_VERSION = "49.0.0"`, in `migrations/data/eb44e431979f/`.
 
 Names CLDR 49 drops (four country names in local languages, five older subdivision forms) are kept
-on purpose: a reader who types the old form still finds the place (ADR-053 amendment).
+on purpose: a reader who types the old form still finds the place.
 
 Downgrade deletes exactly these rows, by value.
 

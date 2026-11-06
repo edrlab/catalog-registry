@@ -1,4 +1,4 @@
-"""Two admins demoting each other at the same moment leave exactly one admin (contract 0.9).
+"""Two admins demoting each other at the same moment leave exactly one admin.
 
 Real connections and real commits, not the test transaction: the point is the row locks.
 """

@@ -4,7 +4,7 @@ Checking a name and then letting the HTTP client resolve it again leaves a gap: 
 answers a public address to the check and `127.0.0.1` to the connect (DNS rebinding). Here the
 resolution, the check and the connect are one step, inside httpcore's network backend, so there is
 no second lookup to race. TLS still verifies the certificate against the host name: httpcore passes
-the request's host as `server_hostname`, whatever address the socket went to (ADR-066).
+the request's host as `server_hostname`, whatever address the socket went to.
 """
 
 import asyncio

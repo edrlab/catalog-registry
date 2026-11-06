@@ -1,6 +1,6 @@
 """The admin API's reads and writes. Reads: counts, the filtered catalog list, what the filters can offer, and countries.
 
-Each public method is one statement (R4): the list returns its page of catalogs with their places
+Each public method is one statement: the list returns its page of catalogs with their places
 and languages, and the total, in a single round trip. Counting happens in SQL.
 
 The list's `ORDER BY` is picked from `_ORDER`, never built from the request, so a sort value cannot
@@ -105,7 +105,7 @@ _ROW_COLUMNS: Final = """
 #: `m` is the filtered set; the heavy columns are read only for the page. The first host in the
 #: statement is the browse link's, the one a person recognises. The search text is split into
 #: words and every word must occur in the folded title, host, city, or any-language country or
-#: subdivision name; `public.fold` is the database's own folding (ADR-059).
+#: subdivision name; `public.fold` is the database's own folding.
 _LIST: Final = """
 WITH matched AS (
   SELECT c.id, c.status, lower(c.title) AS sort_name,
@@ -153,7 +153,7 @@ _LISTS: Final = {
     sort: text(_LIST.format(order=order, columns=_ROW_COLUMNS)) for sort, order in _ORDER.items()
 }
 
-#: One catalog with everything the detail page shows, in one statement (R4). A malformed id never
+#: One catalog with everything the detail page shows, in one statement. A malformed id never
 #: reaches it: the service answers 404 first.
 _DETAIL: Final = text(
     "SELECT"
@@ -182,9 +182,9 @@ _DETAIL: Final = text(
 
 
 #: Every country some catalog uses (any status, as `filter-options`), with its published catalogs,
-#: in one statement (R4) and one pass over `catalogs`. `published` is the predicate
+#: in one statement and one pass over `catalogs`. `published` is the predicate
 #: `/admin/catalogs?country=XX` uses by default, so the two counts always agree. The search text
-#: matches a name in any language, folded (ADR-059), or the ISO code exactly. The English name is
+#: matches a name in any language, folded, or the ISO code exactly. The English name is
 #: the alphabetically first, the rule the catalog columns use.
 _COUNTRIES: Final = text(
     """
@@ -211,9 +211,9 @@ SELECT (SELECT count(*) FROM matched) AS total, p.code, p.name, p.published
 """
 )
 
-#: One country with its languages, subdivision types and catalog counts, in one statement (R4).
+#: One country with its languages, subdivision types and catalog counts, in one statement.
 #: The available types are those the database knows for the country: the offered ones and those
-#: its subdivisions carry. ISO 3166-2's full vocabulary is not loaded yet (ADR-055).
+#: its subdivisions carry. ISO 3166-2's full vocabulary is not loaded yet.
 _COUNTRY: Final = text(
     """
 SELECT k.alpha2 AS code,

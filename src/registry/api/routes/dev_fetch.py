@@ -1,4 +1,4 @@
-"""Read one OPDS document from a library's own server, for the dev console (ADR-063).
+"""Read one OPDS document from a library's own server, for the dev console.
 
 This route is mounted only when `REGISTRY_ENVIRONMENT=local` (see `create_app`), so none of the
 following applies in a deployed environment. Should it ever be mounted elsewhere, two limits keep it
@@ -10,7 +10,7 @@ from being an open relay on a public service:
 
 On top of both: public http(s) hosts only, every redirect hop checked, size and time capped, and
 the connection made through `PublicOnlyTransport`, so it goes to the public address that was checked
-(no DNS rebinding, ADR-066).
+(no DNS rebinding).
 """
 
 import asyncio

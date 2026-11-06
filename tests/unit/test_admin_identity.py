@@ -40,7 +40,7 @@ def sign(key: Any = KEY, algorithm: str = "RS256", **overrides: Any) -> str:
         "exp": now + 300,
         "iat": now,
         "sub": "access-subject",
-        "email": "Roni@EDRLab.org",
+        "email": "Ada@EDRLab.org",
     }
     claims.update(overrides)
     return jwt.encode({k: v for k, v in claims.items() if v is not None}, key, algorithm=algorithm)
@@ -82,10 +82,10 @@ def test_no_configured_key_fails_closed_with_a_503() -> None:
 
 
 async def test_a_valid_token_yields_the_lowercased_email() -> None:
-    identity = await verify(sign(name="Roni"))
+    identity = await verify(sign(name="Ada"))
 
-    assert identity.email == "roni@edrlab.org"
-    assert identity.name == "Roni"
+    assert identity.email == "ada@edrlab.org"
+    assert identity.name == "Ada"
     assert identity.issuer == ISSUER
     assert identity.subject == "access-subject"
 
@@ -93,7 +93,7 @@ async def test_a_valid_token_yields_the_lowercased_email() -> None:
 async def test_a_token_for_any_accepted_audience_is_valid() -> None:
     identity = await verify(sign(aud=[OTHER_AUD]))
 
-    assert identity.email == "roni@edrlab.org"
+    assert identity.email == "ada@edrlab.org"
 
 
 @pytest.mark.parametrize(
@@ -127,7 +127,7 @@ async def test_a_bad_token_is_a_401(token: str | None) -> None:
 
 
 async def test_a_token_expired_within_the_clock_skew_is_accepted() -> None:
-    assert (await verify(sign(exp=int(time.time()) - 30))).email == "roni@edrlab.org"
+    assert (await verify(sign(exp=int(time.time()) - 30))).email == "ada@edrlab.org"
 
 
 async def test_an_unsigned_token_is_refused() -> None:
@@ -175,7 +175,7 @@ def test_the_dev_identity_skips_the_domain_check_but_is_lowercased() -> None:
     )
 
 
-@pytest.mark.parametrize("email", ["nobody", "@edrlab.org", "roni@", ""])
+@pytest.mark.parametrize("email", ["nobody", "@edrlab.org", "ada@", ""])
 def test_an_identity_that_is_not_an_email_address_is_a_401(email: str) -> None:
     with pytest.raises(AuthenticationError):
         build_identity(email, allowed_domains=None, issuer="dev")

@@ -117,7 +117,7 @@ def test_a_missing_locale_is_skipped_but_an_outage_is_not(
 
 
 def test_every_overseas_subdivision_has_a_territory_letter_code() -> None:
-    """ADR-057: the generator's overseas rule maps FR-NC to NC, FR-973 to GF and so on."""
+    """The generator's overseas rule maps FR-NC to NC, FR-973 to GF and so on."""
     assert generator.OVERSEAS_TERRITORY["FR-NC"] == "NC"
     assert generator.OVERSEAS_TERRITORY["FR-973"] == "GF"
     assert all(code.startswith("FR-") for code in generator.OVERSEAS_TERRITORY)

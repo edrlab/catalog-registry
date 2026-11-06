@@ -1,4 +1,4 @@
-"""The admin API's wire contract. Whitelist projection (R3): a response lists its fields."""
+"""The admin API's wire contract. Whitelist projection: a response lists its fields."""
 
 import datetime
 from typing import Annotated, Any, Literal
@@ -46,7 +46,7 @@ class ProblemDocument(BaseModel):
 
 
 class MeResponse(AdminModel):
-    #: The caller's actor id: the users page marks "you" with it (contract 0.9).
+    #: The caller's actor id: the users page marks "you" with it.
     id: str
     email: str
     #: The chosen name, or the email's local part when none is chosen (`name_is_set`).
@@ -56,7 +56,7 @@ class MeResponse(AdminModel):
     permissions: list[str]
     is_active: bool
     created_at: datetime.datetime | None
-    #: The previous request's time, not a sign-in: null on the first visit (contract 0.10).
+    #: The previous request's time, not a sign-in: null on the first visit.
     last_seen_at: datetime.datetime | None
     identity_issuer: str | None
     identity_subject: str | None
@@ -189,7 +189,7 @@ class CountryListResponse(AdminModel):
 
 
 class SubdivisionTypeOption(AdminModel):
-    #: ISO 3166-2's type name, lowercase (ADR-055).
+    #: ISO 3166-2's type name, lowercase.
     key: str
     label: str
 
@@ -278,7 +278,7 @@ PublicationTypes = Annotated[list[PublicationType], Field(max_length=10)]
 
 
 class CatalogCreateRequest(AdminModel):
-    """A new catalog (contract §4, "Catalog fields"). The same checks as the seed follow."""
+    """A new catalog. The same checks as the seed follow."""
 
     name: CatalogName
     description: LongText | None = None
@@ -332,7 +332,7 @@ class CatalogUpdateRequest(AdminModel):
         return value
 
 
-# --- feed checks (contract 0.8) ------------------------------------------------------------------
+# --- feed checks ----------------------------------------------------------------------------------
 
 
 class FeedCheckRequest(AdminModel):
@@ -413,7 +413,7 @@ class FeedCheckResponse(AdminModel):
     changes: list[FeedValueChange | FeedLinksChange] | None = None
 
 
-# --- users (contract 0.9) -------------------------------------------------------------------------
+# --- users ----------------------------------------------------------------------------------------
 
 
 class UserItem(AdminModel):
@@ -436,7 +436,7 @@ class UserRoleRequest(AdminModel):
 
 
 class SubdivisionTypesRequest(AdminModel):
-    """The types a country offers, from its `available_subdivision_types` (contract 0.9)."""
+    """The types a country offers, from its `available_subdivision_types`."""
 
     keys: Annotated[
         list[Annotated[str, StringConstraints(max_length=100, pattern=_NO_NUL)]],
@@ -445,7 +445,7 @@ class SubdivisionTypesRequest(AdminModel):
 
 
 class MeUpdateRequest(AdminModel):
-    """Your own display name (contract 0.10). `null` or blank clears it."""
+    """Your own display name. `null` or blank clears it."""
 
     name: (
         Annotated[

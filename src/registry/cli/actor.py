@@ -1,6 +1,6 @@
 """Add someone to the admin API, or change their role or access.
 
-    python -m registry.cli actor set roni@edrlab.org --role admin --name "Roni"
+    python -m registry.cli actor set someone@edrlab.org --role admin --name "Ada Lovelace"
     python -m registry.cli actor set former@edrlab.org --deactivate
 
 The first administrator has to come from somewhere, and the CLI is trusted by holding the database

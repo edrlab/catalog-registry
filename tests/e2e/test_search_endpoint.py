@@ -1,4 +1,4 @@
-"""`GET /search` over the real ASGI path (ADR-054). Ranking cases are in the test table suite."""
+"""`GET /search` over the real ASGI path. Ranking cases are in the test table suite."""
 
 from typing import Any, NoReturn
 
@@ -122,7 +122,7 @@ async def test_the_top_level_feed_advertises_the_search_template(
 async def test_search_ignores_accept_language(
     client: AsyncClient, searchable_catalogs: None, header: str
 ) -> None:
-    """ADR-044: the top-level feed filters and orders by `Accept-Language`, search does not.
+    """The top-level feed filters and orders by `Accept-Language`, search does not.
     A reader who asks for `tv5` or `liber` in a French browser still finds Italian catalogs;
     a language filter is a later, explicit parameter."""
     plain = await client.get("/search", params={"query": "bibliotheque"})

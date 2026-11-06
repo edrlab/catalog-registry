@@ -230,7 +230,7 @@ async def test_the_openapi_document_describes_every_admin_problem(
             continue
         for method, operation in operations.items():
             # Every catalog or user change can conflict. A feed check writes nothing (it has 429),
-            # and a country's types are last-write-wins (contract 0.8, 0.9).
+            # and a country's types are last-write-wins.
             writes = method != "get" and path not in NO_CONFLICT_PATHS
             expected = ("401", "403", "500", "503") + (("409",) if writes else ())
             if path == "/admin/feed-checks":
@@ -677,7 +677,7 @@ async def test_the_list_is_one_statement_whatever_its_size(
     db_connection: AsyncConnection,
     searchable_catalogs: None,
 ) -> None:
-    """R4. The login is one more statement; the list itself must not grow with the rows."""
+    """One statement per read, plus the login; the count does not grow with the rows."""
     await become(db_session, "count@edrlab.org", "viewer")
     seen: list[str] = []
 

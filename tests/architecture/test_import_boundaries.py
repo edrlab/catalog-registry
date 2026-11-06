@@ -28,7 +28,7 @@ FORBIDDEN = {
         "registry.network",
         "httpx",
     },
-    # The network is reached through `FeedFetcher` only (ADR-066).
+    # The network is reached through `FeedFetcher` only.
     "registry.services": {"sqlalchemy", "fastapi", "registry.api", "registry.network", "httpx"},
     "registry.network": {
         "sqlalchemy",
@@ -85,7 +85,7 @@ def _imports_of(relative: str) -> set[str]:
 
 
 def test_the_search_query_parser_imports_only_the_standard_library() -> None:
-    """`domain/search_query.py` is pure (ADR-059): no framework, no database, no registry."""
+    """`domain/search_query.py` is pure: no framework, no database, no registry."""
     imported = _imports_of("domain/search_query.py")
 
     assert imported, "the parser imports nothing at all? the scan is broken"

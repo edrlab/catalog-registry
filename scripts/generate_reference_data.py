@@ -1,4 +1,4 @@
-"""Generate the v0.2 search reference data from pinned sources (ADR-057).
+"""Generate the v0.2 search reference data from pinned sources.
 
 Writes CSV snapshots to `.cache/reference-data/out/` (gitignored, not part of the repo). The data
 migration embeds the same rows as literals
@@ -6,9 +6,9 @@ migration embeds the same rows as literals
 A CLDR update is a new data migration carrying the difference.
 
 Sources, all pinned:
-  CLDR 48.2, cldr-json tag 48.2.0:  territoryInfo.json (official languages),
+  CLDR 49, cldr-json tag 49.0.0:    territoryInfo.json (official languages),
                                     territories.json (country names)
-  CLDR 48.2, cldr tag release-48-2: common/subdivisions/<lang>.xml (subdivision names)
+  CLDR 49, cldr tag release-49:     common/subdivisions/<lang>.xml (subdivision names)
   pycountry 26.2.16:                ISO 3166-2 subdivision types
 
 pycountry is not a runtime dependency; run the script with
@@ -58,9 +58,10 @@ XML_BASE = (
     f"{build_cldr_xml_tag(CLDR_VERSION)}/common/subdivisions"
 )
 
-#: Every CLDR status that makes a language official somewhere in a country, strongest first. Before
-#: 2026-11-06 only `official` counted (ADR-053), which gave India 2 languages of 22 and South Africa
-#: 1 of 11; Roni widened it to the regional and de facto ones too.
+#: Every CLDR status that makes a language official somewhere in a country, strongest first.
+#: Counting only the country-wide `official` status gave India 2 languages of 22, South Africa 1 of
+#: 11 and Spain no Catalan, Basque or Galician, so the regional, minority and de facto statuses
+#: count too.
 OFFICIAL_STATUSES = ("official", "de_facto_official", "official_regional", "official_minority")
 
 #: Official languages CLDR does not list as official for the country. Each with its source.
@@ -80,7 +81,7 @@ SUPERSCRIPT = re.compile(r"[²³¹⁰-⁹]+$")
 #: Everyday names CLDR lacks. Added by hand so a search for them finds the region.
 HAND_SUBDIVISION_NAMES = [("BE-VLG", "fr", "Flandre"), ("BE-VLG", "nl", "Vlaanderen")]
 
-#: French overseas subdivisions that are also CLDR territories (ADR-057). CLDR (48.2, 49) has no
+#: French overseas subdivisions that are also CLDR territories. CLDR (48.2, 49) has no
 #: subdivision names for the letter-coded ones, and the territory names add everyday forms
 #: ("French Guiana"), so both sets are used.
 OVERSEAS_TERRITORY = {
@@ -151,7 +152,7 @@ def generate_country_languages(iso: set[str], cache: Path) -> dict[str, list[tup
     tag, plus `HAND_COUNTRY_LANGUAGES`.
 
     ISO 3166-1 codes only, script variants merged into the base language (`sr_Latn` -> `sr`),
-    lowercase tags (ADR-053).
+    lowercase tags (BCP-47 writes the language subtag lowercase).
     """
     info = json.loads(
         download_cached(f"{JSON_BASE}/cldr-core/supplemental/territoryInfo.json", cache)
@@ -207,7 +208,7 @@ def generate_subdivision_names(
 ) -> list[tuple[str, str, str]]:
     """Names for subdivisions present in the repo, in English plus the country's languages.
 
-    CLDR writes subdivision codes as `bewal`; the repo uses `BE-WAL` (ADR-057).
+    CLDR writes subdivision codes as `bewal`; the repo uses ISO 3166-2's `BE-WAL`.
     """
     rows: set[tuple[str, str, str]] = set(HAND_SUBDIVISION_NAMES)
     for code in codes:

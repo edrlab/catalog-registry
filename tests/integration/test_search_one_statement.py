@@ -1,7 +1,7 @@
 """The one search statement returns every child once, complete, and renders like the ORM does.
 
 Search answers a page and every child of every catalog on it (kinds, publication types,
-languages, subdivisions, links) in one statement (ADR-060). The danger of that shape is in the
+languages, subdivisions, links) in one statement. The danger of that shape is in the
 details a per-collection query cannot get wrong: a join that multiplies rows, an array that
 drops an element, a JSON aggregate that loses a field, a page that is cut in the wrong place.
 These tests put catalogs with no children, with the maximum of every child, and with nulls

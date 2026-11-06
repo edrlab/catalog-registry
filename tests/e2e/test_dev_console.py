@@ -1,4 +1,4 @@
-"""The dev console, and which parts of it exist where (ADR-063)."""
+"""The dev console, and which parts of it exist where."""
 
 import asyncio
 import json

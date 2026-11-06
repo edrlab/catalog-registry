@@ -1,4 +1,4 @@
-"""Search: parse, query, render. An empty query does no database work (ADR-054)."""
+"""Search: parse, query, render. An empty query does no database work."""
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager

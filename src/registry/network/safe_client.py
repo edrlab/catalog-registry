@@ -1,4 +1,4 @@
-"""The registry's one outbound HTTP client for URLs someone typed (ADR-066).
+"""The registry's one outbound HTTP client for URLs someone typed.
 
 - Every URL, the first and each redirect target, passes `validate_outbound_url`; every connection
   goes through `PublicOnlyTransport`, which connects only to the public address it checked.

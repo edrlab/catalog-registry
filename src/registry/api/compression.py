@@ -1,4 +1,4 @@
-"""Response compression by negotiation (ADR-061).
+"""Response compression by negotiation.
 
 The client says what it can decode in `Accept-Encoding` (RFC 9110 §12.5.3); this picks from what
 the server offers. Measured on real clients (docs/search.md): gzip is the only coding every client
@@ -123,7 +123,7 @@ def configure_client_log() -> None:
 def log_client_request(
     scope: Scope, request_headers: Headers, *, status: int, encoding: str | None
 ) -> None:
-    """The one line per request, whichever path the response took (ADR-061).
+    """The one line per request, whichever path the response took.
 
     The console is not a reader. Its own pages (`/dev...`) and the requests it makes to the app on a
     visitor's behalf (marked in the scope by `call_app`) would pollute the count of real clients.

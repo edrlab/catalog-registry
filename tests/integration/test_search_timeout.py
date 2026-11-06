@@ -1,4 +1,4 @@
-"""The search pool's limits, enforced by the connection itself (ADR-058 amended, ADR-060).
+"""The search pool's limits, enforced by the connection itself.
 
 Search runs on `build_read_engine`: AUTOCOMMIT, with `statement_timeout`, read-only mode and the
 typo threshold sent once per connection in the startup packet. These tests build that engine for
@@ -239,7 +239,7 @@ async def test_the_timeout_leaves_no_idle_in_transaction_backend(
 
 
 async def test_historical_set_local_under_autocommit_was_ignored(settings: Settings) -> None:
-    """HISTORICAL NOTE, not a dependency of the design. ADR-058 first tried
+    """HISTORICAL NOTE, not a dependency of the design. The first design tried
     `SELECT set_config('statement_timeout', ..., true)` (the same as `SET LOCAL`) on an
     AUTOCOMMIT session and measured it silently ignored: `LOCAL` lasts to the end of the
     transaction, and under AUTOCOMMIT that is the end of the statement. That is why the timeout

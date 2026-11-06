@@ -164,7 +164,7 @@ async def test_the_detail_is_one_statement(
     db_connection: AsyncConnection,
     searchable_catalogs: None,
 ) -> None:
-    """R4: the actor login and the detail, nothing per link or subdivision."""
+    """One statement per read: the actor login and the detail, nothing per link or subdivision."""
     item = await first_item(admin_client)
     await become(db_session, "count@edrlab.org", "viewer")
     seen: list[str] = []

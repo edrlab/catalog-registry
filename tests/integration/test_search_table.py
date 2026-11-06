@@ -1,13 +1,13 @@
-"""The search table of the test plan (section 1), one parametrized case per row.
+"""The agreed search test cases, one parametrized case per row.
 
 Expected results are (title, tier) in rank order, measured on 1 October with the real
 migrations and the two data files. Tier 1 is a word match, tier 2 a trigram-only match, which
-always follows every word match (ADR-051). Where the plan calls a result known and accepted the
+always follows every word match. Where a result is known and accepted the
 case says so and pins the CURRENT behaviour, so a change is noticed and has to be decided
 rather than slipping in.
 
-The cases are plain data (query, expected) on purpose: plan section 6 wants this table to become
-a search-quality score one day.
+The cases are plain data (query, expected) on purpose: the same data is scored for search
+quality (`tests/search_quality.py`).
 """
 
 from datetime import UTC, datetime
@@ -156,7 +156,7 @@ async def test_france_finds_the_paris_library_and_both_overseas_catalogs(
     assert {tier for _, tier, _ in rows} == {1}
 
 
-# Plan section 2: paging the real data in pages of two.
+# Paging the real data in pages of two.
 
 
 async def test_pages_of_two_reproduce_the_single_page_order_with_no_duplicate_and_no_gap(
@@ -187,9 +187,9 @@ async def test_a_page_past_the_end_still_reports_the_total_of_six(
 async def test_a_title_match_outranks_a_city_match_which_outranks_a_country_match(
     db_session: AsyncSession,
 ) -> None:
-    """The weight order (ADR-052, Q3): title 1.0, city 0.4, countries and subdivisions 0.2.
+    """The weight order: title 1.0, city 0.4, countries and subdivisions 0.2.
 
-    Hadrien's order (2026-10-14): a city is more specific than a country, so it ranks above it.
+    A city is more specific than a country, so it ranks above it.
     The data files have no pair of catalogs that differ only in which field matched, so the
     order was invisible to the table. Here the best match is the OLDEST and the weakest the
     NEWEST, so `created_at` cannot be what puts them in order. Going back to the old labels

@@ -126,7 +126,7 @@ async def test_the_seed_input_is_rejected_by_the_published_schema(db_session: As
 async def test_re_running_after_the_file_grows_adds_only_the_new_rows(
     db_session: AsyncSession, tmp_path: Path
 ) -> None:
-    """Hadrien said he will probably extend the file."""
+    """The seed file is expected to grow over time."""
     await seed_catalogs(db_session, SEED_FILE)
     await db_session.commit()
 
@@ -196,7 +196,7 @@ async def test_a_not_recommended_import_stays_out_of_the_feed_query(
 ) -> None:
     """`data/libraries.json`'s whole contract: active, real, and not in the top-level feed.
 
-    Hadrien's words were "they can be active as long as they're not recommended". `status` and
+    A catalog may be active as long as it is not recommended. `status` and
     `recommended` are separate columns, so this asserts both halves at once.
     """
     document = {
@@ -217,9 +217,9 @@ async def test_uppercase_country_and_subdivisions_are_stored_verbatim(
 ) -> None:
     """No case folding. The codes reach the database exactly as the file wrote them.
 
-    Hadrien, 2026-09-29, on which case to standardise: "I think that officially it's all uppercase
-    for ISO 3166-2", and "it's better to enforce this at import than convert". So uppercase is the
-    only accepted form, the input schema rejects anything else, and nothing here calls `.upper()`.
+    ISO 3166-2 codes are officially uppercase, and enforcing that at import is better than
+    converting. So uppercase is the only accepted form, the input schema rejects anything else,
+    and nothing here calls `.upper()`.
     `test_lowercase_codes_are_rejected_rather_than_converted` is the other half.
     """
     document = {
@@ -682,7 +682,7 @@ async def test_the_real_libraries_file_imports(db_session: AsyncSession) -> None
         href = next(link["href"] for link in entry["links"] if link["rel"] == "catalog")
         catalog_id = uuid.uuid5(uuid.NAMESPACE_URL, href)
         # The public read is a snapshot of what is rendered; it does not carry `recommended` or
-        # `status` (R3). Those are the importer's business, so the importer's lookup shows them.
+        # `status`. Those are the importer's business, so the importer's lookup shows them.
         public = await repository.fetch_catalog_by_id(catalog_id)
         assert public is not None, entry["metadata"]["title"]
         stored = await repository.fetch_catalog_by_identity_id(catalog_id)

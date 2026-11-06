@@ -149,7 +149,7 @@ def test_no_audiobook_drops_a_catalog_with_audiobooks_and_nothing_else() -> None
 def test_no_audiobook_keeps_mixed_catalogs_and_those_that_list_no_types(
     types: tuple[PublicationType, ...],
 ) -> None:
-    """Hadrien: a catalog with ebooks, comics and audiobooks stays. So does one with no types."""
+    """A mixed catalog (ebooks, comics and audiobooks) stays. So does one that lists no types."""
     assert allows(catalog((), types=types), Restrictions(no_audiobook=True))
 
 

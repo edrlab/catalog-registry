@@ -2,7 +2,7 @@
 
 Retry only what may succeed a moment later: a refused or reset connection, a timeout, and the
 statuses that mean "busy" (408, 429, 502, 503, 504). Never a 4xx about the request itself, never an
-unsafe URL, never past the caller's deadline (ADR-066).
+unsafe URL, never past the caller's deadline.
 """
 
 import email.utils

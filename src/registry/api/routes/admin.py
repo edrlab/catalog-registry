@@ -391,7 +391,7 @@ async def create_admin_feed_check(
     actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
     body: FeedCheckRequest,
 ) -> FeedCheckResponse:
-    """One synchronous check, nothing stored (contract 0.8, ADR-066)."""
+    """One synchronous check, nothing stored."""
     slots = request.app.state.feed_check_slots
     if slots.locked():
         raise ChecksBusyError("Too many feed checks are running. Try again in a few seconds.")

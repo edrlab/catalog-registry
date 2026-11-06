@@ -227,7 +227,7 @@ async def apply_admin_transition(
 async def apply_admin_recommendation(
     writer: AdminWriter, actor: AdminActor, catalog_id: str, *, recommended: bool, version: int
 ) -> str:
-    """Turn recommendation on or off. Published catalogs only (W21); the flag is kept through
+    """Turn recommendation on or off. Published catalogs only; the flag is kept through
     unpublish and archive, but it is changed only while readers can see the catalog."""
     _require_catalog_permission(actor, "recommend")
     normalised = _normalise_catalog_id(catalog_id)
@@ -241,7 +241,7 @@ async def apply_admin_recommendation(
     return normalised
 
 
-#: Where each body field lives in the catalog document the seed reads (contract §4, field table).
+#: Where each body field lives in the catalog document the seed reads.
 _DOCUMENT_PATHS: Mapping[str, tuple[str, ...]] = {
     "name": ("metadata", "title"),
     "description": ("metadata", "description"),
@@ -352,8 +352,8 @@ async def _validate_places(writer: AdminWriter, document: dict[str, Any]) -> Non
 async def apply_admin_catalog_creation(
     writer: AdminWriter, actor: AdminActor, fields: Mapping[str, Any], *, publish: bool
 ) -> str:
-    """A new catalog, as a draft or published (W16), checked as the seed checks one. Its id is
-    derived from its identity href, as the seed derives it (ADR-038). Returns the id."""
+    """A new catalog, as a draft or published, checked as the seed checks one. Its id is
+    derived from its identity href, as the seed derives it. Returns the id."""
     _require_catalog_permission(actor, "create")
     if publish:
         _require_catalog_permission(actor, "publish")
@@ -377,7 +377,7 @@ async def apply_admin_catalog_edit(
     changes: Mapping[str, Any],
 ) -> str:
     """Change some fields of a catalog. The result is checked whole, as a new catalog would be.
-    An edit that changes nothing keeps the version. Archived catalogs are read-only (W20)."""
+    An edit that changes nothing keeps the version. Archived catalogs are read-only."""
     _require_catalog_permission(actor, "edit")
     normalised = _normalise_catalog_id(catalog_id)
     state = await _lock_seen_catalog(writer, normalised, version)
@@ -502,7 +502,7 @@ async def resolve_admin_country_list(
 async def apply_country_subdivision_types(
     writer: AdminWriter, actor: AdminActor, code: str, keys: list[str]
 ) -> str:
-    """Replace the types *code* offers with *keys* (contract 0.9). Each must be one the country
+    """Replace the types *code* offers with *keys*. Each must be one the country
     may offer; `[]` offers none. Catalogs keep the subdivisions they use. Returns the code."""
     if "country.manage_subdivisions" not in build_permissions(actor.role):
         raise PermissionDeniedError("Your role cannot do this (country.manage_subdivisions).")
@@ -528,7 +528,7 @@ async def apply_country_subdivision_types(
 
 
 def _label_subdivision_type(key: str) -> str:
-    """No label table: the key is ISO 3166-2's own type name, lowercased (ADR-055)."""
+    """No label table: the key is ISO 3166-2's own type name, lowercased."""
     return key[:1].upper() + key[1:]
 
 

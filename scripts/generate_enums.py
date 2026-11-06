@@ -1,11 +1,11 @@
 """Generate `registry.domain.enums` from `schema/catalog.schema.json`.
 
-Hadrien authors the schema and it changes independently of the service. Hand-copying his
+The schema is authored upstream and changes independently of the service. Hand-copying its
 enum values into Python is exactly the duplication that drifts silently, so the file is
 generated and committed; CI regenerates and diffs, which turns a schema change into a
 failing build with a readable diff instead of a runtime mismatch weeks later.
 
-`link_rel` is **not** in the JSON Schema, it comes from the Notion links table, so it is
+`link_rel` is **not** in any published JSON Schema, so it is
 transcribed by hand below rather than derived. Being explicit about which enums are derived
 and which are transcribed matters when one of them drifts.
 """

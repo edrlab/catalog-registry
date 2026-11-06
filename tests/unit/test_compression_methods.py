@@ -1,4 +1,4 @@
-"""The middleware on a minimal ASGI app, so each HTTP method can be driven exactly (ADR-061).
+"""The middleware on a minimal ASGI app, so each HTTP method can be driven exactly.
 
 HEAD is the case the application's own routes never exercise (they answer GET only), but a response
 to HEAD stands for the GET: its `Content-Length` is the size of the body it does not send.

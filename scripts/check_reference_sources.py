@@ -3,7 +3,7 @@
     uv run python scripts/check_reference_sources.py [--github-output FILE]
 
 The registry's country languages, country names, subdivisions and subdivision names come from two
-pinned sources (ADR-057): CLDR (`CLDR_VERSION` in `generate_reference_data.py`) and pycountry (the
+pinned sources: CLDR (`CLDR_VERSION` in `generate_reference_data.py`) and pycountry (the
 `pycountry==` pin in the Makefile). Nothing tells us when they move, so this asks: GitHub for the
 latest cldr-json release, PyPI for the latest pycountry. Run weekly by
 `.github/workflows/reference-data-watch.yaml`, which opens an issue when something is newer.

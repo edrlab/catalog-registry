@@ -44,7 +44,7 @@ FEED_ACCEPT = "application/opds+json, application/json;q=0.9"
 
 
 def build_outbound_client() -> SafeHttpClient:
-    """The client `add` fetches with: the registry's one outbound client (ADR-066). A function so
+    """The client `add` fetches with: the registry's one outbound client. A function so
     the loopback tests can swap the transport, never the checks."""
     return SafeHttpClient()
 
@@ -60,7 +60,7 @@ def download_feed_document(url: str) -> dict[str, Any]:
     """Fetch and parse an OPDS feed. Raises `ValidationError` on anything unusable.
 
     `SafeHttpClient` refuses anything but a public http(s) address, on the URL given and on every
-    redirect, and connects only to the address it checked (ADR-066).
+    redirect, and connects only to the address it checked.
     """
     try:
         result = asyncio.run(_download(url))

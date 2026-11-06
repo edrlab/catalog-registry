@@ -1,4 +1,4 @@
-"""The one-statement reads give exactly what the ORM load gives (ADR-062).
+"""The one-statement reads give exactly what the ORM load gives.
 
 `fetch_recommended_catalogs` and `fetch_catalog_by_id` return fresh transient objects built from
 one row each; the importers' `fetch_catalog_by_identity_id` is the unchanged ORM load (attached,

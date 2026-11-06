@@ -1,4 +1,4 @@
-"""One statement, one round trip: what the feed and a single catalog cost the connection (ADR-062).
+"""One statement, one round trip: what the feed and a single catalog cost the connection.
 
 The feed used to be six ORM statements (the catalogs and one `selectinload` per collection) inside
 a transaction on the main pool. Now `fetch_recommended_catalogs` and `fetch_catalog_by_id` are one
@@ -85,7 +85,7 @@ async def test_the_feed_is_one_statement_for_the_seeded_catalogs(
 async def test_the_feed_is_still_one_statement_for_sixty_more_catalogs(
     migrated_database: str, counted: tuple[AsyncEngine, Statements]
 ) -> None:
-    """The N+1 rule (R4), executable: the count does not grow with the number of catalogs."""
+    """The no-N+1 rule, executable: the count does not grow with the number of catalogs."""
     engine, counter = counted
     documents = [
         link_document(

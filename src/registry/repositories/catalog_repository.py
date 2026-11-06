@@ -2,7 +2,7 @@
 
 Two kinds of read, deliberately different:
 
-* **The public reads** (the top-level feed, one catalog) are one statement each (ADR-062): the
+* **The public reads** (the top-level feed, one catalog) are one statement each: the
   catalogs and every child in a single round trip, mapped to the plain `CatalogView` the renderer
   reads. They run on the read pool, which carries a timeout and read-only mode on the connection.
 * **The importers' lookups** (`fetch_catalog_by_identity_*`) load attached ORM objects with
@@ -29,7 +29,7 @@ from registry.repositories.catalog_rows import (
 )
 
 #: The feed and a single catalog may take a moment on a big registry, but not forever: a read that
-#: runs past this is cancelled and answered with a 503 (ADR-062). Search has its own, much shorter.
+#: runs past this is cancelled and answered with a 503. Search has its own, much shorter.
 READ_STATEMENT_TIMEOUT_MS: Final = 10_000
 
 #: Sent once per connection to the read pool (`build_read_engine`). Read-only because these
@@ -64,7 +64,7 @@ SELECT {CATALOG_COLUMNS}
 """
 )
 
-#: The hosts of the feeds the registry lists, for the dev console's deployed `/dev/fetch` (ADR-063).
+#: The hosts of the feeds the registry lists, for the dev console's deployed `/dev/fetch`.
 #: The host is what sits between `://` and the path of a `catalog` link.
 _REGISTERED_HOSTS = text(
     r"""

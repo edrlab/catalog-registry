@@ -41,7 +41,7 @@ def build_permissions(role: ActorRole) -> frozenset[str]:
     return ROLE_PERMISSIONS[role]
 
 
-#: What an admin may do to another person (contract 0.9 `allowed_actions`).
+#: What an admin may do to another person (`allowed_actions`).
 USER_ACTIONS: Final = ("change_role", "deactivate", "reactivate")
 
 

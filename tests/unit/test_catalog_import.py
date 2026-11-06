@@ -40,7 +40,7 @@ OPDS_FEED = {
         ("catalog", None),  # supplied by the operator, never trusted from the feed
         ("next", None),
         # Defined by OPDS 1.2 §6.1 alongside `shelf`, and still not ours: the registry's
-        # vocabulary is Hadrien's links table, not everything the specifications name.
+        # vocabulary is the fixed set of relations it maps, not everything the specifications name.
         ("http://opds-spec.org/subscriptions", None),
         # No generic prefix rule, this must not become `icon`.
         ("http://opds-spec.org/image", None),

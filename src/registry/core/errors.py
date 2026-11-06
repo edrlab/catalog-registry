@@ -36,14 +36,14 @@ class CountryNotFoundError(NotFoundError):
 
 
 class UserNotFoundError(NotFoundError):
-    """No person with this id (contract 0.9)."""
+    """No person with this id."""
 
     problem_type = "https://registry.thoriumreader.com/problems/user-not-found"
 
 
 class ConflictError(RegistryError):
     """The request is well formed but cannot apply to the catalog as it is now. Each case has its
-    own `type` (admin API contract §2), so a caller can tell them apart."""
+    own `type`, so a caller can tell them apart."""
 
     status_code = 409
     title = "Conflict"
@@ -62,7 +62,7 @@ class InvalidTransitionError(ConflictError):
 
 
 class NotPublishedError(ConflictError):
-    """Recommendation changes only on a published catalog (W21)."""
+    """Recommendation changes only on a published catalog."""
 
     problem_type = "https://registry.thoriumreader.com/problems/not-published"
 
@@ -86,20 +86,20 @@ class LastAdminError(ConflictError):
 
 
 class ArchivedReadOnlyError(ConflictError):
-    """An archived catalog cannot be edited until it is unarchived (W20)."""
+    """An archived catalog cannot be edited until it is unarchived."""
 
     problem_type = "https://registry.thoriumreader.com/problems/archived-read-only"
 
 
 class DuplicateCatalogError(ConflictError):
     """Another catalog already has this `catalog`/`shelf` href, or the id derived from it: one
-    identity href is one catalog (`uq_links_identity_href`, ADR-038)."""
+    identity href is one catalog (`uq_links_identity_href`)."""
 
     problem_type = "https://registry.thoriumreader.com/problems/duplicate-catalog"
 
 
 class ChecksBusyError(RegistryError):
-    """This instance is already running its maximum of feed checks (ADR-066). Try again shortly."""
+    """This instance is already running its maximum of feed checks. Try again shortly."""
 
     status_code = 429
     title = "Too Many Requests"
@@ -114,7 +114,7 @@ class ValidationError(RegistryError):
 
 
 class FieldValidationError(ValidationError):
-    """Invalid input, field by field, as the admin API's 422 `errors` (contract §2)."""
+    """Invalid input, field by field, as the admin API's 422 `errors`."""
 
     title = "Validation failed"
     problem_type = "https://registry.thoriumreader.com/problems/validation"
@@ -126,7 +126,7 @@ class FieldValidationError(ValidationError):
 
 
 class ReadTimeoutError(RegistryError):
-    """A read outran its statement timeout (ADR-058, ADR-062). The caller can simply try again."""
+    """A read outran its statement timeout. The caller can simply try again."""
 
     status_code = 503
     title = "Service Unavailable"

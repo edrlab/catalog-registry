@@ -167,9 +167,9 @@ def rank_language_match(
     The best match wins, not the first, and it is ranked on the range's *position* rather
     than its ``q``, because ``Accept-Language: fr, en`` states a preference with order alone.
 
-    ponytail: linear scan, not an index. A prefix map of the ranges built once per request
-    would make this O(t · s) per catalog, worth doing when `n` reaches the thousands, the
-    search path (v0.2), not this one.
+    Limit: a linear scan, not an index. A prefix map of the ranges built once per request
+    would make this O(t · s) per catalog, worth doing when `n` reaches the thousands, as on
+    the search path, not this one.
     """
     tags = [normalise_language_tag(tag) for tag in available]
     best: LanguageMatch | None = None

@@ -1,5 +1,5 @@
 """`build_catalog_from_row`: a row of `CATALOG_COLUMNS` becomes the `Catalog` the renderer reads
-(ADR-060, ADR-062). Search, the feed and one catalog all map their rows with it.
+(one statement per read). Search, the feed and one catalog all map their rows with it.
 
 No database: a row is any mapping, and asyncpg hands `jsonb` back as text, so both forms of the
 `links` column are exercised. The integration twins of this file (`test_search_one_statement`,
@@ -284,14 +284,14 @@ INTERNAL = (
 
 @pytest.mark.parametrize("name", INTERNAL)
 def test_internal_columns_do_not_exist_on_the_mapped_value(name: str) -> None:
-    """R3: only what the renderer projects, and `created_at` for the feed's order, is copied;
+    """Only what the renderer projects, and `created_at` for the feed's order, is copied;
     nothing else internal rides along."""
     assert not hasattr(build_catalog_from_row(make_row()), name)
 
 
 def test_an_extra_column_in_the_row_does_not_reach_the_value() -> None:
     """A new column added to the SELECT list cannot leak by accident: the mapper copies named
-    fields, not the row's keys (R3)."""
+    fields, not the row's keys."""
     catalog = build_catalog_from_row(
         make_row(status="draft", recommended=True, submitter_email="a@b.example")
     )

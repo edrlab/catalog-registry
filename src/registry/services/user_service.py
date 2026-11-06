@@ -1,4 +1,4 @@
-"""People, for admins (contract 0.9): the list, a role change, deactivation and reactivation.
+"""People, for admins: the list, a role change, deactivation and reactivation.
 
 A change runs in one transaction: lock the active admins (in id order), check the caller is still
 one of them, lock the person, apply the rules, write, commit. Two admins demoting each other at once

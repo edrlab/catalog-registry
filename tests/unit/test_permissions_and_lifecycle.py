@@ -149,7 +149,7 @@ def test_an_undo_always_lands_exactly_on_the_previous_status() -> None:
         assert TRANSITIONS[(TRANSITIONS[(status, action)], undo)] is status
 
 
-# --- what an admin may do to a person (contract 0.9) ---------------------------------------------
+# --- what an admin may do to a person ------------------------------------------------------------
 
 
 def _user_actions(**overrides: object) -> list[str]:

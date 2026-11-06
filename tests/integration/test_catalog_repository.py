@@ -1,7 +1,7 @@
 """Repository behaviour, including the N+1 guard.
 
 The public reads (`fetch_recommended_catalogs`, `fetch_catalog_by_id`) return fresh transient
-snapshots built from one statement each (ADR-062). They are not attached to the session, so a
+snapshots built from one statement each. They are not attached to the session, so a
 change is made the way the importer makes it (`fetch_catalog_by_identity_id`, attached) and is
 seen by the NEXT read, never by an object already returned.
 """
@@ -129,7 +129,7 @@ async def test_a_returned_snapshot_is_not_changed_by_a_later_change_to_the_row(
 async def test_the_feed_is_one_select_whatever_the_number_of_catalogs(
     db_session: AsyncSession, seeded_catalogs: int, select_counter: SelectCounter
 ) -> None:
-    """The N+1 rule (R4), made executable: one statement for the catalogs and every child, so
+    """The no-N+1 rule, made executable: one statement for the catalogs and every child, so
     it cannot grow with n. (`test_read_one_statement` proves it at the driver and on the wire.)"""
     for index in range(20):
         db_session.add(

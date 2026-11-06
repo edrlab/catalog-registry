@@ -1,4 +1,4 @@
-"""Users and a country's subdivision types (contract 0.9)."""
+"""Users and a country's subdivision types."""
 
 from typing import Any
 

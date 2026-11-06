@@ -1,4 +1,4 @@
-"""Triggers keep `catalog_search` current, in the same transaction (ADR-056, plan section 3).
+"""Triggers keep `catalog_search` current, in the same transaction.
 
 Every write here is plain SQL or a re-import, never a call to `refresh_catalog_search`: the
 point is that no write path can forget the index. The session never commits to the database
@@ -279,7 +279,7 @@ async def test_a_rolled_back_change_leaves_the_index_as_it_was(
 async def test_a_new_subdivision_name_is_searchable_only_after_the_affected_catalogs_refresh(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
-    """Reference data has no trigger (ADR-056): a data migration ends with a refresh."""
+    """Reference data has no trigger: a data migration ends with a refresh."""
     await sql(
         db_session,
         "INSERT INTO subdivision_names (subdivision_code, language_tag, name) "
@@ -392,7 +392,7 @@ async def test_reseeding_a_changed_subdivision_list_updates_the_row(
 async def test_a_catalog_imported_the_way_make_add_does_is_searchable_with_its_places(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
-    """Plan section 3, "Import through `registry.cli seed` and `add`". `add` builds a document from
+    """Import through `registry.cli seed` and `add`. `add` builds a document from
     a feed with `build_catalog_document` and upserts it through `import_feed_document`; only the
     download is left out, so nothing here needs a network."""
     url = "https://remote.example/zanzibar/opds"

@@ -1,8 +1,8 @@
 """The v0.2 reference data and the schema it lives in, against the migrated database.
 
-The numbers come from ADR-053 (CLDR 48.2: 335 rows over 245 countries) and ADR-055 (the
-starting subdivision types). They are properties of the pinned data, so a regenerated snapshot
-that changes them is a decision to make, not a typo to fix.
+The numbers come from the pinned CLDR snapshot (official languages per country) and the
+starting subdivision types per country. They are properties of the pinned data, so a
+regenerated snapshot that changes them is a decision to make, not a typo to fix.
 """
 
 from typing import Any
@@ -19,9 +19,9 @@ from registry.db.models import *  # noqa: F403 - registers every model on Base.m
 
 pytestmark = pytest.mark.integration
 
-#: ADR-055, France as Hadrien listed it on 2 October, plus the type he asked to add for
-#: Martinique and Guyane. Left out on purpose: overseas territory, dependency, European
-#: collectivity.
+#: The seven ISO 3166-2 types the back office offers for France, overseas unique territorial
+#: collectivity (Martinique, Guyane) included. Left out on purpose, as no libraries are expected
+#: there: overseas territory, dependency, European collectivity.
 FRANCE_TYPES = {
     "metropolitan region",
     "metropolitan department",
@@ -32,7 +32,7 @@ FRANCE_TYPES = {
     "overseas unique territorial collectivity",
 }
 
-#: Countries CLDR gives no language to; they get English only (ADR-053).
+#: Countries CLDR gives no language to; they get English only.
 NO_LANGUAGE = {"AQ", "BV", "HM", "TF"}
 
 
@@ -118,8 +118,8 @@ async def test_every_country_has_an_english_name_except_possibly_none(
 @pytest.mark.parametrize(
     ("country", "languages"),
     [
-        ("BE", {"nl", "fr", "de"}),  # Belgium keeps German (ADR-053)
-        # Every CLDR official status counts since 2026-11-06 (Roni), regional ones included.
+        ("BE", {"nl", "fr", "de"}),  # Belgium keeps German
+        # Every CLDR official status counts, regional ones included.
         ("CH", {"de", "fr", "it", "rm", "gsw"}),
         ("FR", {"fr"}),
         ("CA", {"en", "fr", "iu", "crk", "chp", "den", "dgr", "gwi"}),
@@ -232,7 +232,7 @@ async def test_subdivision_names_follow_the_countrys_languages_or_english(
     assert stray == []
 
 
-async def test_france_has_exactly_the_seven_types_of_adr_055(db_session: AsyncSession) -> None:
+async def test_france_offers_exactly_seven_subdivision_types(db_session: AsyncSession) -> None:
     found = {
         r[0]
         for r in await rows(
@@ -252,7 +252,7 @@ async def test_france_has_exactly_the_seven_types_of_adr_055(db_session: AsyncSe
         ("CA", {"province", "territory"}),
     ],
 )
-async def test_the_other_starting_countries_have_their_adr_055_types(
+async def test_the_other_starting_countries_have_their_subdivision_types(
     db_session: AsyncSession, country: str, types: set[str]
 ) -> None:
     found = {

@@ -1,7 +1,7 @@
-"""Index use (plan section 5) and the NOTICE trap (plan section 4).
+"""Index use and the NOTICE trap.
 
-The data set is far too small for the planner to pick a GIN index on cost, so sequential scans
-are disabled for the transaction: the question is whether each half *can* use its index, which
+The data set is far too small for the query planner to pick a GIN index on cost, so sequential
+scans are disabled for the transaction: the question is whether each half *can* use its index, which
 is what keeps it sublinear at tens of thousands of catalogs.
 """
 

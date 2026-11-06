@@ -39,7 +39,7 @@ from registry.repositories.search_repository import (
 )
 from registry.services.admin_identity import build_jwks_key_resolver
 
-#: Feed checks one instance runs at once; more answer 429 `checks-busy` (ADR-066).
+#: Feed checks one instance runs at once; more answer 429 `checks-busy`.
 FEED_CHECK_SLOTS = 4
 
 
@@ -64,7 +64,7 @@ def bind_admin_stores(app: FastAPI) -> None:
             yield ActorRepository(session)
 
     app.state.open_admin_reader = open_admin_reader
-    #: Feed checks request URLs editors type: one client per check, through `network/` (ADR-066),
+    #: Feed checks request URLs editors type: one client per check, through `network/`,
     #: and at most `FEED_CHECK_SLOTS` at once per instance.
     app.state.open_feed_fetcher = SafeHttpClient
     app.state.feed_check_slots = asyncio.Semaphore(FEED_CHECK_SLOTS)
@@ -80,7 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine = create_database_engine(resolved)
         app.state.settings = resolved
         app.state.engine = engine
-        # The feed and one catalog are reads: their own pool, read-only, with a timeout (ADR-062).
+        # The feed and one catalog are reads: their own pool, read-only, with a timeout.
         read_engine = build_read_engine(resolved, READ_CONNECTION_SETTINGS)
         app.state.read_engine = read_engine
         app.state.session_factory = build_session_factory(read_engine)
@@ -95,7 +95,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.open_catalog_reader = open_catalog_reader
 
         # Search has its own pool: the timeout, read-only mode and typo threshold ride on its
-        # connections, and nothing of that reaches the feed or the importers (ADR-058, ADR-060).
+        # connections, and nothing of that reaches the feed or the importers.
         search_engine = build_read_engine(resolved, SEARCH_CONNECTION_SETTINGS)
         app.state.search_engine = search_engine
         app.state.search_session_factory = build_session_factory(search_engine)
@@ -124,7 +124,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title="OPDS Catalog Registry", version="0.1.0", lifespan=lifespan, redirect_slashes=False
     )
     # Innermost, so it compresses the finished body and the others see the final headers. Chooses
-    # `br`, `gzip` or nothing from the client's `Accept-Encoding` and logs who asked (ADR-061).
+    # `br`, `gzip` or nothing from the client's `Accept-Encoding` and logs who asked.
     configure_client_log()
     app.add_middleware(CompressionMiddleware)
     # Public data, and browser-based readers are a legitimate
@@ -145,7 +145,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The admin routes are described in the schema only locally; deployed, /openapi.json is public.
     app.include_router(admin.router, include_in_schema=resolved.environment == "local")
     # The console page and its simulator read only what the registry already serves publicly, so
-    # they are mounted everywhere (ADR-063).
+    # they are mounted everywhere.
     app.include_router(dev.router)
     if resolved.environment == "local":
         # Reading a library's own feed makes the server request a URL a visitor names, so it is

@@ -41,7 +41,7 @@ class DomainCatalog:
     ``schema/catalog.schema.json``. It is carried rather than rebuilt because in this
     version the source of truth *is* that document.
 
-    ponytail: no whitelist projection yet, there is no internal field to leak while the
+    Limit: no whitelist projection yet. There is no internal field to leak while the
     source is a file that is already the wire format. Whitelist projection lands with the
     database, in the same change that introduces columns the wire contract does not have.
     """
