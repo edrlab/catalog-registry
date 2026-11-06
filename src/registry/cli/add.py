@@ -152,8 +152,8 @@ def main(argv: Sequence[str] = ()) -> int:
     parser.add_argument(
         "--subdivision",
         action="append",
-        help="ISO 3166-2, uppercase, repeatable: BE-WAL. Must already be in the `subdivisions` "
-        "table, which holds only the codes some catalog uses; a missing one is refused",
+        help="ISO 3166-2, uppercase, repeatable: BE-WAL. Must be in the `subdivisions` table "
+        "and belong to --country; anything else is refused",
     )
     parser.add_argument(
         "--publication-type",

@@ -54,9 +54,6 @@ SEARCH_CONNECTION_SETTINGS: Final = {
     "pg_trgm.word_similarity_threshold": str(WORD_SIMILARITY_THRESHOLD),
 }
 
-#: SQLSTATE `query_canceled`, what `statement_timeout` raises.
-_QUERY_CANCELED: Final = "57014"
-
 _SEARCH_SQL: Final = (
     """
 WITH q AS (

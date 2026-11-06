@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 from registry.core.errors import CatalogNotFoundError, PermissionDeniedError
 from registry.domain.admin_models import AdminActor
+from registry.domain.catalog_document import build_catalog_id
 from registry.domain.enums import LinkRel
 from registry.domain.feed_check import (
     AUTHENTICATION_MEDIA_TYPE,
@@ -122,7 +123,11 @@ async def resolve_feed_check(
     permission = "catalog.edit" if catalog_id else "catalog.create"
     if permission not in build_permissions(actor.role):
         raise PermissionDeniedError(f"Your role cannot do this ({permission}).")
-    stored = await _fetch_stored_catalog(reader, catalog_id) if catalog_id else None
+    stored = None
+    if catalog_id:
+        # One spelling from here on: the duplicate check compares it with the stored id.
+        catalog_id = _normalise_checked_id(catalog_id)
+        stored = await _fetch_stored_catalog(reader, catalog_id)
     started = time.monotonic()
     run = _Run(url=url, address=url)
     stages: list[tuple[Stage, Callable[[], Awaitable[None]]]] = [
@@ -161,7 +166,7 @@ async def _check_address(run: _Run, reader: AdminReader, catalog_id: str | None)
 async def _check_duplicate(
     run: _Run, reader: AdminReader, href: str, catalog_id: str | None
 ) -> None:
-    owner = await reader.fetch_admin_catalog_by_href(href)
+    owner = await reader.fetch_admin_catalog_by_href(href, str(build_catalog_id(href)))
     if owner is not None and owner[0] != catalog_id:
         run.duplicate = owner
         run.add(build_finding("duplicate-catalog", stage=Stage.ADDRESS, name=owner[1], url=href))
@@ -393,14 +398,18 @@ def _stage_state(run: _Run, stage: Stage) -> str:
     return "warned" if Severity.WARNING in severities else "passed"
 
 
-async def _fetch_stored_catalog(reader: AdminReader, catalog_id: str) -> FeedFields:
+def _normalise_checked_id(catalog_id: str) -> str:
+    """*catalog_id* in the database's spelling (lowercase, hyphenated)."""
     try:
-        normalised = str(uuid.UUID(catalog_id))
+        return str(uuid.UUID(catalog_id))
     except ValueError:
         raise CatalogNotFoundError(f"No catalog with id {catalog_id}.") from None
-    detail = await reader.fetch_admin_catalog(normalised)
+
+
+async def _fetch_stored_catalog(reader: AdminReader, catalog_id: str) -> FeedFields:
+    detail = await reader.fetch_admin_catalog(catalog_id)
     if detail is None:
-        raise CatalogNotFoundError(f"No catalog with id {normalised}.")
+        raise CatalogNotFoundError(f"No catalog with id {catalog_id}.")
     return FeedFields(
         name=detail.row.name,
         description=detail.description,

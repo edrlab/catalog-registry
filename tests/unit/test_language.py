@@ -6,7 +6,6 @@ from registry.domain.language import (
     MAX_LANGUAGE_RANGES,
     is_wildcard_range,
     match_depth,
-    match_language_ranges,
     normalise_language_tag,
     parse_accept_language,
     rank_language_match,
@@ -58,7 +57,7 @@ def test_parse_accept_language_keeps_a_zero_quality_range() -> None:
 
 
 def test_parse_accept_language_zero_quality_range_never_matches() -> None:
-    assert match_language_ranges(parse_accept_language("fr;q=0"), ["fr"]) == ()
+    assert rank_language_match(parse_accept_language("fr;q=0"), ["fr"]) is None
 
 
 def test_parse_accept_language_quality_above_one_is_clamped() -> None:
@@ -67,6 +66,15 @@ def test_parse_accept_language_quality_above_one_is_clamped() -> None:
 
 def test_parse_accept_language_malformed_quality_is_treated_as_one() -> None:
     assert parse_accept_language("fr;q=abc")[0].quality == 1.0
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf"])
+def test_parse_accept_language_non_finite_quality_is_treated_as_one(value: str) -> None:
+    assert parse_accept_language(f"fr;q={value}")[0].quality == 1.0
+
+
+def test_a_nan_quality_does_not_scramble_the_order_of_the_others() -> None:
+    assert tags("en;q=0.1, xx;q=nan, de;q=0.9") == ["xx", "de", "en"]
 
 
 def test_parse_accept_language_quality_is_truncated_to_three_decimals() -> None:
@@ -96,42 +104,6 @@ def test_normalise_language_tag_is_idempotent() -> None:
 
     assert once == "fr-be"
     assert normalise_language_tag(once) == once
-
-
-# --- §5.2 matching --------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("header", "available", "expected"),
-    [
-        ("fr", ["fr"], ("fr",)),
-        ("fr", ["fr-be"], ("fr-be",)),  # Filtering, the range widens to `fr-be`
-        ("fr-be", ["fr"], ("fr",)),  # Lookup truncation, the range narrows to `fr`
-        ("fr", ["frr"], ()),
-        ("*", ["fr", "de"], ("fr", "de")),
-        ("de-a-value", ["de"], ("de",)),
-        ("fr", [], ()),
-        ("fr, en", ["en"], ("en",)),
-        ("FR", ["fr"], ("fr",)),
-        ("fr", ["de"], ()),
-    ],
-)
-def test_match_language_ranges(
-    header: str, available: list[str], expected: tuple[str, ...]
-) -> None:
-    assert match_language_ranges(parse_accept_language(header), available) == expected
-
-
-def test_match_language_ranges_returns_ranges_in_preference_order() -> None:
-    ranges = parse_accept_language("en;q=0.8, fr;q=0.9")
-
-    assert match_language_ranges(ranges, ["en", "fr"]) == ("fr", "en")
-
-
-def test_match_language_ranges_returns_each_tag_once() -> None:
-    ranges = parse_accept_language("fr, fr-be, *")
-
-    assert match_language_ranges(ranges, ["fr-be"]) == ("fr-be",)
 
 
 # --- §5.2 match depth and ranking -------------------------------------------------------
@@ -259,13 +231,22 @@ def test_a_wildcard_keeps_its_own_position_in_the_order() -> None:
     assert rank_language_match(ranges, ["de"]) == LanguageMatch(rank=1, depth=0)
 
 
-def test_a_leading_wildcard_still_loses_to_a_specific_match_on_the_same_language() -> None:
+def test_a_leading_wildcard_does_not_stand_for_a_language_named_after_it() -> None:
+    """`*` covers only the tags no other range names, so `fr` ranks where `fr` was written."""
     ranges = parse_accept_language("*, fr")
 
     assert rank_language_match(ranges, ["de"]) == LanguageMatch(rank=0, depth=0)
-    # `fr` matches the wildcard at rank 0 depth 0 and the explicit range at rank 1 depth 1;
-    # rank is compared first, so the wildcard match wins. The wildcard was asked for first.
-    assert rank_language_match(ranges, ["fr"]) == LanguageMatch(rank=0, depth=0)
+    assert rank_language_match(ranges, ["fr"]) == LanguageMatch(rank=1, depth=1)
+
+
+@pytest.mark.parametrize("header", ["fr;q=0, *", "de, fr;q=0, *;q=0.1", "fr-be;q=0, *"])
+def test_a_wildcard_does_not_bring_back_a_refused_language(header: str) -> None:
+    """RFC 9110 §12.5.4: `*` matches every tag not matched by another range, refused ones too."""
+    ranges = parse_accept_language(header)
+
+    assert rank_language_match(ranges, ["fr-be"]) is None
+    assert rank_language_match(ranges, ["it"]) is not None
+    assert rank_language_match(ranges, ["fr-be", "it"]) is not None  # still offers Italian
 
 
 def test_a_zero_quality_range_cannot_rank_anything() -> None:

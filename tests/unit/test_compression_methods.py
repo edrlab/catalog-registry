@@ -1,7 +1,7 @@
 """The middleware on a minimal ASGI app, so each HTTP method can be driven exactly.
 
-HEAD is the case the application's own routes never exercise (they answer GET only), but a response
-to HEAD stands for the GET: its `Content-Length` is the size of the body it does not send.
+A response to HEAD stands for the GET: its `Content-Length` is the size of the body it does not
+send. The stub answers HEAD with an empty body, as a framework that strips it itself would.
 """
 
 import json
@@ -64,6 +64,27 @@ async def test_a_head_response_still_says_it_varies_by_accept_encoding(
         response = await http.head("/doc", headers=headers)
 
     assert "accept-encoding" in response.headers["vary"].lower()
+
+
+async def full_document(_request: Request) -> Response:
+    """What the registry's HEAD routes do: build the GET's body and let the server drop it."""
+    return Response(BODY, media_type="application/json")
+
+
+async def test_a_head_built_like_the_get_carries_the_get_s_compressed_headers() -> None:
+    app = Starlette(routes=[Route("/full", full_document, methods=["GET", "HEAD"])])
+    transport = ASGITransport(app=CompressionMiddleware(app))
+    async with AsyncClient(transport=transport, base_url="http://test") as http:
+        get = await http.send(
+            http.build_request("GET", "/full", headers={"Accept-Encoding": "br"}), stream=True
+        )
+        raw = b"".join([chunk async for chunk in get.aiter_raw()])
+        await get.aclose()
+        head = await http.head("/full", headers={"Accept-Encoding": "br"})
+
+    assert head.headers["content-encoding"] == get.headers["content-encoding"] == "br"
+    assert head.headers["content-length"] == get.headers["content-length"] == str(len(raw))
+    assert head.content == b""
 
 
 async def test_the_get_for_the_same_route_is_still_compressed() -> None:

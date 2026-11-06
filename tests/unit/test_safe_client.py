@@ -5,8 +5,11 @@
 
 import asyncio
 import gzip
+import tracemalloc
+import zlib
 from collections.abc import Callable, Iterator
 
+import brotli
 import httpx
 import pytest
 
@@ -18,6 +21,26 @@ from registry.network.safe_client import SafeHttpClient
 FEED = "https://feeds.example.org/opds"
 ACCEPT = "application/opds+json"
 Handler = Callable[[httpx.Request], httpx.Response]
+
+
+class StreamingTransport(httpx.MockTransport):
+    """`httpx.MockTransport` whose answers stream as a socket's do. httpx reads a `content=` or
+    `json=` body (decoding it) as soon as the response is built, which no real transport does;
+    such a body is handed over again as a stream. An encoded body is built with `stream=`."""
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        response = await super().handle_async_request(request)
+        if not response.is_stream_consumed:
+            return response
+        return httpx.Response(
+            response.status_code,
+            headers=response.headers,
+            stream=httpx.ByteStream(response.content),
+        )
+
+
+def encoded(body: bytes, coding: str) -> httpx.Response:
+    return httpx.Response(200, headers={"Content-Encoding": coding}, stream=httpx.ByteStream(body))
 
 
 async def fetch(
@@ -35,7 +58,7 @@ async def fetch(
         (sleeps if sleeps is not None else []).append(seconds)
 
     async with SafeHttpClient(
-        transport=httpx.MockTransport(handler),
+        transport=StreamingTransport(handler),
         policy=policy or RetryPolicy(random=lambda: 0.0),
         sleep=sleep,
     ) as client:
@@ -71,6 +94,7 @@ async def test_it_sends_only_its_own_headers() -> None:
     headers = seen[0].headers
     assert headers["user-agent"] == OUTBOUND_USER_AGENT
     assert headers["accept"] == ACCEPT
+    assert headers["accept-encoding"] == "gzip"
     assert "authorization" not in headers
     assert "cookie" not in headers
 
@@ -175,10 +199,72 @@ async def test_the_limit_applies_after_decompression() -> None:
     bomb = gzip.compress(b"\0" * 5_000_000)
     assert len(bomb) < 10_000
 
-    def handler(_: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=bomb, headers={"Content-Encoding": "gzip"})
+    assert (await refused(lambda _: encoded(bomb, "gzip"), max_bytes=1_000_000)).code == (
+        "fetch-too-large"
+    )
 
-    assert (await refused(handler, max_bytes=1_000_000)).code == "fetch-too-large"
+
+def gzip_bomb(size: int) -> bytes:
+    """*size* zero bytes, gzipped, without holding *size* bytes at once."""
+    packer = zlib.compressobj(9, zlib.DEFLATED, zlib.MAX_WBITS | 16)
+    block = b"\0" * 1_000_000
+    return b"".join(packer.compress(block) for _ in range(size // len(block))) + packer.flush()
+
+
+async def peak_memory_of(handler: Handler, **options: object) -> tuple[FetchResult | str, int]:
+    """The fetch's result (or its error code) and the most memory it held at once."""
+    tracemalloc.start()
+    try:
+        try:
+            outcome: FetchResult | str = await fetch(handler, **options)  # type: ignore[arg-type]
+        except FetchError as error:
+            outcome = error.code
+        return outcome, tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+
+async def test_a_gzip_bomb_is_inflated_only_up_to_the_cap() -> None:
+    bomb = gzip_bomb(50_000_000)
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return encoded(bomb, "gzip")
+
+    refused_code, peak = await peak_memory_of(handler)
+    probe, probe_peak = await peak_memory_of(handler, truncate=True)
+
+    assert refused_code == "fetch-too-large"
+    assert isinstance(probe, FetchResult)
+    assert probe.body == b"\0" * 1000
+    assert probe.truncated is True
+    assert max(peak, probe_peak) < 5_000_000
+
+
+async def test_a_deflate_body_is_inflated() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return encoded(zlib.compress(b"z" * 900), "deflate")
+
+    assert (await fetch(handler)).body == b"z" * 900
+
+
+async def test_a_corrupt_gzip_body_fails() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return encoded(b"not gzip", "gzip")
+
+    assert (await refused(handler)).code == "fetch-failed"
+
+
+@pytest.mark.parametrize("coding", ["br", "zstd", "compress", "gzip, br"])
+async def test_an_encoding_not_asked_for_is_refused_unread(coding: str) -> None:
+    bomb = brotli.compress(b"\0" * 20_000_000, quality=1)
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return encoded(bomb, coding)
+
+    code, peak = await peak_memory_of(handler)
+
+    assert code == "fetch-failed"
+    assert peak < 5_000_000
 
 
 async def test_a_lying_content_length_does_not_raise_the_limit() -> None:
@@ -273,7 +359,7 @@ async def test_a_slow_server_is_cut_off_by_the_deadline() -> None:
         await asyncio.sleep(2)
         return httpx.Response(200)
 
-    async with SafeHttpClient(transport=httpx.MockTransport(slow)) as client:
+    async with SafeHttpClient(transport=StreamingTransport(slow)) as client:
         with pytest.raises(FetchError) as raised:
             await client.fetch(FEED, accept=ACCEPT, max_bytes=1000, deadline=0.2)
 

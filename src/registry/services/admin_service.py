@@ -333,18 +333,29 @@ def _validate_catalog_document(document: dict[str, Any]) -> None:
 
 
 async def _validate_places(writer: AdminWriter, document: dict[str, Any]) -> None:
-    """Country and subdivisions must be codes the registry knows (both are foreign keys)."""
+    """Country and subdivisions must be codes the registry knows (both are foreign keys), and
+    every subdivision must lie in the catalog's country, so one is needed when any is listed."""
     metadata = document["metadata"]
+    country = metadata.get("country")
     subdivisions = metadata.get("subdivisions") or []
-    country_known, unknown = await writer.fetch_unknown_places(
-        metadata.get("country"), subdivisions
-    )
+    country_known, unknown, foreign = await writer.fetch_unknown_places(country, subdivisions)
     errors = [] if country_known else [{"field": "country", "message": "Not a known country"}]
-    errors += [
-        {"field": f"subdivisions.{index}", "message": f"{code} is not a known subdivision"}
-        for index, code in enumerate(subdivisions)
-        if code in unknown
-    ]
+    if country is None and subdivisions:
+        errors.append(
+            {"field": "country", "message": "Choose the country of these subdivisions first"}
+        )
+    for index, code in enumerate(subdivisions):
+        if code in unknown:
+            errors.append(
+                {"field": f"subdivisions.{index}", "message": f"{code} is not a known subdivision"}
+            )
+        elif code in foreign and country is not None and country_known:
+            errors.append(
+                {
+                    "field": f"subdivisions.{index}",
+                    "message": f"{code} is not in this catalog's country",
+                }
+            )
     if errors:
         raise FieldValidationError(errors)
 

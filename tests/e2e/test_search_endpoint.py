@@ -6,8 +6,10 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
+from registry.api.responses import OPDSResponse
 from registry.core.constants import OPDS_CATALOG_MEDIA_TYPE
 from registry.core.schema_validation import build_schema_validator
+from registry.schemas.feed import FeedResponse
 from tests.search_helpers import assert_valid_feed
 
 pytestmark = pytest.mark.e2e
@@ -146,3 +148,29 @@ async def test_search_finds_a_catalog_whose_language_the_header_would_have_exclu
 
     assert "Liber Liber" not in [c["metadata"]["title"] for c in feed.json()["catalogs"]]
     assert "Liber Liber" in [c["metadata"]["title"] for c in found.json()["catalogs"]]
+
+
+@pytest.mark.parametrize("params", [{"query": "bibliotheque"}, {"query": "wallis"}, {}])
+async def test_the_body_is_exactly_what_the_response_model_would_send(
+    client: AsyncClient, searchable_catalogs: None, params: dict[str, str]
+) -> None:
+    """The handler skips the model, so the model in the OpenAPI document must still match."""
+    response = await client.get("/search", params=params)
+
+    dumped = FeedResponse.model_validate(response.json()).model_dump(
+        mode="json", by_alias=True, exclude_none=True
+    )
+    assert response.content == OPDSResponse(content=dumped).body
+
+
+async def test_head_answers_like_get_without_a_body(
+    client: AsyncClient, searchable_catalogs: None
+) -> None:
+    headers = {"Accept-Encoding": "identity"}
+    get = await client.get("/search", params={"query": "wallis"}, headers=headers)
+    head = await client.head("/search", params={"query": "wallis"}, headers=headers)
+
+    assert head.status_code == 200
+    assert head.content == b""
+    assert head.headers["content-type"] == get.headers["content-type"]
+    assert head.headers["content-length"] == get.headers["content-length"]

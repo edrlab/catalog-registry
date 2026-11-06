@@ -6,6 +6,8 @@ sent. The real client's protections are tested on their own (`test_safe_client.p
 
 import asyncio
 import json
+import uuid
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -74,14 +76,28 @@ def any_reader(owners: dict[str, tuple[str, str]] | None = None) -> Any:
 
 
 class FakeReader:
-    def __init__(self, owners: dict[str, tuple[str, str]] | None = None) -> None:
+    """*owners* maps an href, or the id derived from one, to the catalog (id, name) holding it;
+    *stored* is the one catalog `fetch_admin_catalog` finds, under its database id."""
+
+    def __init__(
+        self, owners: dict[str, tuple[str, str]] | None = None, stored: str | None = None
+    ) -> None:
         self.owners = owners or {}
+        self.stored = stored
+        self.read_ids: list[str] = []
 
-    async def fetch_admin_catalog_by_href(self, href: str) -> tuple[str, str] | None:
-        return self.owners.get(href)
+    async def fetch_admin_catalog_by_href(
+        self, href: str, derived_id: str
+    ) -> tuple[str, str] | None:
+        return self.owners.get(href) or self.owners.get(derived_id)
 
-    async def fetch_admin_catalog(self, _catalog_id: str) -> None:
-        return None
+    async def fetch_admin_catalog(self, catalog_id: str) -> Any:
+        self.read_ids.append(catalog_id)
+        if catalog_id != self.stored:
+            return None
+        return SimpleNamespace(
+            row=SimpleNamespace(name="Mine", languages=["fr"]), description=None, links=[]
+        )
 
 
 async def check(
@@ -163,6 +179,28 @@ async def test_re_checking_the_same_catalog_is_not_a_duplicate() -> None:
 
     with pytest.raises(CatalogNotFoundError):
         await check({FEED: answer(FEED, opds())}, reader=reader, catalog_id="not-a-uuid")
+
+
+async def test_re_checking_with_an_uppercase_id_is_not_a_duplicate_of_itself() -> None:
+    mine = "0f8fad5b-d9cb-469f-a165-70867728950e"
+    reader = FakeReader({FEED: (mine, "Mine")}, stored=mine)
+
+    report = await check({FEED: answer(FEED, opds())}, reader=reader, catalog_id=mine.upper())
+
+    assert reader.read_ids == [mine]
+    assert report.duplicate is None
+    assert "duplicate-catalog" not in codes(report)
+
+
+async def test_an_address_a_catalog_was_created_from_is_a_duplicate() -> None:
+    """The catalog moved to another address, but its id is still the one derived from this one."""
+    derived = str(uuid.uuid5(uuid.NAMESPACE_URL, FEED))
+    reader = FakeReader({derived: (derived, "Moved Library")})
+
+    report = await check({}, reader=reader)
+
+    assert report.verdict == "blocked"
+    assert report.duplicate.id == derived
 
 
 @pytest.mark.parametrize(

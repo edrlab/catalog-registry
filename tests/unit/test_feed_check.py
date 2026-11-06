@@ -5,6 +5,12 @@ import re
 
 import pytest
 
+from registry.domain.catalog_document import (
+    MAX_DESCRIPTION_LENGTH,
+    MAX_LINK_TITLE_LENGTH,
+    MAX_MEDIA_TYPE_LENGTH,
+    MAX_NAME_LENGTH,
+)
 from registry.domain.enums import LinkRel
 from registry.domain.feed_check import (
     FINDINGS,
@@ -135,6 +141,30 @@ def test_a_feed_gives_its_title_description_languages_and_links() -> None:
     assert fields.links[0].href == FEED_URL
 
 
+def test_suggested_text_fits_the_admin_api_limits() -> None:
+    """A suggestion the editor saves unchanged must not be refused for its length."""
+    long_link = {"rel": "search", "href": "/s", "type": "t" * 400, "title": "x" * 400}
+    feed = {
+        "metadata": {"title": "n" * 250, "description": "d" * 3000},
+        "links": [long_link],
+    }
+    page = f"<html><head><title>{'n' * 250}</title>".encode() + (
+        f'<meta name="description" content="{"d" * 3000}">'.encode()
+    )
+    authentication = {"title": "n" * 250, "description": "d" * 3000, "authentication": []}
+
+    for fields in (
+        build_feed_fields(feed, base_url=FEED_URL, address=FEED_URL),
+        build_page_fields(page, base_url=FEED_URL, address=FEED_URL),
+        build_signed_in_fields(authentication, address=FEED_URL, authentication_url=FEED_URL),
+    ):
+        assert len(fields.name or "") == MAX_NAME_LENGTH
+        assert len(fields.description or "") == MAX_DESCRIPTION_LENGTH
+    search = build_feed_fields(feed, base_url=FEED_URL, address=FEED_URL).links[1]
+    assert len(search.type or "") == MAX_MEDIA_TYPE_LENGTH
+    assert len(search.title or "") == MAX_LINK_TITLE_LENGTH
+
+
 @pytest.mark.parametrize(
     ("document", "codes"),
     [
@@ -262,3 +292,15 @@ def test_link_headers_are_read() -> None:
 )
 def test_templates_expand_with_every_variable_undefined(href: str, expanded: str | None) -> None:
     assert build_template_probe_url(href) == expanded
+
+
+def test_a_link_too_long_to_store_is_not_suggested() -> None:
+    links = build_feed_links(
+        [
+            {"href": "https://example.org/" + "漢" * 1000, "rel": "search"},
+            {"href": "https://example.org/shelf", "rel": "shelf"},
+        ],
+        "https://example.org/",
+    )
+
+    assert [link.rel for link in links] == ["shelf"]

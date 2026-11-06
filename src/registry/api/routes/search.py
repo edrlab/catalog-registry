@@ -1,7 +1,5 @@
 """`GET /search`. The concrete searcher is wired in `main.py` and reached through `app.state`."""
 
-from typing import Any
-
 from fastapi import APIRouter, Query, Request
 
 from registry.api.responses import OPDSResponse
@@ -13,6 +11,7 @@ from registry.services.search_service import resolve_search
 router = APIRouter(tags=["search"])
 
 
+@router.head("/search", include_in_schema=False)
 @router.get(
     "/search",
     response_model=FeedResponse,
@@ -25,11 +24,12 @@ async def read_search_results(
     query: str | None = None,
     page: int = Query(default=1, ge=1, le=MAX_PAGE),
     restrict: str | None = Query(default=None, pattern=RESTRICT_PATTERN),
-) -> dict[str, Any]:
-    return await resolve_search(
+) -> OPDSResponse:
+    results = await resolve_search(
         request.app.state.open_catalog_searcher,
         query=query,
         page=page,
         base_url=request.app.state.settings.base_url,
         restrictions=parse_restrictions(restrict),
     )
+    return OPDSResponse(content=results)

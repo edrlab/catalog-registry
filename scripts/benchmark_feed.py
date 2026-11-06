@@ -20,7 +20,8 @@ The project's target for search is under 100 ms warm from Europe, 150 ms accepta
 prints it beside the numbers and still asserts nothing: an invented threshold produces flaky builds.
 
 **It writes.** Synthetic rows are titled `ZZ Bench …` and deleted in a `finally`; point
-`REGISTRY_DATABASE_URL` at a throwaway database.
+`REGISTRY_DATABASE_URL` at a throwaway database. A host other than this machine or a compose
+service is refused.
 """
 
 import asyncio
@@ -218,9 +219,27 @@ def report_search(base_url: str, count: int) -> None:
         print(f"  {label:<24} {statistics.median(samples):8.1f}ms {cuts[94]:8.1f}ms {matches:>9}")
 
 
+#: This machine, or the database service of `compose.yaml`.
+LOCAL_DATABASE_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db", "postgres"})
+
+
+def assert_database_is_local(database_url: str) -> None:
+    """Refuse a remote database: the run writes up to a thousand published, recommended rows.
+
+    The Cloud SQL Auth Proxy publishes a remote instance on localhost, which this cannot tell
+    apart; the operator who started the proxy has to know not to run this through it."""
+    host = urllib.parse.urlsplit(database_url).hostname or ""
+    if host not in LOCAL_DATABASE_HOSTS:
+        raise SystemExit(
+            f"REGISTRY_DATABASE_URL points at {host!r}. The benchmark writes published, "
+            "recommended rows, so it runs only against a local throwaway database."
+        )
+
+
 async def main(argv: list[str]) -> int:
     sizes = [int(value) for value in argv] or [10, 100, 1000]
     settings = Settings()
+    assert_database_is_local(settings.database_url)
     base_url = f"{settings.base_url.rstrip('/')}/"
 
     try:

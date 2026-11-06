@@ -211,6 +211,42 @@ async def test_creating_the_same_catalog_twice_is_a_duplicate(
 
     assert response.status_code == 409
     assert problem_type(response) == "duplicate-catalog"
+    assert response.json()["detail"] == "Another catalog already has this catalog or shelf link."
+
+
+async def test_an_address_too_long_for_the_index_is_named_not_a_server_error(
+    admin_client: AsyncClient, editor: str
+) -> None:
+    wide = "https://example.org/" + "漢" * 2000
+
+    response = await create(admin_client, new_catalog(links=[{"rel": "catalog", "href": wide}]))
+
+    assert error_fields(response) == ["links.0.href"]
+    assert response.json()["errors"][0]["message"] == "The address is too long."
+
+
+@pytest.mark.parametrize(
+    ("changes", "field", "message"),
+    [
+        (
+            {"country": "FR", "subdivisions": ["BE-WAL"]},
+            "subdivisions.0",
+            "BE-WAL is not in this catalog's country",
+        ),
+        (
+            {"country": None, "subdivisions": ["BE-WAL"]},
+            "country",
+            "Choose the country of these subdivisions first",
+        ),
+    ],
+)
+async def test_a_subdivision_must_be_in_the_catalogs_country(
+    admin_client: AsyncClient, editor: str, changes: dict[str, Any], field: str, message: str
+) -> None:
+    response = await create(admin_client, new_catalog(**changes))
+
+    assert error_fields(response) == [field]
+    assert response.json()["errors"][0]["message"] == message
 
 
 @pytest.mark.parametrize(
@@ -379,7 +415,11 @@ async def test_an_edit_is_checked_whole_like_a_new_catalog(
     catalog = (await create(admin_client, new_catalog())).json()
 
     response = await edit(admin_client, catalog["id"], {"version": 1, "country": "FR"})
+    assert error_fields(response) == ["subdivisions.0"]
 
+    response = await edit(
+        admin_client, catalog["id"], {"version": 1, "country": "FR", "subdivisions": []}
+    )
     assert response.status_code == 200
     response = await edit(
         admin_client, catalog["id"], {"version": 2, "links": [{"rel": "icon", "href": HREF}]}

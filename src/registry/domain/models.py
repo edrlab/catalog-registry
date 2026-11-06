@@ -4,8 +4,7 @@ Frozen because they cross layer boundaries, and a mutable object that crosses a 
 eventually gets mutated on the far side.
 """
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,20 +30,3 @@ class LanguageMatch:
     def sort_key(self) -> tuple[int, int]:
         """Ascending-sort key: best match first."""
         return (self.rank, -self.depth)
-
-
-@dataclass(frozen=True, slots=True)
-class DomainCatalog:
-    """One catalog, as the feed needs it.
-
-    ``document`` is the catalog's OPDS representation, already conforming to
-    ``schema/catalog.schema.json``. It is carried rather than rebuilt because in this
-    version the source of truth *is* that document.
-
-    Limit: no whitelist projection yet. There is no internal field to leak while the
-    source is a file that is already the wire format. Whitelist projection lands with the
-    database, in the same change that introduces columns the wire contract does not have.
-    """
-
-    languages: tuple[str, ...] = ()
-    document: dict[str, Any] = field(default_factory=dict)

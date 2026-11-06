@@ -1,9 +1,13 @@
 """The response class every OPDS endpoint uses.
 
-A plain `JSONResponse` returned from a handler bypasses `response_model` entirely. FastAPI
-passes a `Response` through untouched, so the endpoints return dicts and name this as their
-`response_class` instead. That keeps the OPDS media type *and* gets the response model into
-the OpenAPI document.
+The endpoints return the rendered document wrapped in this class. FastAPI passes a `Response`
+through untouched, so the document is not validated and dumped a second time through
+`response_model`: measured at about 8 ms of 19 ms for a 1000-catalog feed. The endpoints still
+name `response_model`, which is what puts the schema in the OpenAPI document, and the e2e tests
+check the body equals the model's own dump, so the two cannot drift.
+
+Each endpoint also answers HEAD (RFC 9110 §9.3.2) through a second route with
+`include_in_schema=False`, so the OpenAPI document keeps one operation per path.
 """
 
 from fastapi.responses import JSONResponse

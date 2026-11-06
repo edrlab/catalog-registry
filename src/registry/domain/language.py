@@ -19,6 +19,7 @@ Ranges are compared as strings in practice even though BCP-47 declares tags
 case-insensitive, so everything is lowercased on the way in.
 """
 
+import math
 from collections.abc import Iterable, Sequence
 
 from registry.domain.models import LanguageMatch, LanguageRange
@@ -28,7 +29,6 @@ __all__ = [
     "LanguageMatch",
     "LanguageRange",
     "is_wildcard_range",
-    "match_language_ranges",
     "normalise_language_tag",
     "parse_accept_language",
     "rank_language_match",
@@ -67,6 +67,8 @@ def _parse_quality(parameters: Sequence[str]) -> float:
         try:
             quality = float(value.strip())
         except ValueError:
+            return 1.0
+        if not math.isfinite(quality):  # `nan` would compare false both ways and break sorting
             return 1.0
         quality = min(max(quality, 0.0), 1.0)
         return round(quality, QUALITY_DECIMAL_PLACES)
@@ -133,32 +135,6 @@ def match_depth(range_tag: str, available_tag: str) -> int | None:
     return None
 
 
-def match_language_ranges(
-    ranges: Sequence[LanguageRange], available: Iterable[str]
-) -> tuple[str, ...]:
-    """Return the available tags acceptable to *ranges*, in order of preference.
-
-    Preference order is range order first, then the order the tags were supplied. Each tag
-    appears once. An empty result means the caller stated a preference and none of it is
-    available, which is different from stating no preference at all.
-    """
-    tags = [normalise_language_tag(tag) for tag in available]
-    matched: dict[str, None] = {}
-
-    for range_ in ranges:
-        if range_.quality == 0.0:
-            continue
-        if is_wildcard_range(range_):
-            matched.update(dict.fromkeys(tags))
-            continue
-        range_tag = _strip_singleton_extensions(range_.tag)
-        matched.update(
-            dict.fromkeys(tag for tag in tags if match_depth(range_tag, tag) is not None)
-        )
-
-    return tuple(matched)
-
-
 def rank_language_match(
     ranges: Sequence[LanguageRange], available: Iterable[str]
 ) -> LanguageMatch | None:
@@ -172,6 +148,15 @@ def rank_language_match(
     the search path, not this one.
     """
     tags = [normalise_language_tag(tag) for tag in available]
+    # `*` stands only for the tags no other range names (RFC 9110 §12.5.4, RFC 4647 §3.3.1), so
+    # `fr;q=0, *` still refuses French.
+    named = {
+        tag
+        for range_ in ranges
+        if not is_wildcard_range(range_)
+        for tag in tags
+        if match_depth(_strip_singleton_extensions(range_.tag), tag) is not None
+    }
     best: LanguageMatch | None = None
 
     for position, range_ in enumerate(ranges):
@@ -179,7 +164,10 @@ def rank_language_match(
             continue  # "not acceptable" (RFC 9110 §12.4.2), so it can never rank a catalog
         range_tag = _strip_singleton_extensions(range_.tag)
         for tag in tags:
-            depth = 0 if is_wildcard_range(range_) else match_depth(range_tag, tag)
+            if is_wildcard_range(range_):
+                depth: int | None = None if tag in named else 0
+            else:
+                depth = match_depth(range_tag, tag)
             if depth is None:
                 continue
             candidate = LanguageMatch(rank=position, depth=depth)

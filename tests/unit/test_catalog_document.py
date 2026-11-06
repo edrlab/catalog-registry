@@ -18,6 +18,8 @@ from registry.domain.catalog_document import (
 )
 
 HREF = "https://example.org/opds.json"
+#: 2006 characters, 6020 bytes in UTF-8: over the href index's limit though under 2048 characters.
+WIDE_HREF = "https://example.org/" + "漢" * 2000
 
 
 def document(links: list[dict[str, Any]] | None = None, **metadata: Any) -> dict[str, Any]:
@@ -78,6 +80,22 @@ def test_a_valid_document_has_no_problems() -> None:
             [(("links", 0, "href"), "Must be an http or https URL")],
         ),
         (
+            document([{"rel": "catalog", "href": WIDE_HREF}]),
+            [(("links", 0, "href"), "The address is too long.")],
+        ),
+        (
+            document([{"rel": "catalog", "href": "https://example.org/" + "a" * 2028}]),
+            [],
+        ),
+        (
+            document(city=" Liège "),
+            [(("metadata", "city"), "Remove the spaces at the start or end.")],
+        ),
+        (
+            document(city="Liège "),
+            [(("metadata", "city"), "Remove the spaces at the start or end.")],
+        ),
+        (
             document([{"rel": "catalog", "href": HREF, "templated": True}]),
             [(("links", 0, "templated"), "Only a search link can be templated")],
         ),
@@ -112,6 +130,9 @@ def test_each_problem_names_its_place(
         document([{"rel": "catalog", "href": "ftp://example.org"}]),
         document([{"rel": "catalog", "href": HREF, "templated": True}]),
         document([{"rel": "catalog", "href": HREF}, {"rel": "shelf", "href": HREF}]),
+        document([{"rel": "catalog", "href": WIDE_HREF}]),
+        document(city="Paris 75"),
+        document(city="Paris "),
     ],
 )
 def test_the_seed_refuses_what_the_admin_api_refuses(doc: dict[str, Any]) -> None:

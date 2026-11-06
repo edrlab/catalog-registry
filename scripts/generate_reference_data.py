@@ -325,9 +325,12 @@ _LITERAL_NAMES = {
 }
 
 
-def extract_loaded_rows() -> dict[str, set[tuple[str, ...]]]:
+def extract_loaded_rows(exclude: Path | None = None) -> dict[str, set[tuple[str, ...]]]:
     """Every reference row an existing migration already inserts: the literals of the earlier data
-    migrations and the CSV files under `migrations/data/`. An update writes only what is missing."""
+    migrations and the CSV files under `migrations/data/`. An update writes only what is missing.
+
+    *exclude* is the folder being written: its own files are the output, not rows already loaded,
+    so counting them would make a rerun write empty files."""
     loaded: dict[str, set[tuple[str, ...]]] = {table: set() for table in UPDATE_COLUMNS}
     for path in MIGRATIONS.glob("*.py"):
         for node in ast.parse(path.read_text(encoding="utf-8")).body:
@@ -337,6 +340,8 @@ def extract_loaded_rows() -> dict[str, set[tuple[str, ...]]]:
                     loaded[table] |= {tuple(row) for row in ast.literal_eval(node.value)}
     for table in UPDATE_COLUMNS:
         for csv_path in (MIGRATIONS.parent / "data").glob(f"*/{table}.csv"):
+            if exclude is not None and csv_path.parent.resolve() == exclude.resolve():
+                continue
             with csv_path.open(encoding="utf-8", newline="") as handle:
                 loaded[table] |= {tuple(row) for row in list(csv.reader(handle))[1:]}
     return loaded
@@ -368,6 +373,9 @@ def main() -> None:
         "(the full-subdivisions data migration's data)",
     )
     args = parser.parse_args()
+    # Writing into a folder that holds data, an earlier migration's above all, replaces its files.
+    if args.update and args.update.exists() and any(args.update.iterdir()):
+        parser.error(f"--update {args.update} is not empty; give a new folder for the migration")
 
     iso = extract_iso_countries()
     status_languages = generate_country_languages(iso, CACHE)
@@ -421,7 +429,7 @@ def main() -> None:
         every_names = generate_all_subdivision_names(
             generate_all_subdivisions(iso), languages, CACHE
         )
-        loaded = extract_loaded_rows()
+        loaded = extract_loaded_rows(exclude=args.update)
         for table, rows in (
             ("country_languages", [(c, t) for c, t, _ in language_rows]),
             ("country_names", names),

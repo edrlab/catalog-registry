@@ -15,6 +15,13 @@ from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
+from registry.domain.catalog_document import (
+    MAX_DESCRIPTION_LENGTH,
+    MAX_HREF_BYTES,
+    MAX_LINK_TITLE_LENGTH,
+    MAX_MEDIA_TYPE_LENGTH,
+    MAX_NAME_LENGTH,
+)
 from registry.domain.enums import LinkRel
 from registry.domain.language import normalise_language_tag
 
@@ -293,7 +300,9 @@ class FeedFields:
     links: tuple[FeedLink, ...] = field(default=())
 
 
-def _text(value: Any, limit: int = 300) -> str | None:
+def _text(value: Any, limit: int) -> str | None:
+    """*value* on one line, cut to *limit*: the admin API's limit for the field it fills, so a
+    suggested value always saves."""
     if not isinstance(value, str):
         return None
     cleaned = " ".join(value.replace("\x00", "").split())
@@ -314,7 +323,8 @@ def build_feed_links(links: Any, base_url: str) -> list[FeedLink]:
     """The links of a remote document the registry keeps, hrefs made absolute against *base_url*.
 
     Untrusted input: entries that are not objects, have no string href, resolve to anything but
-    http(s), or carry a rel the registry does not store are skipped. Repeats (rel + href) collapse.
+    http(s), are longer than the registry can store, or carry a rel the registry does not store
+    are skipped. Repeats (rel + href) collapse.
     """
     kept: dict[tuple[str, str], FeedLink] = {}
     for link in links if isinstance(links, list) else ():
@@ -322,15 +332,19 @@ def build_feed_links(links: Any, base_url: str) -> list[FeedLink]:
             continue
         rel = normalise_remote_rel(link.get("rel"))
         href = urljoin(base_url, link["href"].strip())
-        if rel is None or urlsplit(href).scheme not in {"http", "https"}:
+        if (
+            rel is None
+            or urlsplit(href).scheme not in {"http", "https"}
+            or len(href.encode()) > MAX_HREF_BYTES
+        ):
             continue
         kept.setdefault(
             (rel.value, href),
             FeedLink(
                 rel=rel.value,
                 href=href,
-                type=_text(link.get("type")),
-                title=_text(link.get("title")),
+                type=_text(link.get("type"), MAX_MEDIA_TYPE_LENGTH),
+                title=_text(link.get("title"), MAX_LINK_TITLE_LENGTH),
                 templated=bool(link.get("templated")) and rel is LinkRel.SEARCH,
             ),
         )
@@ -343,8 +357,8 @@ def build_feed_fields(document: Mapping[str, Any], *, base_url: str, address: st
     metadata = metadata if isinstance(metadata, dict) else {}
     catalog = FeedLink(rel=LinkRel.CATALOG.value, href=address, type=OPDS_MEDIA_TYPE, active=True)
     return FeedFields(
-        name=_text(metadata.get("title")),
-        description=_text(metadata.get("description"), limit=5000),
+        name=_text(metadata.get("title"), MAX_NAME_LENGTH),
+        description=_text(metadata.get("description"), MAX_DESCRIPTION_LENGTH),
         languages=_languages(metadata.get("language")),
         links=(catalog, *build_feed_links(document.get("links"), base_url)),
     )
@@ -356,8 +370,8 @@ def build_signed_in_fields(
     """A catalog's feed fields from the OPDS Authentication document of a feed behind sign-in: its
     name, the feed address and the `authenticate` link (both answered, so both active)."""
     return FeedFields(
-        name=_text(authentication.get("title")),
-        description=_text(authentication.get("description"), limit=5000),
+        name=_text(authentication.get("title"), MAX_NAME_LENGTH),
+        description=_text(authentication.get("description"), MAX_DESCRIPTION_LENGTH),
         links=(
             FeedLink(rel=LinkRel.CATALOG.value, href=address, type=OPDS_MEDIA_TYPE, active=True),
             FeedLink(
@@ -396,7 +410,7 @@ def build_feed_shape_findings(document: Any) -> list[Finding]:
     if not isinstance(metadata, dict):
         return [build_finding("not-opds2", detail="it has no `metadata` object.")]
     findings = []
-    if not _text(metadata.get("title")):
+    if not _text(metadata.get("title"), MAX_NAME_LENGTH):
         findings.append(build_finding("title-missing", pointer="/metadata/title"))
     if not isinstance(links, list):
         findings.append(
@@ -491,8 +505,8 @@ def build_page_fields(body: bytes, *, base_url: str, address: str) -> FeedFields
     if icon and urlsplit(icon).scheme in {"http", "https"}:
         links.append(FeedLink(rel=LinkRel.ICON.value, href=icon))
     return FeedFields(
-        name=_text("".join(reader.title)),
-        description=_text(reader.description, limit=5000),
+        name=_text("".join(reader.title), MAX_NAME_LENGTH),
+        description=_text(reader.description, MAX_DESCRIPTION_LENGTH),
         languages=_languages(reader.lang),
         links=tuple(links),
     )

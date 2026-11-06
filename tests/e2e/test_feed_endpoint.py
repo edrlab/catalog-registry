@@ -21,7 +21,9 @@ import json
 import pytest
 from httpx import AsyncClient
 
+from registry.api.responses import OPDSResponse
 from registry.core.constants import OPDS_CATALOG_MEDIA_TYPE
+from registry.schemas.feed import FeedResponse
 from tests.conftest import SEED_FILE, SEED_TITLES_IN_FILE_ORDER
 
 pytestmark = pytest.mark.e2e
@@ -195,3 +197,49 @@ async def test_every_catalog_carries_a_synthesised_self_link_first(
         assert self_link["rel"] == "self"
         assert self_link["href"].startswith("http://testserver/catalogs/")
         assert self_link["type"] == OPDS_CATALOG_MEDIA_TYPE
+
+
+@pytest.mark.parametrize("header", ["fr;q=0, *", "it, fr;q=0, *;q=0.1"])
+async def test_a_wildcard_does_not_bring_back_a_refused_language(
+    client: AsyncClient, seeded_catalogs: int, header: str
+) -> None:
+    """RFC 9110 §12.5.4: `*` stands for the languages no other range names, refused ones too."""
+    seed = json.loads(SEED_FILE.read_text(encoding="utf-8"))
+    french = {
+        catalog["metadata"]["title"]
+        for catalog in seed["catalogs"]
+        if "fr" in catalog["metadata"].get("supportedLanguages", [])
+    }
+
+    served = await titles(client, header)
+
+    assert sorted(served) == sorted(set(SEED_TITLES_IN_FILE_ORDER) - french)
+
+
+@pytest.mark.parametrize("header", [None, "fr, en", "*"])
+async def test_the_body_is_exactly_what_the_response_model_would_send(
+    client: AsyncClient, seeded_catalogs: int, header: str | None
+) -> None:
+    """The handler skips the model, so the model in the OpenAPI document must still match."""
+    headers = {"Accept-Language": header} if header is not None else {}
+    response = await client.get("/", headers=headers)
+
+    dumped = FeedResponse.model_validate(response.json()).model_dump(
+        mode="json", by_alias=True, exclude_none=True
+    )
+    assert response.content == OPDSResponse(content=dumped).body
+
+
+async def test_head_answers_like_get_without_a_body(
+    client: AsyncClient, seeded_catalogs: int
+) -> None:
+    """RFC 9110 §9.3.2. Identity, so the length is comparable with the uncompressed GET."""
+    headers = {"Accept-Language": "*", "Accept-Encoding": "identity"}
+    get = await client.get("/", headers=headers)
+    head = await client.head("/", headers=headers)
+
+    assert head.status_code == 200
+    assert head.content == b""
+    assert head.headers["content-type"] == get.headers["content-type"]
+    assert head.headers["content-length"] == get.headers["content-length"]
+    assert head.headers["vary"] == get.headers["vary"]

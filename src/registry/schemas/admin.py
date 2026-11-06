@@ -14,6 +14,13 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
+from registry.domain.catalog_document import (
+    MAX_CITY_LENGTH,
+    MAX_DESCRIPTION_LENGTH,
+    MAX_LINK_TITLE_LENGTH,
+    MAX_MEDIA_TYPE_LENGTH,
+    MAX_NAME_LENGTH,
+)
 from registry.domain.enums import (
     CatalogColor,
     CatalogKind,
@@ -253,15 +260,20 @@ _NO_NUL = r"^[^\x00]*$"
 #: A one-line value: no control characters at all.
 _NO_CONTROL = r"^[^\x00-\x1f\x7f]*$"
 CatalogName = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200, pattern=_NO_CONTROL)
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=MAX_NAME_LENGTH, pattern=_NO_CONTROL
+    ),
 ]
 #: Newlines and tabs are allowed in a description.
-LongText = Annotated[str, StringConstraints(max_length=2000, pattern=_NO_NUL)]
-ShortText = Annotated[str, StringConstraints(max_length=300, pattern=_NO_NUL)]
+LongText = Annotated[str, StringConstraints(max_length=MAX_DESCRIPTION_LENGTH, pattern=_NO_NUL)]
+ShortText = Annotated[str, StringConstraints(max_length=MAX_LINK_TITLE_LENGTH, pattern=_NO_NUL)]
 #: A media type; parameters are allowed (`application/opds+json;profile=…`).
-MediaType = Annotated[str, StringConstraints(max_length=255, pattern=_NO_CONTROL)]
+MediaType = Annotated[str, StringConstraints(max_length=MAX_MEDIA_TYPE_LENGTH, pattern=_NO_CONTROL)]
 #: Letters only is checked by the shared document checks, which the seed applies too.
-CityText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=100, pattern=_NO_NUL)]
+CityText = Annotated[
+    str, StringConstraints(strip_whitespace=True, max_length=MAX_CITY_LENGTH, pattern=_NO_NUL)
+]
 Href = Annotated[str, StringConstraints(min_length=1, max_length=2048, pattern=_NO_NUL)]
 #: Shape and case are checked by the shared document checks, which say what the code should be.
 PlaceCode = Annotated[str, StringConstraints(max_length=10, pattern=_NO_NUL)]

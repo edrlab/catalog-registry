@@ -134,3 +134,30 @@ def test_every_overseas_subdivision_has_a_territory_letter_code() -> None:
 )
 def test_cldr_names_are_made_plain(raw: str, clean: str) -> None:
     assert generator.clean_cldr_name(raw) == clean
+
+
+def test_update_refuses_a_folder_that_already_holds_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Pointed at an existing migration's folder, an update would replace that migration's data."""
+    (tmp_path / "country_names.csv").write_text("country_code,language_tag,name\n")
+    monkeypatch.setattr("sys.argv", ["generate_reference_data.py", "--update", str(tmp_path)])
+
+    with pytest.raises(SystemExit):
+        generator.main()
+
+    assert "is not empty" in capsys.readouterr().err
+    assert (tmp_path / "country_names.csv").read_text() == "country_code,language_tag,name\n"
+
+
+def test_loaded_rows_come_from_the_migrations_except_the_folder_being_written() -> None:
+    """Hindi is a literal in an early migration, Tamil a CSV row in a later one's folder. The folder
+    being written is output, so its own rows must not count as already loaded."""
+    folder = generator.MIGRATIONS.parent / "data" / "195c3d701630"
+
+    loaded = generator.extract_loaded_rows()["country_languages"]
+    without = generator.extract_loaded_rows(exclude=folder)["country_languages"]
+
+    assert {("IN", "hi"), ("IN", "ta")} <= loaded
+    assert ("IN", "hi") in without
+    assert ("IN", "ta") not in without

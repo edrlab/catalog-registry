@@ -294,7 +294,8 @@ INVALID_BODY = "The body is invalid; `errors` names each field."
     summary="Add a catalog, as a draft or published",
     responses={
         409: problem_response(
-            "`duplicate-catalog`: another catalog already has this catalog or shelf link."
+            "`duplicate-catalog`: another catalog already has this catalog or shelf link, or was "
+            "created from this address and now uses another one."
         ),
         422: problem_response(INVALID_BODY),
     },
@@ -325,7 +326,8 @@ async def create_admin_catalog(
         409: problem_response(
             "`version-conflict`: it changed since it was read. "
             "`archived-read-only`: an archived catalog cannot be edited. "
-            "`duplicate-catalog`: another catalog already has this catalog or shelf link."
+            "`duplicate-catalog`: another catalog already has this catalog or shelf link, or was "
+            "created from this address and now uses another one."
         ),
         422: problem_response(INVALID_BODY),
     },

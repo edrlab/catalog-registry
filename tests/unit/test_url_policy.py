@@ -62,6 +62,9 @@ def test_a_public_web_address_is_allowed(url: str, host: str, port: int) -> None
         "http://[::ffff:169.254.169.254]/",
         "http://[64:ff9b::7f00:1]/",
         "http://[2002:7f00:1::]/",
+        "http://[::7f00:1]/",
+        "http://[::ffff:0:a00:1]/",
+        "http://[fec0::1]/",
         "http://2130706433/",
         "http://0177.0.0.1/",
         "http://0x7f.0.0.1/",
@@ -115,6 +118,9 @@ def test_a_malformed_address_is_invalid(url: str) -> None:
         ("64:ff9b::a00:1", False),
         ("2002:0a00:0001::", False),
         ("ff02::1", False),
+        ("::7f00:1", False),
+        ("::ffff:0:a00:1", False),
+        ("fec0::1", False),
     ],
 )
 def test_embedded_ipv4_addresses_are_looked_through(address: str, public: bool) -> None:

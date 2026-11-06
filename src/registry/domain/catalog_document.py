@@ -37,6 +37,17 @@ ISO_CODE_SHAPES = {
 }
 
 
+#: Text limits, one set for the admin API's bodies and the values a feed check suggests, so a
+#: suggestion always saves.
+MAX_NAME_LENGTH = 200
+MAX_DESCRIPTION_LENGTH = 2000
+MAX_MEDIA_TYPE_LENGTH = 255
+MAX_LINK_TITLE_LENGTH = 300
+MAX_CITY_LENGTH = 100
+#: In UTF-8 bytes: a btree index entry holds at most 2704 bytes, and an href is indexed.
+MAX_HREF_BYTES = 2048
+
+
 #: An absolute web URL. Anything else (`javascript:`, a relative path) would reach every reader.
 _WEB_URL = re.compile(r"https?://[^\s/]", re.IGNORECASE)
 
@@ -113,7 +124,8 @@ def _build_repeat_problems(
 def build_link_problems(links: list[dict[str, Any]]) -> list[DocumentProblem]:
     """What `links` and `uq_links_identity_href` would refuse, named by link.
 
-    - every href an absolute http or https URL;
+    - every href an absolute http or https URL of at most `MAX_HREF_BYTES` in UTF-8 (the index
+      on `links.href`);
     - at least one `catalog` or `shelf` link, the catalog's identity;
     - `templated` only on `search` (`templated_only_search`);
     - one link per rel and href (`uq_links_catalog_rel_href`);
@@ -130,6 +142,8 @@ def build_link_problems(links: list[dict[str, Any]]) -> list[DocumentProblem]:
             problems.append(
                 DocumentProblem(("links", index, "href"), "Must be an http or https URL")
             )
+        elif len(href.encode()) > MAX_HREF_BYTES:
+            problems.append(DocumentProblem(("links", index, "href"), "The address is too long."))
         if link.get("templated") and any(rel is not LinkRel.SEARCH for rel in rels):
             problems.append(
                 DocumentProblem(
@@ -164,7 +178,6 @@ def build_link_problems(links: list[dict[str, Any]]) -> list[DocumentProblem]:
 #: Besides letters and combining marks, a city name may hold these: "Saint-Étienne", "L'Aquila",
 #: "St. Gallen". Digits, parentheses, slashes and other symbols are refused.
 CITY_PUNCTUATION = frozenset(" -'\u2019.")  # \u2019 is the typographic apostrophe
-MAX_CITY_LENGTH = 100
 
 
 def build_city_problems(metadata: dict[str, Any]) -> list[DocumentProblem]:
@@ -179,15 +192,12 @@ def build_city_problems(metadata: dict[str, Any]) -> list[DocumentProblem]:
         return [DocumentProblem(path, "The city cannot be blank.")]
     if len(city) > MAX_CITY_LENGTH:
         return [DocumentProblem(path, f"Use at most {MAX_CITY_LENGTH} characters.")]
+    if city != city.strip():
+        return [DocumentProblem(path, "Remove the spaces at the start or end.")]
     letters_only = all(
         unicodedata.category(char)[0] in "LM" or char in CITY_PUNCTUATION for char in city
     )
-    if (
-        not letters_only
-        or unicodedata.category(city[0])[0] != "L"
-        or "  " in city
-        or city != city.strip()
-    ):
+    if not letters_only or unicodedata.category(city[0])[0] != "L" or "  " in city:
         return [DocumentProblem(path, "Use letters only: no numbers or symbols.")]
     return []
 

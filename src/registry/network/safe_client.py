@@ -4,7 +4,8 @@
   goes through `PublicOnlyTransport`, which connects only to the public address it checked.
 - Redirects are followed by hand, at most `max_redirects`, never to a URL seen before.
 - The body is streamed and stops at `max_bytes` after decompression, so a gzip bomb or a lying
-  `Content-Length` costs at most that much.
+  `Content-Length` costs at most that much. Only gzip is asked for, and it is inflated here in
+  steps that never produce more than the cap; any other content coding is refused.
 - One deadline covers the whole fetch, redirects and retries included, so a server sending one byte
   at a time cannot hold it past the budget.
 - Transient failures are retried by `RetryPolicy`, never past the deadline.
@@ -15,6 +16,7 @@ import asyncio
 import dataclasses
 import itertools
 import time
+import zlib
 from collections.abc import Awaitable, Callable
 from types import TracebackType
 from typing import Self
@@ -36,6 +38,10 @@ TIMEOUTS = httpx.Timeout(connect=4.0, read=10.0, write=4.0, pool=2.0)
 
 #: Failures another attempt may cure. A refused URL (`FetchError`) is never among them.
 _TRANSIENT = (httpx.ConnectError, httpx.TimeoutException, httpx.RemoteProtocolError)
+#: Inflated here, never by httpx: its decoders expand a whole chunk before any cap applies.
+_ZLIB_CODINGS = frozenset({"gzip", "x-gzip", "deflate"})
+#: `wbits` that reads a gzip or a zlib header, whichever the stream starts with.
+_GZIP_OR_ZLIB = zlib.MAX_WBITS | 32
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -70,7 +76,9 @@ class SafeHttpClient:
             transport=self._transport or PublicOnlyTransport(),
             follow_redirects=False,
             timeout=TIMEOUTS,
-            headers={"User-Agent": OUTBOUND_USER_AGENT},
+            # Replaces httpx's default, which offers br and zstd: those cannot be inflated in
+            # bounded steps here.
+            headers={"User-Agent": OUTBOUND_USER_AGENT, "Accept-Encoding": "gzip"},
             trust_env=False,
         )
         return self
@@ -173,30 +181,55 @@ class SafeHttpClient:
 
     async def _send(self, url: str, request: "_Request") -> tuple[httpx.Response, bytes, bool]:
         assert self._client is not None, "use `async with SafeHttpClient()`"
-        chunks: list[bytes] = []
-        size = 0
-        cut = False
-        max_bytes = request.max_bytes
+        body, cut = b"", False
         async with self._client.stream(
             request.method, url, headers={"Accept": request.accept}
         ) as response:
             if request.method != "HEAD":
-                async for chunk in response.aiter_bytes():
-                    size += len(chunk)
-                    if size > max_bytes:
-                        if not request.truncate:
-                            raise FetchError(
-                                "fetch-too-large",
-                                f"The answer is larger than {max_bytes} bytes.",
-                                url=url,
-                            )
-                        chunks.append(chunk[: max_bytes - (size - len(chunk))])
-                        cut = True
-                        break
-                    chunks.append(chunk)
+                body, cut = await _read_capped(response, request.max_bytes, url)
+                if cut and not request.truncate:
+                    raise FetchError(
+                        "fetch-too-large",
+                        f"The answer is larger than {request.max_bytes} bytes.",
+                        url=url,
+                    )
         # Nothing carries over to the next request: not cookies, not anything a server set.
         self._client.cookies.clear()
-        return response, b"".join(chunks), cut
+        return response, body, cut
+
+
+async def _read_capped(response: httpx.Response, max_bytes: int, url: str) -> tuple[bytes, bool]:
+    """The body, decoded, cut at *max_bytes*, and whether it went past. The compressed stream is
+    inflated with `max_length` (zlib), so no step yields more than one byte past the cap."""
+    coding = response.headers.get("content-encoding", "identity").strip().lower()
+    if coding in _ZLIB_CODINGS:
+        inflate = zlib.decompressobj(_GZIP_OR_ZLIB)
+    elif coding in {"", "identity"}:
+        inflate = None
+    else:
+        raise FetchError(
+            "fetch-failed", "The server answered with an unsupported content encoding.", url=url
+        )
+    body = bytearray()
+    try:
+        async for chunk in response.aiter_raw():
+            pending = chunk
+            while pending:
+                if inflate is None:
+                    body += pending
+                    pending = b""
+                else:
+                    body += inflate.decompress(pending, max_bytes + 1 - len(body))
+                    pending = inflate.unconsumed_tail
+                if len(body) > max_bytes:
+                    return bytes(body[:max_bytes]), True
+        if inflate is not None:
+            body += inflate.flush()  # what zlib still holds: at most its 32 KiB window
+    except zlib.error:
+        raise FetchError("fetch-failed", "The answer could not be decompressed.", url=url) from None
+    if len(body) > max_bytes:
+        return bytes(body[:max_bytes]), True
+    return bytes(body), False
 
 
 def _transport_failure(error: Exception, url: str) -> FetchError:

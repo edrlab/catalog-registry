@@ -1,15 +1,22 @@
+# uv 0.12.6, pinned by digest. A stage of its own because Dependabot updates FROM lines, not
+# images named in COPY --from.
+FROM ghcr.io/astral-sh/uv:0.12.6@sha256:88bc6eb1ccd4b82efd0e1b530caffabddf50dc2bf612e66c14ea25b8ee8a4d3d AS uv
+
 FROM python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb AS base
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 UV_COMPILE_BYTECODE=1
-COPY --from=ghcr.io/astral-sh/uv:0.12.6 /uv /usr/local/bin/uv
 WORKDIR /app
+
+# uv only where something is installed; the runtime image runs the finished venv without it.
+FROM base AS build
+COPY --from=uv /uv /usr/local/bin/uv
 
 # Dependencies before source: dependencies change rarely, source changes constantly, so a
 # code edit rebuilds one layer instead of reinstalling the world.
-FROM base AS dependencies
+FROM build AS dependencies
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
-FROM base AS development
+FROM build AS development
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project
 COPY . .

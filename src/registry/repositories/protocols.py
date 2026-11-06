@@ -101,7 +101,12 @@ class AdminReader(Protocol):
 
     async def fetch_admin_country(self, code: str) -> AdminCountryDetail | None: ...
 
-    async def fetch_admin_catalog_by_href(self, href: str) -> tuple[str, str] | None: ...
+    async def fetch_admin_catalog_by_href(
+        self, href: str, derived_id: str
+    ) -> tuple[str, str] | None:
+        """(id, name) of the catalog using *href* as its identity, else of the catalog whose id
+        is *derived_id* (the id a catalog created from *href* would get)."""
+        ...
 
 
 class FeedFetcher(Protocol):
@@ -131,7 +136,10 @@ class AdminWriter(Protocol):
 
     async def fetch_unknown_places(
         self, country: str | None, subdivisions: Sequence[str]
-    ) -> tuple[bool, list[str]]: ...
+    ) -> tuple[bool, list[str], list[str]]:
+        """Whether *country* is known, the unknown subdivision codes, and the known ones that are
+        not in *country* (every known one when *country* is None)."""
+        ...
 
     async def persist_new_catalog(
         self, document: dict[str, Any], catalog_id: uuid.UUID, *, publish: bool

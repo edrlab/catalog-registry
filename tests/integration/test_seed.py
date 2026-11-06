@@ -4,6 +4,7 @@ import json
 import re
 import uuid
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import func, select, text
@@ -284,7 +285,7 @@ async def test_uppercase_country_and_subdivisions_are_stored_verbatim(
     ],
 )
 async def test_the_core_refuses_malformed_codes_even_without_schema_validation(
-    db_session: AsyncSession, metadata: dict[str, object], expected: str
+    db_session: AsyncSession, metadata: dict[str, Any], expected: str
 ) -> None:
     """Layer two. `import_catalog_document` does not validate against the schema, so it needs its
     own check, or a caller that skips validation reaches Postgres and fails on a check constraint
@@ -912,3 +913,93 @@ async def test_a_rel_array_is_accepted(db_session: AsyncSession) -> None:
     await db_session.commit()
 
     assert {link.rel for link in catalog.links} == {LinkRel.CATALOG}
+
+
+async def test_a_re_seed_bumps_the_version(db_session: AsyncSession) -> None:
+    """The admin API refuses a write made against a stale `version`. A re-seed rewrites the
+    catalog, so it must move the version too, or an editor's open page overwrites it silently."""
+    await seed_catalogs(db_session, SEED_FILE)
+    await db_session.commit()
+    before = dict((await db_session.execute(select(Catalog.id, Catalog.version))).tuples().all())
+
+    await seed_catalogs(db_session, SEED_FILE)
+    await db_session.commit()
+    after = dict((await db_session.execute(select(Catalog.id, Catalog.version))).tuples().all())
+
+    assert after == {catalog_id: version + 1 for catalog_id, version in before.items()}
+
+
+async def test_a_catalog_whose_link_an_editor_changed_is_updated_not_duplicated(
+    db_session: AsyncSession,
+) -> None:
+    """The row keeps the id derived from its old link. The file, which has no identifier, still
+    names that link, so the href lookup misses; the derived id must then find the row, or the
+    insert collides on `pk_catalogs` and aborts the whole seed."""
+    href = "https://library.example/edited.opds2"
+    document = {
+        "metadata": {"title": "Edited Link", "kind": ["public"]},
+        "links": [{"href": href, "rel": "catalog"}],
+    }
+    first, _ = await import_catalog_document(db_session, document, recommended=False)
+    await db_session.commit()
+    await db_session.execute(
+        text("UPDATE links SET href = 'https://elsewhere.example/opds' WHERE catalog_id = :id"),
+        {"id": first.id},
+    )
+    await db_session.commit()
+    db_session.expire_all()
+
+    second, created = await import_catalog_document(db_session, document, recommended=False)
+    await db_session.commit()
+
+    assert created is False
+    assert second.id == first.id
+    assert await count(db_session, Catalog) == 1
+    assert (await db_session.scalars(select(Link.href))).all() == [href]
+
+
+def place_feed(**metadata: Any) -> dict[str, Any]:
+    return {
+        "metadata": {"title": "Places"},
+        "catalogs": [
+            {
+                "metadata": {"title": "Placed Library", "kind": ["public"], **metadata},
+                "links": [{"href": "https://library.example/placed.opds2", "rel": "catalog"}],
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    [
+        pytest.param({"country": "XK"}, r"Placed Library \(XK\)", id="unknown-country"),
+        pytest.param(
+            {"country": "FR", "subdivisions": ["BE-WAL"]},
+            r"BE-WAL, outside its country \(FR\)",
+            id="subdivision-of-another-country",
+        ),
+        pytest.param(
+            {"subdivisions": ["BE-WAL"]},
+            r"BE-WAL, outside its country \(none given\)",
+            id="subdivision-without-country",
+        ),
+    ],
+)
+async def test_places_the_registry_cannot_store_are_a_readable_message(
+    db_session: AsyncSession, metadata: dict[str, Any], expected: str
+) -> None:
+    """Refused before anything is written, naming the code, instead of an `IntegrityError` on a
+    foreign key or a catalog placed in two countries at once."""
+    with pytest.raises(ValidationError, match=expected):
+        await import_feed_document(db_session, place_feed(**metadata), source="test")
+
+    assert await count(db_session, Catalog) == 0
+
+
+async def test_a_subdivision_of_its_own_country_passes(db_session: AsyncSession) -> None:
+    created, _ = await import_feed_document(
+        db_session, place_feed(country="BE", subdivisions=["BE-WAL"]), source="test"
+    )
+
+    assert created == 1

@@ -34,7 +34,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.core.config import Settings
@@ -43,7 +43,7 @@ from registry.core.schema_validation import SEED_INPUT_SCHEMA, build_schema_vali
 from registry.db.models.catalog import (
     Catalog,
 )
-from registry.db.models.reference import Subdivision
+from registry.db.models.reference import Country, Subdivision
 from registry.db.session import build_session_factory, create_database_engine
 from registry.domain.catalog_document import (
     build_catalog_id,
@@ -60,8 +60,8 @@ RECOMMENDED_AT_LAUNCH = True
 
 
 # Limit: the href match is only the fallback now, but a catalog with no `metadata.identifier`
-# that changes its feed URL inserts a second row instead of updating the first. The fix is to
-# give it an identifier, which `resolve_existing_catalog` then matches on.
+# whose file changes its feed URL inserts a second row instead of updating the first. The fix is
+# to give it an identifier, which `resolve_existing_catalog` then matches on.
 def resolve_identity_href(document: dict[str, Any]) -> str:
     """The externally owned URL this catalog is matched on across seed runs.
 
@@ -131,13 +131,21 @@ async def resolve_existing_catalog(
     identity available: `data/libraries.json`, which supplies no identifiers, and a catalog
     already stored under a different id than the one the file now names, which keeps the id it
     has, since an upsert does not rewrite a primary key.
+
+    **A document without an identifier that misses on href is then looked up by its derived
+    id.** An editor can change a catalog's main link, and the row keeps the id derived from the
+    old one. The file still names the old href, so the href lookup misses, and inserting would
+    collide on `pk_catalogs` and abort the whole seed. Matching on the id updates that row
+    instead, and its link goes back to the file's.
     """
     repository = CatalogRepository(session)
-    if document["metadata"].get("identifier"):
-        by_id = await repository.fetch_catalog_by_identity_id(catalog_id)
-        if by_id is not None:
-            return by_id
-    return await repository.fetch_catalog_by_identity_href(identity_href)
+    named = bool(document["metadata"].get("identifier"))
+    if named and (by_id := await repository.fetch_catalog_by_identity_id(catalog_id)) is not None:
+        return by_id
+    by_href = await repository.fetch_catalog_by_identity_href(identity_href)
+    if by_href is not None or named:
+        return by_href
+    return await repository.fetch_catalog_by_identity_id(catalog_id)
 
 
 def assert_iso_codes_are_uppercase(document: dict[str, Any]) -> None:
@@ -227,6 +235,9 @@ async def import_catalog_document(
 
     await persist_catalog_contents(session, existing, built)
     existing.recommended = recommended
+    # The admin API's optimistic-concurrency check compares this, so an editor's open page
+    # must see a re-import as a change rather than overwrite it.
+    existing.version = Catalog.version + 1
     # ck_catalogs_published_when_published. A row that was a draft has no publication date,
     # and publishing it without one fails the constraint at commit.
     if existing.published_at is None:
@@ -286,39 +297,67 @@ def assert_identities_are_unique(feed: dict[str, Any], *, source: str) -> None:
         by_id[catalog_id] = title
 
 
-async def assert_subdivisions_are_known(
+async def assert_places_are_known(
     session: AsyncSession, feed: dict[str, Any], *, source: str
 ) -> None:
-    """Refuse codes absent from `subdivisions` with a message. Raises `ValidationError`.
+    """Refuse unknown country and subdivision codes, and subdivisions outside their catalog's
+    country, with a message. Raises `ValidationError`.
 
     `subdivisions` is **not** a full copy of ISO 3166-2. It holds only the codes some catalog
     references, added per data migration. So a valid code the table has never heard of fails on
     `fk_catalog_subdivisions_subdivision_code_subdivisions` at flush time, as a raw
     `IntegrityError` that names a constraint rather than the code, the catalog or the remedy.
     `make add --subdivision NL-ZH` is the easiest way to hit it; the flag's own help says
-    "ISO 3166-2", which is a promise five rows cannot keep.
+    "ISO 3166-2", which is a promise five rows cannot keep. A well-formed country the
+    `countries` table lacks (`XK`) fails the same way on `fk_catalogs_country_code_countries`.
+
+    A subdivision must also belong to its catalog's country, the rule the admin API applies:
+    `FR` with `BE-WAL` contradicts itself, and subdivisions without a country have none to
+    belong to.
 
     One query for the whole document, before anything is written, listing every unknown code at
     once, so an operator fixes one migration rather than rediscovering this per catalog.
     """
-    requested = {
-        code
-        for document in feed["catalogs"]
-        for code in document["metadata"].get("subdivisions") or ()
-    }
-    if not requested:
+    metadata = [document["metadata"] for document in feed["catalogs"]]
+    countries = {item["country"] for item in metadata if item.get("country")}
+    subdivisions = {code for item in metadata for code in item.get("subdivisions") or ()}
+    if not countries and not subdivisions:
         return
 
-    known = set(
-        await session.scalars(select(Subdivision.code).where(Subdivision.code.in_(requested)))
+    # Country and subdivision codes never coincide (`BE` against `BE-WAL`), so one map holds
+    # both: each known code to the country it is in.
+    statement = union_all(
+        select(Country.alpha2, Country.alpha2).where(Country.alpha2.in_(countries)),
+        select(Subdivision.code, Subdivision.country_alpha2).where(
+            Subdivision.code.in_(subdivisions)
+        ),
     )
-    if unknown := sorted(requested - known):
+    known = dict((await session.execute(statement)).tuples().all())
+
+    if unknown := [
+        f"{item['title']} ({item['country']})"
+        for item in metadata
+        if item.get("country") and item["country"] not in known
+    ]:
+        raise ValidationError(
+            f"{source} names a country absent from the `countries` table, which holds the "
+            f"ISO 3166-1 codes: {', '.join(unknown)}."
+        )
+    if unknown := sorted(subdivisions - known.keys()):
         raise ValidationError(
             f"{source} references {', '.join(unknown)}, absent from the `subdivisions` table. "
             "That table holds only the ISO 3166-2 codes some catalog already uses, so a valid "
             "code can still be missing; add it in a migration, as `b41f7c9ade52` did for "
             "FR-IDF and CH-VS."
         )
+    for item in metadata:
+        country = item.get("country")
+        if outside := [c for c in item.get("subdivisions") or () if known[c] != country]:
+            raise ValidationError(
+                f"{item['title']} names {', '.join(outside)}, outside its country "
+                f"({country or 'none given'}). A subdivision must belong to the catalog's "
+                "`country`."
+            )
 
 
 async def import_feed_document(
@@ -340,7 +379,7 @@ async def import_feed_document(
         raise ValidationError(f"{source} is not valid seed input. {detail}")
 
     assert_identities_are_unique(feed, source=source)
-    await assert_subdivisions_are_known(session, feed, source=source)
+    await assert_places_are_known(session, feed, source=source)
 
     # One clock reading for the run: each catalog is written a millisecond earlier than the
     # one before it, so position in the file survives as `created_at` order. Re-read per

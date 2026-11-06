@@ -36,6 +36,7 @@ from registry.domain.admin_models import (
     UsedLanguage,
     UsedPlaces,
 )
+from registry.domain.catalog_document import build_identity_href
 from registry.domain.enums import CatalogStatus
 from registry.repositories.catalog_documents import (
     build_catalog,
@@ -382,8 +383,12 @@ class AdminRepository:
             ],
         )
 
-    async def fetch_admin_catalog_by_href(self, href: str) -> tuple[str, str] | None:
-        row = (await self._session.execute(_CATALOG_BY_HREF, {"href": href})).first()
+    async def fetch_admin_catalog_by_href(
+        self, href: str, derived_id: str
+    ) -> tuple[str, str] | None:
+        row = (
+            await self._session.execute(_CATALOG_BY_HREF, {"href": href, "id": derived_id})
+        ).first()
         return (row.id, row.name) if row else None
 
     async def fetch_admin_country(self, code: str) -> AdminCountryDetail | None:
@@ -412,13 +417,20 @@ class AdminRepository:
         )
 
 
-#: The catalog that already uses *href* as its identity (`catalog` or `shelf`), if any.
+#: The catalog that already uses *href* as its identity (`catalog` or `shelf`), else the one whose
+#: id is derived from *href*: created from it, it has since moved, and its id still blocks a new
+#: catalog created from that address.
 _CATALOG_BY_HREF: Final = text(
     """
-SELECT c.id::text AS id, c.title AS name
-  FROM links l JOIN catalogs c ON c.id = l.catalog_id
- WHERE l.rel IN ('catalog', 'shelf') AND l.href = :href
- LIMIT 1
+SELECT id, name FROM (
+  SELECT c.id::text AS id, c.title AS name, 0 AS rank
+    FROM links l JOIN catalogs c ON c.id = l.catalog_id
+   WHERE l.rel IN ('catalog', 'shelf') AND l.href = :href
+  UNION ALL
+  SELECT c.id::text, c.title, 1 FROM catalogs c WHERE c.id = CAST(:id AS uuid)
+) owners
+ORDER BY rank
+LIMIT 1
 """
 )
 
@@ -450,8 +462,9 @@ _SET_RECOMMENDED: Final = text(
 )
 
 
-#: Whether the country is known, and which subdivision codes are not, in one round trip. Both are
-#: foreign keys; checked first so the answer names the field rather than a constraint.
+#: Whether the country is known, which subdivision codes are not, and which known ones lie in
+#: another country (all of them when the country is null), in one round trip. Country and
+#: subdivisions are foreign keys; checked first so the answer names the field, not a constraint.
 _UNKNOWN_PLACES: Final = text(
     """
 SELECT (CAST(:country AS text) IS NULL
@@ -459,8 +472,19 @@ SELECT (CAST(:country AS text) IS NULL
        coalesce((SELECT array_agg(c.code ORDER BY c.code)
                    FROM unnest(CAST(:subdivisions AS text[])) AS c(code)
                   WHERE NOT EXISTS (SELECT 1 FROM subdivisions s WHERE s.code = c.code)),
-                CAST('{}' AS text[])) AS unknown_subdivisions
+                CAST('{}' AS text[])) AS unknown_subdivisions,
+       coalesce((SELECT array_agg(s.code ORDER BY s.code)
+                   FROM subdivisions s
+                  WHERE s.code = ANY (CAST(:subdivisions AS text[]))
+                    AND s.country_alpha2 IS DISTINCT FROM CAST(:country AS text)),
+                CAST('{}' AS text[])) AS foreign_subdivisions
 """
+)
+
+#: Whether the catalog with this id still uses this href as its identity.
+_STILL_AT_HREF: Final = text(
+    "SELECT EXISTS (SELECT 1 FROM links WHERE catalog_id = CAST(:id AS uuid)"
+    " AND rel IN ('catalog', 'shelf') AND href = :href)"
 )
 
 _DELETE_CATALOG: Final = text("DELETE FROM catalogs WHERE id = CAST(:id AS uuid)")
@@ -515,13 +539,17 @@ class AdminCatalogWriter:
 
     async def fetch_unknown_places(
         self, country: str | None, subdivisions: Sequence[str]
-    ) -> tuple[bool, list[str]]:
+    ) -> tuple[bool, list[str], list[str]]:
         row = (
             await self._session.execute(
                 _UNKNOWN_PLACES, {"country": country, "subdivisions": list(subdivisions)}
             )
         ).one()
-        return row.country_known, list(row.unknown_subdivisions)
+        return (
+            row.country_known,
+            list(row.unknown_subdivisions),
+            list(row.foreign_subdivisions),
+        )
 
     async def persist_new_catalog(
         self, document: dict[str, Any], catalog_id: uuid.UUID, *, publish: bool
@@ -531,7 +559,22 @@ class AdminCatalogWriter:
         # ck_catalogs_published_when_published.
         catalog.published_at = func.now() if publish else None
         self._session.add(catalog)
-        await self._flush_catalog()
+        try:
+            await self._flush_catalog()
+        except DuplicateCatalogError:
+            # The id is taken. If its catalog has since moved to another address, say so: nothing
+            # uses this address now, yet a catalog created from it would get the same id.
+            await self._session.rollback()
+            href = build_identity_href(document)
+            still_there = await self._session.scalar(
+                _STILL_AT_HREF, {"id": str(catalog_id), "href": href}
+            )
+            if still_there is False:
+                raise DuplicateCatalogError(
+                    "A catalog created from this address already exists; it now uses another "
+                    "address."
+                ) from None
+            raise
 
     async def fetch_catalog_document(self, catalog_id: str) -> dict[str, Any]:
         return build_document_from_catalog(await self._load_catalog(catalog_id))

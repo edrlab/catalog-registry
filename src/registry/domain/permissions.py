@@ -41,10 +41,6 @@ def build_permissions(role: ActorRole) -> frozenset[str]:
     return ROLE_PERMISSIONS[role]
 
 
-#: What an admin may do to another person (`allowed_actions`).
-USER_ACTIONS: Final = ("change_role", "deactivate", "reactivate")
-
-
 def build_user_actions(
     caller_id: str,
     caller_permissions: frozenset[str],

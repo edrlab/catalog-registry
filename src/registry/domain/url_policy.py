@@ -21,6 +21,9 @@ MAX_URL_LENGTH = 2048
 
 #: IPv6 prefixes that carry an IPv4 address the check must look through.
 _NAT64 = ipaddress.IPv6Network("64:ff9b::/96")
+#: RFC 4291 §2.4: global unicast. Everything outside it (the deprecated IPv4-compatible `::a.b.c.d`,
+#: site-local `fec0::/10`, unassigned space) is refused even where `is_global` would say otherwise.
+_GLOBAL_UNICAST = ipaddress.IPv6Network("2000::/3")
 #: The forms `inet_aton` reads as IPv4 that `ipaddress` does not: `2130706433`, `0177.0.0.1`,
 #: `0x7f.1`. A resolver would turn them into an address the canonical check never saw.
 _LEGACY_IPV4 = re.compile(r"(?:0x[0-9a-f]*|\d+)(?:\.(?:0x[0-9a-f]*|\d+)){0,3}", re.IGNORECASE)
@@ -44,6 +47,7 @@ def is_public_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) ->
             embedded = ipaddress.IPv4Address(int(address) & 0xFFFFFFFF)
         if embedded is not None:
             return is_public_address(embedded)
+        return address in _GLOBAL_UNICAST and address.is_global
     return address.is_global and not address.is_multicast
 
 

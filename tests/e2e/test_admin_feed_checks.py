@@ -1,7 +1,7 @@
 """`POST /admin/feed-checks`: through the app, with the library servers mocked.
 
-The app's fetcher is swapped for the real `SafeHttpClient` on an `httpx.MockTransport`, so the URL
-policy, redirects, caps and retries all run; only the sockets are fake.
+The app's fetcher is swapped for the real `SafeHttpClient` on a mock transport that streams like a
+socket, so the URL policy, redirects, caps and retries all run; only the sockets are fake.
 """
 
 import json
@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from registry.network.safe_client import SafeHttpClient
 from tests.conftest import admin_headers
 from tests.e2e.test_admin_api import become
+from tests.unit.test_safe_client import StreamingTransport
 
 pytestmark = pytest.mark.e2e
 
@@ -24,6 +25,7 @@ EDITOR = "editor@edrlab.org"
 VIEWER = "viewer@edrlab.org"
 FEED = "https://feeds.example.org/opds"
 PROBLEMS = "https://registry.thoriumreader.com/problems/"
+LONG_FEED = "https://feeds.example.org/long"
 
 
 def opds_feed(title: str = "Example Library") -> dict[str, Any]:
@@ -56,6 +58,19 @@ def library(request: httpx.Request) -> httpx.Response:
             200, content=b"<feed>", headers={"content-type": "application/atom+xml"}
         ),
         "https://old.example.org/opds": httpx.Response(301, headers={"location": FEED}),
+        LONG_FEED: httpx.Response(
+            200,
+            json={
+                "metadata": {"title": "T" * 250, "description": "D" * 3000},
+                "links": [
+                    {"rel": "self", "href": LONG_FEED},
+                    {"rel": "alternate", "href": "/page", "title": "A" * 400, "type": "t" * 400},
+                ],
+                "navigation": [],
+            },
+            headers={"content-type": "application/opds+json"},
+        ),
+        "https://feeds.example.org/page": httpx.Response(200),
     }
     return routes.get(url, httpx.Response(404))
 
@@ -64,7 +79,7 @@ def library(request: httpx.Request) -> httpx.Response:
 async def editor(admin_app: FastAPI, db_session: AsyncSession, searchable_catalogs: None) -> str:
     await become(db_session, EDITOR, "editor")
     admin_app.state.open_feed_fetcher = lambda: SafeHttpClient(
-        transport=httpx.MockTransport(library)
+        transport=StreamingTransport(library)
     )
     return EDITOR
 
@@ -127,6 +142,65 @@ async def test_the_report_saves_as_a_draft(admin_client: AsyncClient, editor: st
     assert again["verdict"] == "blocked"
     assert again["duplicate"]["id"] == response.json()["id"]
     assert [f["code"] for f in again["findings"]] == ["duplicate-catalog"]
+
+
+def saved_links(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {key: value for key, value in link.items() if key != "active" and value is not None}
+        for link in feed["links"]
+        if link["active"] is not False
+    ]
+
+
+async def test_text_over_the_limits_is_suggested_at_a_length_that_saves(
+    admin_client: AsyncClient, editor: str
+) -> None:
+    feed = (await check(admin_client, {"url": LONG_FEED})).json()["feed"]
+
+    response = await admin_client.post(
+        "/admin/catalogs",
+        json={
+            "name": feed["name"],
+            "description": feed["description"],
+            "links": saved_links(feed),
+            "kinds": ["public"],
+        },
+        headers=admin_headers(EDITOR),
+    )
+
+    assert response.status_code == 201, response.text
+    assert len(response.json()["name"]) == 200
+    assert len(response.json()["description"]) == 2000
+
+
+async def test_an_address_a_moved_catalog_was_created_from_is_a_duplicate(
+    admin_client: AsyncClient, editor: str
+) -> None:
+    """Its id is derived from the first address and stays when its link changes, so a new catalog
+    from that address cannot be created: the check says so before the save does."""
+    body = {"name": "Mover", "links": [{"rel": "catalog", "href": FEED}], "kinds": ["public"]}
+    created = await admin_client.post("/admin/catalogs", json=body, headers=admin_headers(EDITOR))
+    catalog_id = created.json()["id"]
+    moved = await admin_client.patch(
+        f"/admin/catalogs/{catalog_id}",
+        json={
+            "version": 1,
+            "links": [{"rel": "catalog", "href": "https://elsewhere.example.org/"}],
+        },
+        headers=admin_headers(EDITOR),
+    )
+    assert moved.status_code == 200, moved.text
+
+    report = (await check(admin_client, {"url": FEED})).json()
+    again = await admin_client.post("/admin/catalogs", json=body, headers=admin_headers(EDITOR))
+
+    assert report["verdict"] == "blocked"
+    assert report["duplicate"] == {"id": catalog_id, "name": "Mover"}
+    assert again.status_code == 409
+    assert again.json()["type"] == PROBLEMS + "duplicate-catalog"
+    assert again.json()["detail"] == (
+        "A catalog created from this address already exists; it now uses another address."
+    )
 
 
 async def test_a_web_page_is_accepted(admin_client: AsyncClient, editor: str) -> None:

@@ -7,8 +7,7 @@ from typing import Final
 
 from registry.domain.enums import ActorRole, CatalogStatus
 
-#: `sort` values of the catalog list, and the page-size cap.
-SORT_VALUES: Final = ("name", "-name", "kind", "status")
+#: The page-size cap of the catalog list.
 MAX_PER_PAGE: Final = 100
 #: A page number that would overflow the database's 64-bit offset is a 422, not a 500.
 MAX_PAGE: Final = 100_000

@@ -159,13 +159,14 @@ live-check:  ## Check a running or deployed registry end to end: make live-check
 search-cases:  ## Regenerate docs/search-test-cases.md from tests/search_cases.py
 	uv run python scripts/write_search_cases_doc.py
 
-# Confirm a database is usable before anything depends on it, point REGISTRY_DATABASE_URL
-# at Cloud SQL through the Auth Proxy and run this. See README, "The Cloud SQL sandbox".
 # No latency target has ever been agreed, so this asserts nothing. It answers "what
-# happens at n" on demand, and gives any future optimisation a measured before.
+# happens at n" on demand, and gives any future optimisation a measured before. It writes
+# synthetic catalogs, so it refuses any database but a local one.
 bench:  ## Measure GET / and GET /search as the catalog set grows: make bench N="10 1000"
 	uv run python scripts/benchmark_feed.py $(N)
 
+# Confirm a database is usable before anything depends on it, point REGISTRY_DATABASE_URL
+# at Cloud SQL through the Auth Proxy and run this. See README, "The Cloud SQL sandbox".
 check-db:  ## Report a database's version and extension availability
 	uv run python scripts/check_database.py
 

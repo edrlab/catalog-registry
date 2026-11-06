@@ -40,3 +40,12 @@ async def test_liveness_names_the_cloud_run_revision_when_there_is_one(
     response = await client.get("/health/live")
 
     assert response.json() == {"status": "alive", "revision": "registry-00013-cnz"}
+
+
+@pytest.mark.parametrize("path", ["/health/live", "/health/ready"])
+async def test_a_health_route_answers_head(client: AsyncClient, path: str) -> None:
+    """Uptime checks often probe with HEAD; a 405 there reads as the service being down."""
+    response = await client.head(path)
+
+    assert response.status_code == 200
+    assert response.content == b""
