@@ -17,6 +17,7 @@ Downloads are cached in `.cache/reference-data`.
 """
 
 import argparse
+import ast
 import collections
 import csv
 import json
@@ -31,8 +32,44 @@ MIGRATIONS = REPO_ROOT / "migrations" / "versions"
 #: Downloads are cached here, so a rerun is offline; the CSVs are written next to them (gitignored).
 CACHE = REPO_ROOT / ".cache" / "reference-data"
 OUT = CACHE / "out"
-JSON_BASE = "https://raw.githubusercontent.com/unicode-org/cldr-json/48.2.0/cldr-json"
-XML_BASE = "https://raw.githubusercontent.com/unicode-org/cldr/release-48-2/common/subdivisions"
+#: The one place the CLDR release is pinned. `scripts/check_reference_sources.py` compares it with
+#: the latest published release; a bump is a new data migration carrying the difference.
+CLDR_VERSION = "48.2.0"
+
+
+def build_cldr_xml_tag(version: str) -> str:
+    """The cldr repository's tag for a cldr-json version: `48.2.0` → `release-48-2`,
+    `49.0.0` → `release-49`."""
+    major, minor, patch = version.split(".")
+    return "-".join(
+        [
+            "release",
+            major,
+            *([minor] if minor != "0" or patch != "0" else []),
+            *([patch] if patch != "0" else []),
+        ]
+    )
+
+
+JSON_BASE = f"https://raw.githubusercontent.com/unicode-org/cldr-json/{CLDR_VERSION}/cldr-json"
+XML_BASE = (
+    "https://raw.githubusercontent.com/unicode-org/cldr/"
+    f"{build_cldr_xml_tag(CLDR_VERSION)}/common/subdivisions"
+)
+
+#: Every CLDR status that makes a language official somewhere in a country, strongest first. Before
+#: 2026-11-06 only `official` counted (ADR-053), which gave India 2 languages of 22 and South Africa
+#: 1 of 11; Roni widened it to the regional and de facto ones too.
+OFFICIAL_STATUSES = ("official", "de_facto_official", "official_regional", "official_minority")
+
+#: Official languages CLDR does not list as official for the country. Each with its source.
+HAND_COUNTRY_LANGUAGES = [
+    # Constitution of India, Eighth Schedule (Bodo and Dogri: 92nd Amendment, 2003; Manipuri:
+    # 71st Amendment, 1992). CLDR 48.2 gives these three no official status in India.
+    ("IN", "brx", "official_regional"),
+    ("IN", "doi", "official_regional"),
+    ("IN", "mni", "official_regional"),
+]
 
 HTTP_NOT_FOUND = 404
 
@@ -102,8 +139,9 @@ def extract_subdivision_codes() -> list[str]:
     return sorted(codes)
 
 
-def generate_country_languages(iso: set[str], cache: Path) -> dict[str, tuple[str, list[str]]]:
-    """Official languages; where a country has none, the de facto official ones.
+def generate_country_languages(iso: set[str], cache: Path) -> dict[str, list[tuple[str, str]]]:
+    """Every language official anywhere in each country: (tag, CLDR status), strongest status per
+    tag, plus `HAND_COUNTRY_LANGUAGES`.
 
     ISO 3166-1 codes only, script variants merged into the base language (`sr_Latn` -> `sr`),
     lowercase tags (ADR-053).
@@ -111,26 +149,20 @@ def generate_country_languages(iso: set[str], cache: Path) -> dict[str, tuple[st
     info = json.loads(
         download_cached(f"{JSON_BASE}/cldr-core/supplemental/territoryInfo.json", cache)
     )
-    result: dict[str, tuple[str, list[str]]] = {}
-    for country, data in info["supplemental"]["territoryInfo"].items():
-        if country not in iso:
+    found: dict[str, dict[str, str]] = collections.defaultdict(dict)
+    entries = [
+        (country, tag.split("_")[0].lower(), data.get("_officialStatus"))
+        for country, territory in info["supplemental"]["territoryInfo"].items()
+        for tag, data in territory.get("languagePopulation", {}).items()
+    ]
+    entries += HAND_COUNTRY_LANGUAGES
+    for country, tag, status in entries:
+        if country not in iso or status not in OFFICIAL_STATUSES:
             continue
-        population = data.get("languagePopulation", {})
-
-        def pick(status: str, population: dict[str, dict[str, str]] = population) -> list[str]:
-            return sorted(
-                {
-                    tag.split("_")[0].lower()
-                    for tag, v in population.items()
-                    if v.get("_officialStatus") == status
-                }
-            )
-
-        official = pick("official")
-        result[country] = (
-            ("official", official) if official else ("de_facto_official", pick("de_facto_official"))
-        )
-    return result
+        known = found[country].get(tag)
+        if known is None or OFFICIAL_STATUSES.index(status) < OFFICIAL_STATUSES.index(known):
+            found[country][tag] = status
+    return {country: sorted(tags.items()) for country, tags in found.items()}
 
 
 def generate_country_names(
@@ -272,6 +304,36 @@ def generate_all_subdivision_names(
     return sorted(rows)
 
 
+#: The columns of each table an `--update` writes, in the migrations' order.
+UPDATE_COLUMNS = {
+    "country_languages": ("country_code", "language_tag"),
+    "country_names": ("country_code", "language_tag", "name"),
+    "subdivision_names": ("subdivision_code", "language_tag", "name"),
+}
+_LITERAL_NAMES = {
+    "COUNTRY_LANGUAGES": "country_languages",
+    "COUNTRY_NAMES": "country_names",
+    "SUBDIVISION_NAMES": "subdivision_names",
+}
+
+
+def extract_loaded_rows() -> dict[str, set[tuple[str, ...]]]:
+    """Every reference row an existing migration already inserts: the literals of the earlier data
+    migrations and the CSV files under `migrations/data/`. An update writes only what is missing."""
+    loaded: dict[str, set[tuple[str, ...]]] = {table: set() for table in UPDATE_COLUMNS}
+    for path in MIGRATIONS.glob("*.py"):
+        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+            if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
+                table = _LITERAL_NAMES.get(node.targets[0].id)
+                if table:
+                    loaded[table] |= {tuple(row) for row in ast.literal_eval(node.value)}
+    for table in UPDATE_COLUMNS:
+        for csv_path in (MIGRATIONS.parent / "data").glob(f"*/{table}.csv"):
+            with csv_path.open(encoding="utf-8", newline="") as handle:
+                loaded[table] |= {tuple(row) for row in list(csv.reader(handle))[1:]}
+    return loaded
+
+
 def write_csv(path: Path, header: list[str], rows: Sequence[tuple[object, ...]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -284,6 +346,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--python", action="store_true", help="print the rows as Python literals")
     parser.add_argument(
+        "--update",
+        type=Path,
+        metavar="DIR",
+        help="write only the rows no migration holds yet (languages, country names, subdivision "
+        "names) as CSV files into DIR: the data of the next reference-data migration",
+    )
+    parser.add_argument(
         "--full-subdivisions",
         type=Path,
         metavar="DIR",
@@ -294,11 +363,11 @@ def main() -> None:
 
     iso = extract_iso_countries()
     status_languages = generate_country_languages(iso, CACHE)
-    languages = {country: tags for country, (_, tags) in status_languages.items()}
+    languages = {country: [tag for tag, _ in tags] for country, tags in status_languages.items()}
     language_rows = [
         (country, tag, status)
-        for country, (status, tags) in sorted(status_languages.items())
-        for tag in tags
+        for country, tags in sorted(status_languages.items())
+        for tag, status in tags
     ]
     names = generate_country_names(iso, languages, CACHE)
     sub_names = generate_subdivision_names(extract_subdivision_codes(), languages, CACHE)
@@ -339,6 +408,20 @@ def main() -> None:
             every_names,
         )
         print(f"all subdivisions {len(every)}, their names {len(every_names)}")
+
+    if args.update:
+        every_names = generate_all_subdivision_names(
+            generate_all_subdivisions(iso), languages, CACHE
+        )
+        loaded = extract_loaded_rows()
+        for table, rows in (
+            ("country_languages", [(c, t) for c, t, _ in language_rows]),
+            ("country_names", names),
+            ("subdivision_names", every_names),
+        ):
+            new_rows = sorted(set(rows) - loaded[table])
+            write_csv(args.update / f"{table}.csv", list(UPDATE_COLUMNS[table]), new_rows)
+            print(f"{table}: {len(new_rows)} new")
 
     if args.python:
         for name, rows in (

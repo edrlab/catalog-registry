@@ -44,10 +44,12 @@ async def rows(session: AsyncSession, statement: str) -> list[tuple[Any, ...]]:
     return [tuple(row) for row in await session.execute(text(statement))]
 
 
-async def test_country_languages_has_335_rows_over_245_countries(
+async def test_country_languages_has_484_rows_over_245_countries(
     db_session: AsyncSession,
 ) -> None:
-    assert await scalar(db_session, "SELECT count(*) FROM country_languages") == 335
+    """335 country-wide official languages (`2eb49a8f4664`) plus 149 regional or de facto ones and
+    India's three from its Constitution (`195c3d701630`)."""
+    assert await scalar(db_session, "SELECT count(*) FROM country_languages") == 484
     assert (
         await scalar(db_session, "SELECT count(DISTINCT country_code) FROM country_languages")
         == 245
@@ -117,12 +119,45 @@ async def test_every_country_has_an_english_name_except_possibly_none(
     ("country", "languages"),
     [
         ("BE", {"nl", "fr", "de"}),  # Belgium keeps German (ADR-053)
-        ("CH", {"de", "fr", "it"}),  # Romansh is official_regional and left out
+        # Every CLDR official status counts since 2026-11-06 (Roni), regional ones included.
+        ("CH", {"de", "fr", "it", "rm", "gsw"}),
         ("FR", {"fr"}),
-        ("CA", {"en", "fr"}),
+        ("CA", {"en", "fr", "iu", "crk", "chp", "den", "dgr", "gwi"}),
+        ("ZA", {"en", "af", "zu", "xh", "nso", "st", "tn", "ts", "ss", "ve", "nr"}),
+        # The 22 languages of the Eighth Schedule, English, and Khasi (CLDR: regional). Bodo, Dogri
+        # and Manipuri come from `HAND_COUNTRY_LANGUAGES`, not CLDR.
+        (
+            "IN",
+            {
+                "hi",
+                "en",
+                "as",
+                "bn",
+                "brx",
+                "doi",
+                "gu",
+                "kha",
+                "kn",
+                "kok",
+                "ks",
+                "mai",
+                "ml",
+                "mni",
+                "mr",
+                "ne",
+                "or",
+                "pa",
+                "sa",
+                "sat",
+                "sd",
+                "ta",
+                "te",
+                "ur",
+            },
+        ),
     ],
 )
-async def test_the_official_languages_of_the_countries_hadrien_checked(
+async def test_the_official_languages_of_the_countries_checked_by_hand(
     db_session: AsyncSession, country: str, languages: set[str]
 ) -> None:
     found = {
@@ -311,3 +346,13 @@ async def test_the_migrated_schema_matches_the_models_alembic_check(
         return list(compare_metadata(context, Base.metadata))
 
     assert await db_connection.run_sync(compare) == []
+
+
+async def test_tamil_nadu_is_found_by_its_tamil_name(db_session: AsyncSession) -> None:
+    found = await rows(
+        db_session,
+        "SELECT subdivision_code FROM subdivision_names "
+        "WHERE language_tag = 'ta' AND name = 'தமிழ்நாடு'",
+    )
+
+    assert [row[0] for row in found] == ["IN-TN"]
