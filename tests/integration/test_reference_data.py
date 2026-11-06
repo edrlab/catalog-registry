@@ -356,3 +356,16 @@ async def test_tamil_nadu_is_found_by_its_tamil_name(db_session: AsyncSession) -
     )
 
     assert [row[0] for row in found] == ["IN-TN"]
+
+
+async def test_every_official_language_has_an_english_name(db_session: AsyncSession) -> None:
+    """The country page shows these names; a bare tag ("kha") is not a name a person can read."""
+    from registry.services.language_names import build_language_name  # noqa: PLC0415
+
+    tags = [
+        r[0] for r in await rows(db_session, "SELECT DISTINCT language_tag FROM country_languages")
+    ]
+
+    assert [tag for tag in tags if build_language_name(tag) == tag] == []
+    assert build_language_name("kha") == "Khasi"
+    assert build_language_name("cak") == "Kaqchikel"
