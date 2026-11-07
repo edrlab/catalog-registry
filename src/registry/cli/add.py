@@ -15,162 +15,66 @@ file. The back office (v1.0) will drive that same path from a browser.
 
 import argparse
 import asyncio
-import ipaddress
 import json
-import socket
 import sys
-import urllib.request
 from collections.abc import Sequence
-from typing import Any, override
-from urllib.parse import urlsplit
+from typing import Any
 
 from registry.cli.seed import assert_iso_codes_are_uppercase, import_feed_document
 from registry.core.config import Settings
 from registry.core.errors import ValidationError
 from registry.db.session import build_session_factory, create_database_engine
-from registry.domain.enums import (
-    CatalogColor,
-    CatalogKind,
-    CoverageScope,
-    LinkRel,
-    PublicationType,
+from registry.domain.enums import CatalogColor, CatalogKind, CoverageScope, LinkRel, PublicationType
+from registry.domain.feed_check import (
+    OPDS_MEDIA_TYPE,
+    build_feed_links,
+    normalise_remote_rel,
+    parse_json_document,
 )
+from registry.domain.fetching import FetchError, FetchResult
+from registry.network.safe_client import SafeHttpClient
 
-#: Checked on the URL given and again on every redirect hop.
-ALLOWED_SCHEMES = frozenset({"http", "https"})
+__all__ = ["build_catalog_document", "download_feed_document", "main", "normalise_remote_rel"]
 
 #: A registry entry is metadata, not a mirror. Twelve seconds and two megabytes is a generous
 #: ceiling for a feed's first page, and it bounds a hostile or broken origin.
-FETCH_TIMEOUT_SECONDS = 12
+FETCH_TIMEOUT_SECONDS = 12.0
 MAX_FEED_BYTES = 2 * 1024 * 1024
-
-#: The one alias the specifications actually define for a rel this registry stores.
-#:
-#: OPDS 1.2 §6.1 defines the relation as `http://opds-spec.org/shelf` and gives it no short
-#: form; the bare `shelf` is the registry's own vocabulary, transcribed from Hadrien's links
-#: table (`scripts/generate_enums.py`). OPDS 2.0 §4 does define short aliases for the OPDS
-#: 1.x URIs, but only for the acquisition relations, none of which the registry stores, and
-#: `shelf` does not appear in OPDS 2.0 at all.
-#:
-#: So this is a table, not a prefix rule. Stripping `http://opds-spec.org/` generically would
-#: silently invent short forms the specifications never defined. `subscriptions`, `facet`,
-#: `crawlable`, `recommended`, and import them as though Hadrien had listed them.
-REL_ALIASES = {"http://opds-spec.org/shelf": LinkRel.SHELF}
-
-#: Never imported from a feed: the registry synthesises its own `self`, and
-#: `catalog` is the address the operator gave, not one the feed claims for itself.
-NEVER_IMPORTED = {LinkRel.SELF, LinkRel.CATALOG}
+FEED_ACCEPT = "application/opds+json, application/json;q=0.9"
 
 
-def assert_publicly_reachable(url: str) -> None:
-    """Refuse a URL no reader could follow. Raises `ValidationError`.
-
-    Two things at once, and the second is why this exists. A catalog in a public registry has
-    to be reachable from the public internet, so a loopback or private address is not a
-    catalog anyone can use. And an address that is not globally routable is the shape of an
-    SSRF target: `169.254.169.254` is the cloud metadata service, which hands credentials to
-    anything that asks. Harmless while this runs on a laptop, not harmless the day it runs
-    inside GCP, and that is a change nobody would think to re-audit this for.
-
-    Checked on the URL given and again on every redirect hop, because a public host is free
-    to redirect to a private one.
-    """
-    host = urlsplit(url).hostname
-    if not host:
-        raise ValidationError(f"{url} names no host")
-    try:
-        resolved = socket.getaddrinfo(host, None)
-    except OSError as error:
-        raise ValidationError(f"could not resolve {host}. {error}") from error
-
-    for entry in resolved:
-        address = ipaddress.ip_address(entry[4][0])
-        if not address.is_global:
-            raise ValidationError(
-                f"{host} resolves to {address}, which is not a public address. A catalog in "
-                "the registry has to be reachable by readers."
-            )
+def build_outbound_client() -> SafeHttpClient:
+    """The client `add` fetches with: the registry's one outbound client. A function so
+    the loopback tests can swap the transport, never the checks."""
+    return SafeHttpClient()
 
 
-class _HTTPOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Re-check the scheme on every hop, not just the first.
-
-    `urllib` already refuses to redirect to `file:`, but it permits `ftp:`, and a public host
-    is free to redirect to a private one. Checking the URL the operator typed is not the same
-    as checking where the request ends up.
-    """
-
-    @override
-    def redirect_request(
-        self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str
-    ) -> Any:
-        if urlsplit(newurl).scheme not in ALLOWED_SCHEMES:
-            raise ValidationError(f"refusing to follow a redirect to {newurl}")
-        assert_publicly_reachable(newurl)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
-def _http_only_opener() -> urllib.request.OpenerDirector:
-    return urllib.request.build_opener(_HTTPOnlyRedirectHandler)
+async def _download(url: str) -> FetchResult:
+    async with build_outbound_client() as client:
+        return await client.fetch(
+            url, accept=FEED_ACCEPT, max_bytes=MAX_FEED_BYTES, deadline=FETCH_TIMEOUT_SECONDS
+        )
 
 
 def download_feed_document(url: str) -> dict[str, Any]:
     """Fetch and parse an OPDS feed. Raises `ValidationError` on anything unusable.
 
-    Scheme and destination are checked before the request. `urlopen` also speaks `file:` and
-    `ftp:`, so an unchecked URL turns this command into a local-file reader, and an unchecked
-    host turns it into a way to read whatever the machine can reach.
+    `SafeHttpClient` refuses anything but a public http(s) address, on the URL given and on every
+    redirect, and connects only to the address it checked.
     """
-    if urlsplit(url).scheme not in ALLOWED_SCHEMES:
-        raise ValidationError(f"{url} is not an http(s) URL")
-    assert_publicly_reachable(url)
-
-    request = urllib.request.Request(
-        url, headers={"Accept": "application/opds+json, application/json"}
-    )
     try:
-        with _http_only_opener().open(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
-            payload = response.read(MAX_FEED_BYTES + 1)
-    except OSError as error:  # URLError, HTTPError, socket timeouts
-        raise ValidationError(f"could not fetch {url}. {error}") from error
-
-    if len(payload) > MAX_FEED_BYTES:
-        raise ValidationError(f"{url} returned more than {MAX_FEED_BYTES} bytes")
-
+        result = asyncio.run(_download(url))
+    except FetchError as error:
+        raise ValidationError(f"could not fetch {url}: {error.detail}") from None
+    if not 200 <= result.status < 300:  # noqa: PLR2004
+        raise ValidationError(f"could not fetch {url}: the server answered {result.status}")
     try:
-        feed = json.loads(payload)
-    except json.JSONDecodeError as error:
-        raise ValidationError(f"{url} did not return JSON. {error}") from error
-
+        feed = parse_json_document(result.body)
+    except ValueError as error:
+        raise ValidationError(f"{url} did not return JSON. {error}") from None
     if not isinstance(feed, dict):
         raise ValidationError(f"{url} returned {type(feed).__name__}, not an OPDS document")
     return feed
-
-
-def normalise_remote_rel(rel: Any) -> LinkRel | None:
-    """One OPDS rel → the registry's vocabulary, or `None` for one we do not store.
-
-    A Readium link's `rel` is a string *or* an array (`link.schema.json`), so both are
-    accepted; the first recognised value in an array wins.
-
-    Anything outside `LinkRel` and `REL_ALIASES` returns `None`. Including relations the
-    OPDS specifications do define, such as `http://opds-spec.org/subscriptions`. The registry
-    stores the eight rels in Hadrien's links table and no others; a feed cannot widen that by
-    publishing something else, whether it is malformed or merely broader than we support.
-    """
-    candidates = rel if isinstance(rel, list) else [rel]
-    for candidate in candidates:
-        if not isinstance(candidate, str):
-            continue
-        if (aliased := REL_ALIASES.get(candidate)) is not None:
-            return aliased
-        try:
-            resolved = LinkRel(candidate)
-        except ValueError:
-            continue
-        if resolved not in NEVER_IMPORTED:
-            return resolved
-    return None
 
 
 def build_catalog_document(feed: dict[str, Any], url: str, **editorial: Any) -> dict[str, Any]:
@@ -178,30 +82,26 @@ def build_catalog_document(feed: dict[str, Any], url: str, **editorial: Any) -> 
 
     *url* becomes the `catalog` rel, and that is also the upsert identity: a re-run of `add`
     on the same URL finds the row it created the first time and replaces its contents rather
-    than inserting a second one.
+    than inserting a second one. The feed's own links are kept by the feed check's rules
+    (`build_feed_links`): known rels only, hrefs made absolute, http(s) only.
 
     `editorial` holds the flag-supplied metadata; keys whose value is `None` or empty are
     dropped, so `metadata` never carries a null that `additionalProperties: false` would
     otherwise have to allow.
     """
-    title = feed.get("metadata", {}).get("title")
+    metadata_in = feed.get("metadata")
+    title = metadata_in.get("title") if isinstance(metadata_in, dict) else None
     if not isinstance(title, str) or not title.strip():
         raise ValidationError(f"{url} has no metadata.title, so there is nothing to name it")
 
-    links = [{"href": url, "type": "application/opds+json", "rel": LinkRel.CATALOG.value}]
-    for link in feed.get("links", []):
-        # A remote document is untrusted, and `links: [null]` is valid JSON. Reaching `.get`
-        # on it raises before the schema ever sees the document.
-        if not isinstance(link, dict):
-            continue
-        resolved = normalise_remote_rel(link.get("rel"))
-        href = link.get("href")
-        if resolved is None or not isinstance(href, str):
-            continue
-        imported: dict[str, Any] = {"href": href, "rel": resolved.value}
-        if isinstance(link.get("type"), str):
-            imported["type"] = link["type"]
-        if link.get("templated"):
+    links: list[dict[str, Any]] = [
+        {"href": url, "type": OPDS_MEDIA_TYPE, "rel": LinkRel.CATALOG.value}
+    ]
+    for link in build_feed_links(feed.get("links"), url):
+        imported: dict[str, Any] = {"href": link.href, "rel": link.rel}
+        if link.type:
+            imported["type"] = link.type
+        if link.templated:
             imported["templated"] = True
         links.append(imported)
 
@@ -252,8 +152,8 @@ def main(argv: Sequence[str] = ()) -> int:
     parser.add_argument(
         "--subdivision",
         action="append",
-        help="ISO 3166-2, uppercase, repeatable: BE-WAL. Must already be in the `subdivisions` "
-        "table, which holds only the codes some catalog uses; a missing one is refused",
+        help="ISO 3166-2, uppercase, repeatable: BE-WAL. Must be in the `subdivisions` table "
+        "and belong to --country; anything else is refused",
     )
     parser.add_argument(
         "--publication-type",

@@ -1,7 +1,7 @@
-"""The search pool through the real app: its own engine, its own limits (ADR-058 amended).
+"""The search pool through the real app: its own engine, its own limits.
 
 The app has three pools: the main one (readiness and the importers), the search pool (1 s timeout)
-and the read pool of the feed and one catalog (10 s timeout, ADR-062). Each read kind has its
+and the read pool of the feed and one catalog (10 s timeout). Each read kind has its
 own, so one kind's limits and stuck connections cannot reach another's.
 
 Unlike the rest of the e2e suite this does not rebind the app to the rollback fixture, because

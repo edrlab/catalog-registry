@@ -1,4 +1,4 @@
-"""`/dev/fetch` outside local: who may call it, and where it may go (ADR-063).
+"""`/dev/fetch` outside local: who may call it, and where it may go.
 
 The route makes the server request a URL a visitor names. On a public service that is an open relay
 unless two things hold: the caller holds the shared secret, and the host is one the registry lists.

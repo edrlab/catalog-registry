@@ -1,7 +1,7 @@
 """Assert every file in schema/ is valid JSON and a valid draft-07 schema.
 
 The trailing comma in `catalog.schema.json` sat unnoticed until it was read by eye. This
-makes that impossible to repeat, which matters because Hadrien edits the schemas directly.
+makes that impossible to repeat, which matters because the schemas are edited by hand upstream.
 """
 
 import json

@@ -1,4 +1,4 @@
-"""The feed and `GET /catalogs/{id}` through the real app and its read pool (ADR-062).
+"""The feed and `GET /catalogs/{id}` through the real app and its read pool.
 
 Not rebound to the rollback fixture: the timeout, the read-only mode and the pool's behaviour under
 load have to be proven on the wiring `main.py` builds (`create_app` and its lifespan), against the

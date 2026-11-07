@@ -1,8 +1,8 @@
 """The v0.2 reference data and the schema it lives in, against the migrated database.
 
-The numbers come from ADR-053 (CLDR 48.2: 335 rows over 245 countries) and ADR-055 (the
-starting subdivision types). They are properties of the pinned data, so a regenerated snapshot
-that changes them is a decision to make, not a typo to fix.
+The numbers come from the pinned CLDR snapshot (official languages per country) and the
+starting subdivision types per country. They are properties of the pinned data, so a
+regenerated snapshot that changes them is a decision to make, not a typo to fix.
 """
 
 from typing import Any
@@ -19,9 +19,9 @@ from registry.db.models import *  # noqa: F403 - registers every model on Base.m
 
 pytestmark = pytest.mark.integration
 
-#: ADR-055, France as Hadrien listed it on 2 October, plus the type he asked to add for
-#: Martinique and Guyane. Left out on purpose: overseas territory, dependency, European
-#: collectivity.
+#: The seven ISO 3166-2 types the back office offers for France, overseas unique territorial
+#: collectivity (Martinique, Guyane) included. Left out on purpose, as no libraries are expected
+#: there: overseas territory, dependency, European collectivity.
 FRANCE_TYPES = {
     "metropolitan region",
     "metropolitan department",
@@ -32,7 +32,7 @@ FRANCE_TYPES = {
     "overseas unique territorial collectivity",
 }
 
-#: Countries CLDR gives no language to; they get English only (ADR-053).
+#: Countries CLDR gives no language to; they get English only.
 NO_LANGUAGE = {"AQ", "BV", "HM", "TF"}
 
 
@@ -44,10 +44,12 @@ async def rows(session: AsyncSession, statement: str) -> list[tuple[Any, ...]]:
     return [tuple(row) for row in await session.execute(text(statement))]
 
 
-async def test_country_languages_has_335_rows_over_245_countries(
+async def test_country_languages_has_484_rows_over_245_countries(
     db_session: AsyncSession,
 ) -> None:
-    assert await scalar(db_session, "SELECT count(*) FROM country_languages") == 335
+    """335 country-wide official languages (`2eb49a8f4664`) plus 149 regional or de facto ones and
+    India's three from its Constitution (`195c3d701630`)."""
+    assert await scalar(db_session, "SELECT count(*) FROM country_languages") == 484
     assert (
         await scalar(db_session, "SELECT count(DISTINCT country_code) FROM country_languages")
         == 245
@@ -116,13 +118,46 @@ async def test_every_country_has_an_english_name_except_possibly_none(
 @pytest.mark.parametrize(
     ("country", "languages"),
     [
-        ("BE", {"nl", "fr", "de"}),  # Belgium keeps German (ADR-053)
-        ("CH", {"de", "fr", "it"}),  # Romansh is official_regional and left out
+        ("BE", {"nl", "fr", "de"}),  # Belgium keeps German
+        # Every CLDR official status counts, regional ones included.
+        ("CH", {"de", "fr", "it", "rm", "gsw"}),
         ("FR", {"fr"}),
-        ("CA", {"en", "fr"}),
+        ("CA", {"en", "fr", "iu", "crk", "chp", "den", "dgr", "gwi"}),
+        ("ZA", {"en", "af", "zu", "xh", "nso", "st", "tn", "ts", "ss", "ve", "nr"}),
+        # The 22 languages of the Eighth Schedule, English, and Khasi (CLDR: regional). Bodo, Dogri
+        # and Manipuri come from `HAND_COUNTRY_LANGUAGES`, not CLDR.
+        (
+            "IN",
+            {
+                "hi",
+                "en",
+                "as",
+                "bn",
+                "brx",
+                "doi",
+                "gu",
+                "kha",
+                "kn",
+                "kok",
+                "ks",
+                "mai",
+                "ml",
+                "mni",
+                "mr",
+                "ne",
+                "or",
+                "pa",
+                "sa",
+                "sat",
+                "sd",
+                "ta",
+                "te",
+                "ur",
+            },
+        ),
     ],
 )
-async def test_the_official_languages_of_the_countries_hadrien_checked(
+async def test_the_official_languages_of_the_countries_checked_by_hand(
     db_session: AsyncSession, country: str, languages: set[str]
 ) -> None:
     found = {
@@ -197,7 +232,7 @@ async def test_subdivision_names_follow_the_countrys_languages_or_english(
     assert stray == []
 
 
-async def test_france_has_exactly_the_seven_types_of_adr_055(db_session: AsyncSession) -> None:
+async def test_france_offers_exactly_seven_subdivision_types(db_session: AsyncSession) -> None:
     found = {
         r[0]
         for r in await rows(
@@ -217,7 +252,7 @@ async def test_france_has_exactly_the_seven_types_of_adr_055(db_session: AsyncSe
         ("CA", {"province", "territory"}),
     ],
 )
-async def test_the_other_starting_countries_have_their_adr_055_types(
+async def test_the_other_starting_countries_have_their_subdivision_types(
     db_session: AsyncSession, country: str, types: set[str]
 ) -> None:
     found = {
@@ -311,3 +346,37 @@ async def test_the_migrated_schema_matches_the_models_alembic_check(
         return list(compare_metadata(context, Base.metadata))
 
     assert await db_connection.run_sync(compare) == []
+
+
+async def test_tamil_nadu_is_found_by_its_tamil_name(db_session: AsyncSession) -> None:
+    found = await rows(
+        db_session,
+        "SELECT subdivision_code FROM subdivision_names "
+        "WHERE language_tag = 'ta' AND name = 'தமிழ்நாடு'",
+    )
+
+    assert [row[0] for row in found] == ["IN-TN"]
+
+
+async def test_every_official_language_has_an_english_name(db_session: AsyncSession) -> None:
+    """The country page shows these names; a bare tag ("kha") is not a name a person can read."""
+    from registry.services.language_names import build_language_name  # noqa: PLC0415
+
+    tags = [
+        r[0] for r in await rows(db_session, "SELECT DISTINCT language_tag FROM country_languages")
+    ]
+
+    assert [tag for tag in tags if build_language_name(tag) == tag] == []
+    assert build_language_name("kha") == "Khasi"
+    assert build_language_name("cak") == "Kaqchikel"
+
+
+async def test_no_stored_name_carries_an_xml_entity(db_session: AsyncSession) -> None:
+    """CLDR XML is read with a regex, so `&amp;` once reached the table ("Brighton &amp; Hove")."""
+    found = await rows(
+        db_session,
+        "SELECT name FROM subdivision_names WHERE name ~ '&(#?[a-z0-9]+);' "
+        "UNION ALL SELECT name FROM country_names WHERE name ~ '&(#?[a-z0-9]+);'",
+    )
+
+    assert found == []

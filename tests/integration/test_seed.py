@@ -1,24 +1,30 @@
 """The seed path, against real Postgres."""
 
+import asyncio
 import json
 import re
 import uuid
 from pathlib import Path
+from typing import Any
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from registry.cli import seed as seed_module
 from registry.cli.seed import (
     import_catalog_document,
     import_feed_document,
     seed_catalogs,
 )
+from registry.cli.seed import main as seed_main
+from registry.core.config import Settings
 from registry.core.errors import ValidationError
 from registry.core.schema_validation import build_schema_validator
 from registry.db.models.catalog import Catalog, CatalogLanguageRow
 from registry.db.models.link import Link
+from registry.db.session import build_session_factory, create_database_engine
 from registry.domain.enums import CatalogStatus, CoverageScope, LinkRel
 from registry.repositories.catalog_repository import CatalogRepository
 from tests.conftest import SEED_CATALOG_COUNT, SEED_FILE
@@ -126,7 +132,7 @@ async def test_the_seed_input_is_rejected_by_the_published_schema(db_session: As
 async def test_re_running_after_the_file_grows_adds_only_the_new_rows(
     db_session: AsyncSession, tmp_path: Path
 ) -> None:
-    """Hadrien said he will probably extend the file."""
+    """The seed file is expected to grow over time."""
     await seed_catalogs(db_session, SEED_FILE)
     await db_session.commit()
 
@@ -196,7 +202,7 @@ async def test_a_not_recommended_import_stays_out_of_the_feed_query(
 ) -> None:
     """`data/libraries.json`'s whole contract: active, real, and not in the top-level feed.
 
-    Hadrien's words were "they can be active as long as they're not recommended". `status` and
+    A catalog may be active as long as it is not recommended. `status` and
     `recommended` are separate columns, so this asserts both halves at once.
     """
     document = {
@@ -217,9 +223,9 @@ async def test_uppercase_country_and_subdivisions_are_stored_verbatim(
 ) -> None:
     """No case folding. The codes reach the database exactly as the file wrote them.
 
-    Hadrien, 2026-09-29, on which case to standardise: "I think that officially it's all uppercase
-    for ISO 3166-2", and "it's better to enforce this at import than convert". So uppercase is the
-    only accepted form, the input schema rejects anything else, and nothing here calls `.upper()`.
+    ISO 3166-2 codes are officially uppercase, and enforcing that at import is better than
+    converting. So uppercase is the only accepted form, the input schema rejects anything else,
+    and nothing here calls `.upper()`.
     `test_lowercase_codes_are_rejected_rather_than_converted` is the other half.
     """
     document = {
@@ -284,7 +290,7 @@ async def test_uppercase_country_and_subdivisions_are_stored_verbatim(
     ],
 )
 async def test_the_core_refuses_malformed_codes_even_without_schema_validation(
-    db_session: AsyncSession, metadata: dict[str, object], expected: str
+    db_session: AsyncSession, metadata: dict[str, Any], expected: str
 ) -> None:
     """Layer two. `import_catalog_document` does not validate against the schema, so it needs its
     own check, or a caller that skips validation reaches Postgres and fails on a check constraint
@@ -682,7 +688,7 @@ async def test_the_real_libraries_file_imports(db_session: AsyncSession) -> None
         href = next(link["href"] for link in entry["links"] if link["rel"] == "catalog")
         catalog_id = uuid.uuid5(uuid.NAMESPACE_URL, href)
         # The public read is a snapshot of what is rendered; it does not carry `recommended` or
-        # `status` (R3). Those are the importer's business, so the importer's lookup shows them.
+        # `status`. Those are the importer's business, so the importer's lookup shows them.
         public = await repository.fetch_catalog_by_id(catalog_id)
         assert public is not None, entry["metadata"]["title"]
         stored = await repository.fetch_catalog_by_identity_id(catalog_id)
@@ -695,7 +701,7 @@ async def test_the_real_libraries_file_imports(db_session: AsyncSession) -> None
 
 
 async def test_an_unseeded_subdivision_is_a_readable_message(db_session: AsyncSession) -> None:
-    """`subdivisions` is not a full copy of ISO 3166-2, so a valid code can still be missing.
+    """A code the `subdivisions` table does not hold is refused with a readable message.
 
     It used to fail at flush as a raw `IntegrityError` naming
     `fk_catalog_subdivisions_subdivision_code_subdivisions`: not the code, not the catalog, not
@@ -711,14 +717,14 @@ async def test_an_unseeded_subdivision_is_a_readable_message(db_session: AsyncSe
                     "title": "Dutch Library",
                     "kind": ["public"],
                     "country": "NL",
-                    "subdivisions": ["NL-ZH", "NL-UT"],
+                    "subdivisions": ["NL-ZZ", "NL-QQ"],
                 },
                 "links": [{"href": "https://library.example/nl.opds2", "rel": "catalog"}],
             }
         ],
     }
 
-    with pytest.raises(ValidationError, match="NL-UT, NL-ZH"):
+    with pytest.raises(ValidationError, match="NL-QQ, NL-ZZ"):
         await import_feed_document(db_session, feed, source="test")
 
     assert await count(db_session, Catalog) == 0
@@ -912,3 +918,154 @@ async def test_a_rel_array_is_accepted(db_session: AsyncSession) -> None:
     await db_session.commit()
 
     assert {link.rel for link in catalog.links} == {LinkRel.CATALOG}
+
+
+async def test_a_re_seed_bumps_the_version(db_session: AsyncSession) -> None:
+    """The admin API refuses a write made against a stale `version`. A re-seed rewrites the
+    catalog, so it must move the version too, or an editor's open page overwrites it silently."""
+    await seed_catalogs(db_session, SEED_FILE)
+    await db_session.commit()
+    before = dict((await db_session.execute(select(Catalog.id, Catalog.version))).tuples().all())
+
+    await seed_catalogs(db_session, SEED_FILE)
+    await db_session.commit()
+    after = dict((await db_session.execute(select(Catalog.id, Catalog.version))).tuples().all())
+
+    assert after == {catalog_id: version + 1 for catalog_id, version in before.items()}
+
+
+async def test_a_catalog_whose_link_an_editor_changed_is_updated_not_duplicated(
+    db_session: AsyncSession,
+) -> None:
+    """The row keeps the id derived from its old link. The file, which has no identifier, still
+    names that link, so the href lookup misses; the derived id must then find the row, or the
+    insert collides on `pk_catalogs` and aborts the whole seed."""
+    href = "https://library.example/edited.opds2"
+    document = {
+        "metadata": {"title": "Edited Link", "kind": ["public"]},
+        "links": [{"href": href, "rel": "catalog"}],
+    }
+    first, _ = await import_catalog_document(db_session, document, recommended=False)
+    await db_session.commit()
+    await db_session.execute(
+        text("UPDATE links SET href = 'https://elsewhere.example/opds' WHERE catalog_id = :id"),
+        {"id": first.id},
+    )
+    await db_session.commit()
+    db_session.expire_all()
+
+    second, created = await import_catalog_document(db_session, document, recommended=False)
+    await db_session.commit()
+
+    assert created is False
+    assert second.id == first.id
+    assert await count(db_session, Catalog) == 1
+    assert (await db_session.scalars(select(Link.href))).all() == [href]
+
+
+def place_feed(**metadata: Any) -> dict[str, Any]:
+    return {
+        "metadata": {"title": "Places"},
+        "catalogs": [
+            {
+                "metadata": {"title": "Placed Library", "kind": ["public"], **metadata},
+                "links": [{"href": "https://library.example/placed.opds2", "rel": "catalog"}],
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    [
+        pytest.param({"country": "XK"}, r"Placed Library \(XK\)", id="unknown-country"),
+        pytest.param(
+            {"country": "FR", "subdivisions": ["BE-WAL"]},
+            r"BE-WAL, outside its country \(FR\)",
+            id="subdivision-of-another-country",
+        ),
+        pytest.param(
+            {"subdivisions": ["BE-WAL"]},
+            r"BE-WAL, outside its country \(none given\)",
+            id="subdivision-without-country",
+        ),
+    ],
+)
+async def test_places_the_registry_cannot_store_are_a_readable_message(
+    db_session: AsyncSession, metadata: dict[str, Any], expected: str
+) -> None:
+    """Refused before anything is written, naming the code, instead of an `IntegrityError` on a
+    foreign key or a catalog placed in two countries at once."""
+    with pytest.raises(ValidationError, match=expected):
+        await import_feed_document(db_session, place_feed(**metadata), source="test")
+
+    assert await count(db_session, Catalog) == 0
+
+
+async def test_a_subdivision_of_its_own_country_passes(db_session: AsyncSession) -> None:
+    created, _ = await import_feed_document(
+        db_session, place_feed(country="BE", subdivisions=["BE-WAL"]), source="test"
+    )
+
+    assert created == 1
+
+
+def test_the_command_commits_a_named_file_and_reports_what_it_did(
+    settings: Settings,
+    migrated_database: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`seed FILE --no-recommended` writes for real, outside any request, and says the catalogs
+    it imported stay out of the feed."""
+    title = "Seeded By The Command"
+    seed_file = tmp_path / "libraries.json"
+    seed_file.write_text(
+        json.dumps(
+            {
+                "metadata": {"title": "One library"},
+                "catalogs": [
+                    {
+                        "metadata": {"title": title, "kind": ["public"]},
+                        "links": [
+                            {
+                                "href": "https://seed-command.example/opds",
+                                "type": "application/opds+json",
+                                "rel": "catalog",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(seed_module, "Settings", lambda: settings)
+    try:
+        status = seed_main([str(seed_file), "--no-recommended"])
+        stored = asyncio.run(read_recommended(settings, title))
+    finally:
+        asyncio.run(delete_catalog(settings, title))
+
+    assert (status, stored) == (0, [False])
+    assert capsys.readouterr().out == f"seeded {seed_file}: 1 created, 0 updated, not recommended\n"
+
+
+async def read_recommended(settings: Settings, title: str) -> list[bool]:
+    engine = create_database_engine(settings)
+    try:
+        async with build_session_factory(engine)() as session:
+            found = await session.scalars(select(Catalog.recommended).where(Catalog.title == title))
+            return list(found)
+    finally:
+        await engine.dispose()
+
+
+async def delete_catalog(settings: Settings, title: str) -> None:
+    engine = create_database_engine(settings)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(delete(Catalog).where(Catalog.title == title))
+    finally:
+        await engine.dispose()

@@ -1,4 +1,4 @@
-"""Which coding the client gets, worked out from its `Accept-Encoding` alone (ADR-061)."""
+"""Which coding the client gets, worked out from its `Accept-Encoding` alone."""
 
 import pytest
 
@@ -22,6 +22,7 @@ pytestmark = pytest.mark.unit
         ("gzip;q=-1", {"gzip": 0.0}),
         (",, ,gzip,", {"gzip": 1.0}),
         ("*;q=0.1", {"*": 0.1}),
+        ("gzip;level=9;q=0.4", {"gzip": 0.4}),  # a parameter other than q is ignored
     ],
 )
 def test_the_header_is_read_leniently_but_never_guessed_at(

@@ -5,8 +5,6 @@ The concrete repository is wired in `main.py`, the composition root, and reached
 fails on.
 """
 
-from typing import Any
-
 from fastapi import APIRouter, Header, Query, Request
 
 from registry.api.responses import OPDSResponse
@@ -17,6 +15,7 @@ from registry.services.feed_service import resolve_top_level_feed
 router = APIRouter(tags=["feed"])
 
 
+@router.head("/", include_in_schema=False)
 @router.get(
     "/",
     response_model=FeedResponse,
@@ -28,11 +27,12 @@ async def read_top_level_feed(
     request: Request,
     accept_language: str | None = Header(default=None),
     restrict: str | None = Query(default=None, pattern=RESTRICT_PATTERN),
-) -> dict[str, Any]:
+) -> OPDSResponse:
     async with request.app.state.open_catalog_reader() as reader:
-        return await resolve_top_level_feed(
+        feed = await resolve_top_level_feed(
             reader,
             accept_language=accept_language,
             base_url=request.app.state.settings.base_url,
             restrictions=parse_restrictions(restrict),
         )
+    return OPDSResponse(content=feed)

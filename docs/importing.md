@@ -108,7 +108,7 @@ wrong for editing one field. Partial edits are the back office's job.
 
 `status` is always `active` and `recommended` is always `true`. There is no flag for either, so
 anything you add is in the public feed immediately. Marking a catalog recommended, or not, is
-Phase 3.
+left to the back office.
 
 ## When it refuses
 

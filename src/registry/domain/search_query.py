@@ -1,4 +1,4 @@
-"""Pure parsing of the user's search text (ADR-051, ADR-054, ADR-059).
+"""Pure parsing of the user's search text.
 
 Splitting only. Nothing here folds, lowercases or strips accents: Python's Unicode
 decomposition and PostgreSQL's `unaccent` disagree on `ß`, `Ø`, `Ł`, `æ` and `œ`, so the
@@ -45,7 +45,7 @@ def parse_search_query(text: str | None) -> ParsedQuery:
     """
     # U+0000 cannot be stored in PostgreSQL text, and asyncpg refuses it as a parameter, which
     # would be a 500. It is not a word character, so removing it changes no search; this is
-    # cleaning, not the folding ADR-059 forbids.
+    # cleaning, not folding, which happens only in the database (`public.fold`).
     raw = (text or "").replace("\x00", "")[:MAX_QUERY_CHARS]
     positives: list[str] = []
     negatives: list[str] = []

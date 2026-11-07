@@ -1,4 +1,4 @@
-"""Score a running registry's search against the plan's ideal answers.
+"""Score a running registry's search against the agreed search test cases.
 
     make search-score                              # http://localhost:8000
     make search-score ARGS="--url https://registry.example -v"

@@ -35,9 +35,15 @@ class CountryNotFoundError(NotFoundError):
     problem_type = "https://registry.thoriumreader.com/problems/country-not-found"
 
 
+class UserNotFoundError(NotFoundError):
+    """No person with this id."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/user-not-found"
+
+
 class ConflictError(RegistryError):
     """The request is well formed but cannot apply to the catalog as it is now. Each case has its
-    own `type` (admin API contract §2), so a caller can tell them apart."""
+    own `type`, so a caller can tell them apart."""
 
     status_code = 409
     title = "Conflict"
@@ -56,9 +62,50 @@ class InvalidTransitionError(ConflictError):
 
 
 class NotPublishedError(ConflictError):
-    """Recommendation changes only on a published catalog (W21)."""
+    """Recommendation changes only on a published catalog."""
 
     problem_type = "https://registry.thoriumreader.com/problems/not-published"
+
+
+class NotDeletableError(ConflictError):
+    """Only a draft can be deleted; anything a reader may have seen is archived instead."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/not-deletable"
+
+
+class SelfChangeError(ConflictError):
+    """An admin cannot change their own role or deactivate themselves."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/self-change"
+
+
+class LastAdminError(ConflictError):
+    """The change would leave no active admin."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/last-admin"
+
+
+class ArchivedReadOnlyError(ConflictError):
+    """An archived catalog cannot be edited until it is unarchived."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/archived-read-only"
+
+
+class DuplicateCatalogError(ConflictError):
+    """Another catalog already has this `catalog`/`shelf` href, or the id derived from it: one
+    identity href is one catalog (`uq_links_identity_href`)."""
+
+    problem_type = "https://registry.thoriumreader.com/problems/duplicate-catalog"
+
+
+class ChecksBusyError(RegistryError):
+    """This instance is already running its maximum of feed checks. Try again shortly."""
+
+    status_code = 429
+    title = "Too Many Requests"
+    problem_type = "https://registry.thoriumreader.com/problems/checks-busy"
+    #: Seconds, sent as `Retry-After`.
+    retry_after = 5
 
 
 class ValidationError(RegistryError):
@@ -66,8 +113,20 @@ class ValidationError(RegistryError):
     title = "Unprocessable Entity"
 
 
+class FieldValidationError(ValidationError):
+    """Invalid input, field by field, as the admin API's 422 `errors`."""
+
+    title = "Validation failed"
+    problem_type = "https://registry.thoriumreader.com/problems/validation"
+
+    def __init__(self, errors: list[dict[str, str]]) -> None:
+        plural = len(errors) != 1
+        super().__init__(f"{len(errors)} fields are invalid" if plural else "1 field is invalid")
+        self.errors = errors
+
+
 class ReadTimeoutError(RegistryError):
-    """A read outran its statement timeout (ADR-058, ADR-062). The caller can simply try again."""
+    """A read outran its statement timeout. The caller can simply try again."""
 
     status_code = 503
     title = "Service Unavailable"

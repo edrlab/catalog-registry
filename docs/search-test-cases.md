@@ -34,7 +34,7 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 | --- | --- | --- | --- | --- | --- |
 | `Paris` | Title word, and since the city was filled in also the city | BnParis | BnParis | 1.00 | The city (`Paris`, label B) adds to the title match: the score went from 0.608 (no city) to 0.638 with the city at label C, and 0.669 at label B. |
 | `ile-de-france` | Region name with hyphens | BnParis | BnParis | 1.00 |  |
-| `Île de France` | Same name typed without hyphens | BnParis first | BnParis, De Openbare, Lirtuel | 0.33 | Both Belgian libraries come back because of 'de' (Région de Bruxelles-Capitale, De Openbare). Accepted for now (Q5): there are no stop words. |
+| `Île de France` | Same name typed without hyphens | BnParis first | BnParis, De Openbare, Lirtuel | 0.33 | Both Belgian libraries come back because of 'de' (Région de Bruxelles-Capitale, De Openbare). Accepted for now: there are no stop words. |
 | `France` | Country name, weight C | BnParis | BnParis | 1.00 |  |
 | `Belgique` | Country, French | Lirtuel, De Openbare | Lirtuel, De Openbare | 1.00 |  |
 | `Belgium` | Country, English | Lirtuel, De Openbare | Lirtuel, De Openbare | 1.00 |  |
@@ -148,7 +148,7 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 
 | Search | What it checks | Expected | Today | Score | Note |
 | --- | --- | --- | --- | --- | --- |
-| `bibliothèque de Paris` | Three words, one of them 'de' | BnParis first | BnParis, De Openbare, BN Romande, Bibliothèque russe et slave, Lirtuel | 0.20 | De Openbare comes second because of 'de' in its title. The stop word problem (Q5). |
+| `bibliothèque de Paris` | Three words, one of them 'de' | BnParis first | BnParis, De Openbare, BN Romande, Bibliothèque russe et slave, Lirtuel | 0.20 | De Openbare comes second because of 'de' in its title. The stop word problem. |
 
 ## Catalogs without a country
 

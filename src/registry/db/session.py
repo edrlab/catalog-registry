@@ -36,7 +36,7 @@ READ_POOL_RECYCLE_SECONDS = 300
 
 
 def build_read_engine(settings: Settings, server_settings: Mapping[str, str]) -> AsyncEngine:
-    """A connection pool for the public reads: search, the feed, one catalog (ADR-060, ADR-062).
+    """A connection pool for the public reads: search, the feed, one catalog.
 
     Each of these is one read statement, so it needs no transaction: AUTOCOMMIT saves BEGIN and
     COMMIT, and the limits ride on the connection itself instead of being set again for every

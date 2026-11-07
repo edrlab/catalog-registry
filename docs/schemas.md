@@ -21,8 +21,8 @@ distinction is worth holding on to.
 
 ```
 schema/
-├── catalog.schema.json                          ← CONTRACT.  Hadrien owns. Never edit here.
-├── feed.schema.json                             ← CONTRACT.  Hadrien owns. Never edit here.
+├── catalog.schema.json                          ← CONTRACT.  Upstream owns. Never edit here.
+├── feed.schema.json                             ← CONTRACT.  Upstream owns. Never edit here.
 │
 ├── vendor/                                      ← THIRD-PARTY. Fetched. Never edit.
 │   ├── README.md                                    provenance: where and when
@@ -38,7 +38,7 @@ schema/
 
 | | Who owns it | Edit it? | Refresh how |
 |---|---|---|---|
-| `schema/*.json` | **Hadrien**, upstream | Only upstream, never in a fork | `git merge upstream/main` |
+| `schema/*.json` | Upstream | Only upstream, never in a fork | `git merge upstream/main` |
 | `schema/vendor/` | Readium and the OPDS spec | No | Re-fetch and review the diff |
 | `schema/generated/` | This repository, mechanically | **No**, edits are overwritten | `make seed-schema` |
 
@@ -76,9 +76,9 @@ offline validation possible.
 
 ## `schema/`, the contract
 
-`catalog.schema.json` and `feed.schema.json` are the published contract, authored by Hadrien
+`catalog.schema.json` and `feed.schema.json` are the published contract, authored upstream
 and served from `edrlab.github.io`. They are the reason this project can test its output
-mechanically instead of by eye, his stated purpose for them on 2026-08-18.
+mechanically instead of by eye, which is what they were written for.
 
 They are also **the reason several things in this codebase exist**:
 
@@ -147,9 +147,9 @@ Keep it accurate; it is the only provenance there is.
 ### Refreshing them
 
 Re-run the fetches and **read the diff**. An upstream change is information, not automatically
-a change to adopt. The plan calls for a weekly, deliberately **non-blocking**
-CI job that fetches and diffs, an upstream edit should not fail a build that has nothing to do
-with it. That job is not written yet.
+a change to adopt. The intended safeguard is a weekly, deliberately **non-blocking** CI job that
+fetches and diffs: an upstream edit should not fail a build that has nothing to do with it. That
+job is not written yet.
 
 ---
 
@@ -165,8 +165,8 @@ that is correct rather than a bug. It has no feed-level `links`, and no catalog 
 `self` link. Both are required by the published schema, because the published schema describes
 *output*.
 
-A `self` link points at the registry. At the time Hadrien authored the seed file, that registry
-did not exist. Requiring one would be asking him to invent a URL.
+A `self` link points at the registry. When the seed file was authored, that registry
+did not exist. Requiring one would be asking its author to invent a URL.
 
 So input and output are different documents that happen to look alike, and conflating them was
 the mistake. The seed validates against a **relaxed** variant:
@@ -196,7 +196,7 @@ passing, the published schema has loosened and the relaxed variant is worth revi
 ### Why it is generated rather than written
 
 The rule is explicit: derived at build time, not hand-written, **so it cannot drift** when
-Hadrien edits the originals. A hand-maintained second copy of a schema is a copy that silently
+upstream edits the originals. A hand-maintained second copy of a schema is a copy that silently
 disagrees with the first six months later.
 
 The generator deep-copies `feed.schema.json`, applies the five relaxations above, and inlines a
@@ -273,7 +273,7 @@ one of them was wrong within a single branch.
 
 That last one exists because a **trailing comma** in `catalog.schema.json` once sat unnoticed
 until someone read it by eye. It is a one-line CI job that makes that impossible to repeat, and
-it matters because Hadrien edits these files directly.
+it matters because these files are edited by hand upstream.
 
 `jsonschema` is a **runtime** dependency, not a dev one, precisely because of
 `cli/seed.py`'s `SEED_INPUT_SCHEMA`. Validating input before persisting it is production
@@ -283,7 +283,7 @@ behaviour.
 
 ## What to do when a schema changes
 
-**Hadrien edits `catalog.schema.json` or `feed.schema.json`:**
+**Upstream edits `catalog.schema.json` or `feed.schema.json`:**
 
 ```
 git fetch upstream && git merge upstream/main
@@ -336,7 +336,7 @@ fails on the diff.
 **Never edit anything under `vendor/`.** It is someone else's file; local edits are invisible
 divergence from a published spec.
 
-**Editing `schema/*.json` in this fork** puts you at odds with upstream. Hadrien owns them.
+**Editing `schema/*.json` in this fork** puts you at odds with upstream, which owns them.
 
 **`$ref` resolution is offline by design.** If you add a schema that references a new external
 URL, vendor it too, or the whole suite starts making network calls again. Quietly, and only

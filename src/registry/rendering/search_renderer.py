@@ -1,4 +1,4 @@
-"""The search results feed (ADR-054).
+"""The search results feed.
 
 Catalogs are rendered by `render_catalog`, the same projection the top-level feed uses, so a
 search result can never carry a field the feed would not.

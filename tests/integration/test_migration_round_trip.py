@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from registry.cli.seed import seed_catalogs
+from registry.cli.seed import import_feed_document, seed_catalogs
 from tests.conftest import LIBRARIES_FILE, REPO_ROOT, SEED_FILE
 from tests.search_helpers import ALL_TITLES
 
@@ -72,7 +72,9 @@ DATA_QUERIES = {
     "country_names": "SELECT * FROM country_names ORDER BY 1, 2, 3",
     "subdivision_names": "SELECT * FROM subdivision_names ORDER BY 1, 2, 3",
     "country_subdivision_types": "SELECT * FROM country_subdivision_types ORDER BY 1, 2",
-    "subdivisions": "SELECT code, country_alpha2, subdivision_type FROM subdivisions ORDER BY 1",
+    "subdivisions": (
+        "SELECT code, country_alpha2, parent_code, subdivision_type FROM subdivisions ORDER BY 1"
+    ),
 }
 
 
@@ -148,6 +150,53 @@ async def test_upgrade_downgrade_upgrade_leaves_the_schema_and_the_search_rows_i
 
         assert await snapshot(engine, SCHEMA_QUERIES) == schema_before
         assert await snapshot(engine, DATA_QUERIES) == data_before
+    finally:
+        await engine.dispose()
+
+
+async def test_a_round_trip_loses_the_parent_of_a_used_subdivision_whose_parent_is_unused(
+    scratch_url: str,
+) -> None:
+    """A known limit, asserted so it cannot change unnoticed.
+
+    The full-subdivisions downgrade keeps every subdivision a catalog uses and deletes the rest,
+    so a used department whose region nobody uses (FR-69 under FR-ARA) loses its parent. The
+    upgrade then inserts the region again but skips the department, which already exists, so its
+    parent stays empty. The data files use only top-level codes, which is why the round trip above
+    compares equal. Migrations are never edited once merged; a later migration restoring the
+    parents is the fix, and this test then changes to expect FR-ARA.
+    """
+    parent = "SELECT parent_code FROM subdivisions WHERE code = 'FR-69'"
+    alembic(scratch_url, "upgrade", "head")
+    engine = create_async_engine(scratch_url)
+    try:
+        feed = {
+            "metadata": {"title": "Nested"},
+            "catalogs": [
+                {
+                    "metadata": {
+                        "title": "Rhône Library",
+                        "kind": ["public"],
+                        "country": "FR",
+                        "subdivisions": ["FR-69"],
+                    },
+                    "links": [{"href": "https://library.example/rhone.opds2", "rel": "catalog"}],
+                }
+            ],
+        }
+        async with async_sessionmaker(engine)() as session:
+            await import_feed_document(session, feed, source="test")
+            await session.commit()
+        async with engine.connect() as connection:
+            assert await connection.scalar(text(parent)) == "FR-ARA"
+
+        alembic(scratch_url, "downgrade", V01_HEAD)
+        alembic(scratch_url, "upgrade", "head")
+
+        async with engine.connect() as connection:
+            assert await connection.scalar(text(parent)) is None
+            region = "SELECT count(*) FROM subdivisions WHERE code = 'FR-ARA'"
+            assert await connection.scalar(text(region)) == 1
     finally:
         await engine.dispose()
 

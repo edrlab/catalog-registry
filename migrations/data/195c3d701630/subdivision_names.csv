@@ -1,0 +1,2002 @@
+subdivision_code,language_tag,name
+AF-BAL,uz,Balx
+AF-BAM,uz,Bomiyon
+AF-BDG,uz,Badgʻis
+AF-BDS,uz,Badaxshon
+AF-BGL,uz,Bagʻlon
+AF-DAY,uz,Daykundi
+AF-FRA,uz,Farah
+AF-FYB,uz,Foryob (viloyat)
+AF-GHA,uz,Gʻazni viloyati
+AF-GHO,uz,Gʻoʻr (viloyati)
+AF-HEL,uz,Hilmand viloyati
+AF-HER,uz,Hirot viloyati
+AF-JOW,uz,Joʻzjon
+AF-KAB,tk,Kabul welaýaty
+AF-KAB,uz,Kobul viloyati
+AF-KAN,uz,Qandahor viloyati
+AF-KAP,uz,Kapisa viloyati
+AF-KDZ,uz,Qunduz viloyati
+AF-KHO,uz,Xust viloyati
+AF-KNR,uz,Kunar
+AF-LAG,uz,Lagʻmon viloyati
+AF-LOG,uz,Luvgar
+AF-NAN,uz,Nangarhor
+AF-NIM,uz,Nimroz
+AF-NUR,uz,Nuriston
+AF-PAN,uz,Panjsher viloyati
+AF-PAR,uz,Parvon viloyati
+AF-PIA,uz,Paktia viloyati
+AF-PKA,uz,Paktika Province
+AF-SAM,uz,Samangan
+AF-SAR,uz,Sarupul viloyati
+AF-TAK,uz,"Taxor viloyati, Afgʼoniston"
+AF-URU,uz,Uroʻzgon viloyati
+AF-WAR,uz,Vardak viloyati
+AF-ZAB,uz,Zobul viloyati
+AT-1,hr,Gradišće
+AT-1,hu,Burgenland
+AT-1,sl,Gradiščanska
+AT-2,hr,Koruška
+AT-2,hu,Karintia
+AT-2,sl,Koroška
+AT-3,hr,Donja Austrija
+AT-3,hu,Alsó-Ausztria
+AT-3,sl,Spodnja Avstrija
+AT-4,hr,Gornja Austrija
+AT-4,hu,Felső-Ausztria
+AT-4,sl,Gornja Avstrija
+AT-5,hr,Salzburg
+AT-5,hu,Salzburg
+AT-5,sl,Salzburg
+AT-6,hr,Štajerska
+AT-6,hu,Stájerország
+AT-6,sl,Štajerska
+AT-7,hr,Tirol
+AT-7,hu,Tirol
+AT-7,sl,Tirolska
+AT-8,hr,Vorarlberg
+AT-8,hu,Vorarlberg
+AT-8,sl,Predarlska
+AT-9,hr,Beč
+AT-9,hu,Bécs
+AT-9,sl,Dunaj
+CD-BC,sw,Mkoa wa Kongo Kati
+CD-BU,sw,Mkoa wa Wele Chini
+CD-EQ,sw,Mkoa wa Équateur
+CD-HK,sw,Mkoa wa Katanga Juu
+CD-HL,sw,Mkoa wa Lomami Juu
+CD-HU,sw,Mkoa wa Wele Juu
+CD-IT,sw,Mkoa wa Ituri
+CD-KC,sw,Mkoa wa Lulua
+CD-KE,sw,Mkoa wa Kasai Mashariki
+CD-KG,sw,Mkoa wa Kwango
+CD-KN,sw,Kinshasa
+CD-LO,sw,Lomami
+CD-LU,sw,Mkoa wa Lualaba
+CD-MA,sw,Mkoa wa Maniema
+CD-MN,sw,Mai-Ndombe
+CD-MO,sw,Mkoa wa Mongala
+CD-NK,sw,Mkoa wa Kivu Kaskazini
+CD-NU,sw,Mkoa wa Ubangi Kaskazini
+CD-SA,sw,Mkoa wa Sankuru
+CD-SK,sw,Mkoa wa Kivu Kusini
+CD-SU,sw,Sud-Ubangi
+CD-TA,sw,Mkoa wa Tanganyika
+CD-TO,sw,Mkoa wa Tshopo
+CD-TU,sw,Mkoa wa Tshuapa
+CN-AH,ko,안후이 성
+CN-AH,mn,Аньхуй муж
+CN-BJ,ko,베이징 시
+CN-BJ,mn,Бээжин
+CN-CQ,ko,충칭 시
+CN-CQ,mn,Чунцин
+CN-FJ,ko,푸젠 성
+CN-FJ,mn,Фужянь муж
+CN-GD,ko,광둥 성
+CN-GD,mn,Гуандун муж
+CN-GS,ko,간쑤 성
+CN-GS,mn,Ганьсү
+CN-GX,ko,광시 좡족 자치구
+CN-GX,mn,Гуанши
+CN-GZ,ko,구이저우 성
+CN-GZ,mn,Гуйжоу муж
+CN-HA,ko,허난 성
+CN-HA,mn,Хэнань
+CN-HB,ko,후베이 성
+CN-HB,mn,Хүбэй
+CN-HE,ko,허베이 성
+CN-HE,mn,Хэбэй
+CN-HI,ko,하이난 성
+CN-HI,mn,Хайнань
+CN-HK,ko,홍콩
+CN-HK,mn,Хонг Конг
+CN-HL,ko,헤이룽장 성
+CN-HL,mn,Хармөрөн
+CN-HN,ko,후난 성
+CN-HN,mn,Хүнань
+CN-JL,ko,지린 성
+CN-JL,mn,Гирин
+CN-JS,ko,장쑤 성
+CN-JS,mn,Жянсү
+CN-JX,ko,장시 성
+CN-JX,mn,Жянши муж
+CN-LN,ko,랴오닝 성
+CN-LN,mn,Ляонин
+CN-MO,ko,마카오
+CN-MO,mn,Макао
+CN-NM,ko,내몽골 자치구
+CN-NM,mn,Өвөр Монголын Өөртөө Засах Орон
+CN-NX,ko,닝샤 후이족 자치구
+CN-NX,mn,Ниншя - Хотонгийн өөртөө засах орон
+CN-QH,ko,칭하이 성
+CN-QH,mn,Хөхнуур
+CN-SC,ko,쓰촨 성
+CN-SC,mn,Сычуань муж
+CN-SD,ko,산둥 성
+CN-SD,mn,Шаньдун
+CN-SH,ko,상하이 시
+CN-SH,mn,Шанхай
+CN-SN,ko,산시 성
+CN-SN,mn,Шэньси муж
+CN-SX,ko,산시 성
+CN-SX,mn,Шаньси муж
+CN-TJ,ko,톈진 시
+CN-TJ,mn,Тяньжинь
+CN-TW,ko,타이완성
+CN-XJ,ko,신장 위구르 자치구
+CN-XJ,mn,Шиньжян - Уйгурын өөртөө засах орон
+CN-XZ,ko,티베트 자치구
+CN-XZ,mn,Төвөдийн өөртөө засах орон
+CN-YN,ko,윈난 성
+CN-YN,mn,Юньнань муж
+CN-ZJ,ko,저장 성
+CN-ZJ,mn,Жөжян
+DK-81,de,Region Nordjylland
+DK-82,de,Region Midtjylland
+DK-83,de,Region Syddanmark
+DK-84,de,Region Hovedstaden
+DK-85,de,Region Sjælland
+ES-A,ca,província d’Alacant
+ES-A,eu,Alacanteko probintzia
+ES-A,gl,Provincia de Alacant
+ES-AB,ca,Província d’Albacete
+ES-AB,eu,Albaceteko probintzia
+ES-AB,gl,Provincia de Albacete
+ES-AL,ca,Província d’Almeria
+ES-AL,eu,Almeríako probintzia
+ES-AL,gl,Provincia de Almería
+ES-AN,ca,Andalusia
+ES-AN,eu,Andaluzia
+ES-AN,gl,Andalucía
+ES-AR,ca,Aragó
+ES-AR,eu,Aragoi
+ES-AR,gl,Aragón
+ES-AS,ca,Astúries
+ES-AS,eu,Asturiesko Printzerria
+ES-AS,gl,Principado de Asturias
+ES-AV,ca,província d’Àvila
+ES-AV,eu,Ávilako probintzia
+ES-AV,gl,Provincia de Ávila
+ES-B,ca,província de Barcelona
+ES-B,eu,Bartzelonako probintzia
+ES-B,gl,Provincia de Barcelona
+ES-BA,ca,Província de Badajoz
+ES-BA,eu,Badajozko probintzia
+ES-BA,gl,Provincia de Badaxoz
+ES-BI,ca,Biscaia
+ES-BI,eu,Bizkaia
+ES-BI,gl,Biscaia - Bizkaia
+ES-BU,ca,província de Burgos
+ES-BU,eu,Burgosko probintzia
+ES-BU,gl,Provincia de Burgos
+ES-C,ca,província de la Corunya
+ES-C,eu,Coruñako probintzia
+ES-C,gl,Provincia da Coruña
+ES-CA,ca,província de Cadis
+ES-CA,eu,Cádizko probintzia
+ES-CA,gl,Provincia de Cádiz
+ES-CB,ca,Cantàbria
+ES-CB,eu,Kantabria
+ES-CB,gl,Cantabria
+ES-CC,ca,Província de Càceres
+ES-CC,eu,Cáceresko probintzia
+ES-CC,gl,Provincia de Cáceres
+ES-CE,ca,Ceuta
+ES-CE,eu,Ceuta
+ES-CE,gl,Ceuta
+ES-CL,ca,Castella i Lleó
+ES-CL,eu,Gaztela eta Leon
+ES-CL,gl,Castela e León
+ES-CM,ca,Castella - la Manxa
+ES-CM,eu,Gaztela-Mantxa
+ES-CM,gl,Castela-A Mancha
+ES-CN,ca,illes Canàries
+ES-CN,eu,Kanariak
+ES-CN,gl,Illas Canarias
+ES-CO,ca,província de Còrdova
+ES-CO,eu,Kordobako probintzia
+ES-CO,gl,Provincia de Córdoba
+ES-CR,ca,Província de Ciudad Real
+ES-CR,eu,Ciudad Realgo probintzia
+ES-CR,gl,Provincia de Cidade Real - Ciudad Real
+ES-CS,ca,província de Castelló
+ES-CS,eu,Castellóko probintzia
+ES-CS,gl,Provincia de Castelló
+ES-CT,ca,Catalunya
+ES-CT,eu,Katalunia
+ES-CT,gl,Cataluña
+ES-CU,ca,Província de Conca
+ES-CU,eu,Cuencako probintzia
+ES-CU,gl,Provincia de Cuenca
+ES-EX,ca,Extremadura
+ES-EX,eu,Extremadura
+ES-EX,gl,Estremadura - Extremadura
+ES-GA,ca,Galícia
+ES-GA,eu,Galizia
+ES-GA,gl,Galicia
+ES-GC,ca,província de Las Palmas
+ES-GC,eu,Las Palmasko probintzia
+ES-GC,gl,Provincia das Palmas
+ES-GI,ca,província de Girona
+ES-GI,eu,Gironako probintzia
+ES-GI,gl,Provincia de Xirona - Girona
+ES-GR,ca,província de Granada
+ES-GR,eu,Granadako probintzia
+ES-GR,gl,Provincia de Granada
+ES-GU,ca,Província de Guadalajara
+ES-GU,eu,Guadalajarako probintzia
+ES-GU,gl,Provincia de Guadalaxara - Guadalajara
+ES-H,ca,província de Huelva
+ES-H,eu,Huelvako probintzia
+ES-H,gl,Provincia de Huelva
+ES-HU,ca,província d’Osca
+ES-HU,eu,Huescako probintzia
+ES-HU,gl,Provincia de Huesca - Uesca
+ES-IB,ca,Illes Balears
+ES-IB,eu,Balear Uharteak
+ES-IB,gl,Illas Baleares - Illes Balears
+ES-J,ca,província de Jaén
+ES-J,eu,Jaéngo probintzia
+ES-J,gl,Provincia de Xaén
+ES-L,ca,província de Lleida
+ES-L,eu,Lleidako probintzia
+ES-L,gl,Provincia de Lleida
+ES-LE,ca,província de Lleó
+ES-LE,eu,Leóngo probintzia
+ES-LE,gl,Provincia de León
+ES-LO,ca,La Rioja
+ES-LO,eu,Errioxako Autonomia Erkidegoa
+ES-LO,gl,A Rioxa
+ES-LU,ca,província de Lugo
+ES-LU,eu,Lugoko probintzia
+ES-LU,gl,Provincia de Lugo
+ES-M,ca,província de Madrid
+ES-M,eu,Madrilgo probintzia
+ES-M,gl,provincia de Madrid
+ES-MA,ca,província de Màlaga
+ES-MA,eu,Málagako probintzia
+ES-MA,gl,Provincia de Málaga
+ES-MC,ca,Regió de Múrcia
+ES-MC,eu,Murtziako Eskualdea
+ES-MC,gl,Rexión de Murcia
+ES-MD,ca,Comunitat de Madrid
+ES-MD,eu,Madrilgo Erkidegoa
+ES-MD,gl,Comunidade de Madrid
+ES-ML,ca,Melilla
+ES-ML,eu,Melilla
+ES-ML,gl,Melilla
+ES-MU,ca,província de Múrcia
+ES-MU,gl,provincia de Murcia
+ES-NA,ca,Navarra
+ES-NA,eu,Nafarroako Foru Erkidegoa
+ES-NA,gl,Navarra
+ES-NC,ca,Navarra
+ES-NC,eu,Nafarroako Foru Erkidegoa
+ES-NC,gl,Navarra
+ES-O,ca,província d’Astúries
+ES-O,eu,Asturiasko probintzia
+ES-O,gl,provincia de Asturias
+ES-OR,ca,província d’Ourense
+ES-OR,eu,Ourenseko probintzia
+ES-OR,gl,Provincia de Ourense
+ES-P,ca,província de Palència
+ES-P,eu,Palentziako probintzia
+ES-P,gl,Provincia de Palencia
+ES-PM,ca,Illes Balears
+ES-PM,eu,Balear Uharteak
+ES-PM,gl,Illas Baleares
+ES-PO,ca,província de Pontevedra
+ES-PO,eu,Pontevedrako probintzia
+ES-PO,gl,Provincia de Pontevedra
+ES-PV,ca,Comunitat autònoma del País Basc
+ES-PV,eu,Euskal Autonomia Erkidegoa
+ES-PV,gl,País Vasco
+ES-RI,ca,La Rioja
+ES-RI,eu,Errioxako Autonomia Erkidegoa
+ES-RI,gl,A Rioxa
+ES-S,ca,Cantàbria
+ES-S,eu,Kantabria
+ES-S,gl,Cantabria
+ES-SA,ca,província de Salamanca
+ES-SA,eu,Salamancako probintzia
+ES-SA,gl,Provincia de Salamanca
+ES-SE,ca,província de Sevilla
+ES-SE,eu,Sevillako probintzia
+ES-SE,gl,Provincia de Sevilla
+ES-SG,ca,província de Segòvia
+ES-SG,eu,Segoviako probintzia
+ES-SG,gl,Provincia de Segovia
+ES-SO,ca,província de Sòria
+ES-SO,eu,Soriako probintzia
+ES-SO,gl,Provincia de Soria
+ES-SS,ca,Guipúscoa
+ES-SS,eu,Gipuzkoa
+ES-SS,gl,Provincia de Guipúscoa - Gipuzkoa
+ES-T,ca,província de Tarragona
+ES-T,eu,Tarragonako probintzia
+ES-T,gl,Provincia de Tarragona
+ES-TE,ca,província de Terol
+ES-TE,eu,Teruelgo probintzia
+ES-TE,gl,Provincia de Teruel
+ES-TF,ca,província de Santa Cruz de Tenerife
+ES-TF,eu,Santa Cruz Tenerifekoko probintzia
+ES-TF,gl,Provincia de Santa Cruz de Tenerife
+ES-TO,ca,Província de Toledo
+ES-TO,eu,Toledoko probintzia
+ES-TO,gl,Provincia de Toledo
+ES-V,ca,Província de València
+ES-V,eu,Valentziako probintzia
+ES-V,gl,Provincia de Valencia
+ES-VA,ca,província de Valladolid
+ES-VA,eu,Valladolideko probintzia
+ES-VA,gl,Provincia de Valladolid
+ES-VC,ca,País Valencià
+ES-VC,eu,Valentziako Erkidegoa
+ES-VC,gl,Comunidade Valenciana
+ES-VI,ca,Àlaba
+ES-VI,eu,Araba
+ES-VI,gl,Provincia de Álava - Araba
+ES-Z,ca,província de Saragossa
+ES-Z,eu,Zaragozako probintzia
+ES-Z,gl,Provincia de Zaragoza
+ES-ZA,ca,província de Zamora
+ES-ZA,eu,Zamorako probintzia
+ES-ZA,gl,Provincia de Zamora
+GB-ABC,ga,"Ard Mhacha, Droichead na Banna, agus Craigavon"
+GB-ABD,cy,Swydd Aberdeen
+GB-ABD,ga,Contae Obar Deathain
+GB-ABE,cy,Aberdeen
+GB-ABE,ga,Obar Dheathain
+GB-AGB,cy,Argyll a Bute
+GB-AGB,ga,Earra-Ghaidheal agus Bód
+GB-AGY,cy,Ynys Môn
+GB-AGY,ga,Ynys Môn
+GB-AND,ga,An Aird agus Tuaisceart an Dúin
+GB-ANS,cy,Angus
+GB-ANS,ga,Aonghas
+GB-BAS,cy,Caerfaddon a Gogledd-ddwyrain Gwlad yr Haf
+GB-BBD,cy,Bwrdeistref Blackburn gyda Darwen
+GB-BCP,cy,"Bournemouth, Christchurch a Poole"
+GB-BDF,cy,Bwrdeistref Bedford
+GB-BDF,ga,Bedford
+GB-BDG,cy,Barking a Dagenham
+GB-BDG,ga,Buirg Londan Barking agus Dagenham
+GB-BEN,cy,Brent
+GB-BEN,ga,Buirg Londan Brent
+GB-BEX,cy,Bexley
+GB-BEX,ga,London Borough of Bexley
+GB-BFS,cy,Ardal Belffast
+GB-BFS,ga,ceantar Bhéal Feirste
+GB-BGE,cy,Bwrdeistref Sirol Pen-y-bont ar Ogwr
+GB-BGE,ga,Pen-y-bont ar Ogwr
+GB-BGW,cy,Blaenau Gwent
+GB-BGW,ga,Blaenau Gwent
+GB-BIR,cy,Dinas Birmingham
+GB-BIR,ga,Birmingham
+GB-BKM,cy,Swydd Buckingham
+GB-BKM,ga,Buckinghamshire
+GB-BNE,cy,Barnet
+GB-BNE,ga,Buirg Londan Barnet
+GB-BNH,cy,Brighton a Hove
+GB-BNH,ga,Brighton & Hove
+GB-BNS,cy,Bwrdeistref Fetropolitan Barnsley
+GB-BNS,ga,Barnsley
+GB-BOL,cy,Bwrdeistref Fetropolitan Bolton
+GB-BOL,ga,Bolton
+GB-BPL,cy,Blackpool
+GB-BPL,ga,Blackpool
+GB-BRC,cy,Bwrdeistref Bracknell Forest
+GB-BRC,ga,Bracknell Forest
+GB-BRD,cy,Dinas Bradford
+GB-BRD,ga,Bradford
+GB-BRY,cy,Bromley
+GB-BRY,ga,Bromley
+GB-BST,cy,Bryste
+GB-BST,ga,Briostó
+GB-BUR,cy,Bwrdeisdref Fetropolitan Bury
+GB-BUR,ga,Bury
+GB-CAM,cy,Swydd Gaergrawnt
+GB-CAM,ga,Cambridgeshire
+GB-CAY,cy,Bwrdeistref Sirol Caerffili
+GB-CAY,ga,Caerffili
+GB-CBF,cy,Canol Swydd Bedford
+GB-CBF,ga,Bedfordshire Láir
+GB-CCG,cy,Causeway Coast a Glens
+GB-CGN,cy,Ceredigion
+GB-CGN,ga,Ceredigion
+GB-CHE,cy,Dwyrain Swydd Gaer
+GB-CHE,ga,Cheshire Thoir
+GB-CHW,cy,Gorllewin Swydd Gaer a Chaer
+GB-CLD,cy,Calderdale
+GB-CLD,ga,Calderdale
+GB-CLK,cy,Swydd Clackmannan
+GB-CLK,ga,Clach Mhanainn
+GB-CMA,cy,Cumbria
+GB-CMA,ga,Cumbria
+GB-CMD,cy,Camden
+GB-CMD,ga,Buirg Londan Camden
+GB-CMN,cy,Sir Gaerfyrddin
+GB-CMN,ga,Sir Gaerfyrddin
+GB-CON,cy,Cernyw
+GB-CON,ga,Corn na Breataine
+GB-COV,cy,Dinas Coventry
+GB-COV,ga,Coventry
+GB-CRF,cy,Dinas a Sir Caerdydd
+GB-CRF,ga,Caerdydd
+GB-CRY,cy,Croydon
+GB-CRY,ga,Buirg Londan Croydon
+GB-CWY,cy,Bwrdeistref Sirol Conwy
+GB-CWY,ga,Conwy
+GB-DAL,cy,Bwrdeistref Darlington
+GB-DBY,cy,Swydd Derby
+GB-DBY,ga,Derbyshire
+GB-DEN,cy,Sir Ddinbych
+GB-DEN,ga,Sir Ddinbych
+GB-DER,cy,Derby
+GB-DER,ga,Derby
+GB-DEV,cy,Dyfnaint
+GB-DEV,ga,Devon
+GB-DGY,cy,Dumfries a Galloway
+GB-DGY,ga,Comhairle Dhún Phrís is Gall-Ghaidhealaibh
+GB-DNC,cy,Bwrdeistref Fetropolitan Doncaster
+GB-DNC,ga,Doncaster
+GB-DND,cy,Dundee
+GB-DND,ga,Dún Déagh
+GB-DOR,cy,Dorset
+GB-DRS,ga,Cathair Dhoire agus an Srath Bán
+GB-DUD,cy,Bwrdeistref Fetropolitan Dudley
+GB-DUD,ga,Dudley
+GB-DUR,cy,Swydd Durham
+GB-DUR,ga,Contae Durham
+GB-EAL,cy,Ealing
+GB-EAL,ga,Buirg Londan Ealing
+GB-EAY,cy,Dwyrain Swydd Ayr
+GB-EAY,ga,Comhairle Shiorrachd Áir an Ear
+GB-EDH,cy,Caeredin
+GB-EDH,ga,Dún Éideann
+GB-EDU,cy,Dwyrain Swydd Dunbarton
+GB-EDU,ga,Siorrachd Dhún Bhreatainn an Ear
+GB-ELN,cy,Dwyrain Lothian
+GB-ELN,ga,Lodainn an Ear
+GB-ELS,cy,Ynysoedd Allanol Heledd
+GB-ELS,ga,Na hOileáin Siar
+GB-ENF,cy,Enfield
+GB-ENF,ga,London Borough of Enfield
+GB-ENG,cy,Lloegr
+GB-ENG,ga,Sasana
+GB-ENG,gd,Sasainn
+GB-ERW,cy,Dwyrain Swydd Renfrew
+GB-ERW,ga,Comhairle Shiorrachd Rinn Friú an Ear
+GB-ERY,cy,Riding Dwyreiniol Efrog
+GB-ERY,ga,East Riding of Yorkshire
+GB-ESS,cy,Essex
+GB-ESS,ga,Essex
+GB-ESX,cy,Dwyrain Sussex
+GB-ESX,ga,Sussex Thoir
+GB-FAL,cy,Falkirk
+GB-FAL,ga,Comhairle na h-Eaglaise Brice
+GB-FIF,cy,Fife
+GB-FIF,ga,Foibhe
+GB-FLN,cy,Sir y Fflint
+GB-FLN,ga,Sir y Fflint
+GB-FMO,ga,Fhear Manach agus na hÓmaí
+GB-GAT,cy,Bwrdeistref Fetropolitan Gateshead
+GB-GAT,ga,Gateshead
+GB-GLG,cy,Glasgow
+GB-GLG,ga,Glaschú
+GB-GLS,cy,Sir Gaerloyw
+GB-GLS,ga,Gloucestershire
+GB-GRE,cy,Greenwich
+GB-GRE,ga,Buirg Ríoga Greenwich
+GB-GWN,cy,Gwynedd
+GB-GWN,ga,Gwynedd
+GB-HAL,cy,Bwrdeistref Halton
+GB-HAL,ga,Halton
+GB-HAM,cy,Hampshire
+GB-HAM,ga,Hampshire
+GB-HAV,cy,Havering
+GB-HAV,ga,Buirg Londan Havering
+GB-HCK,cy,Hackney
+GB-HCK,ga,London Borough of Hackney
+GB-HEF,cy,Swydd Henffordd
+GB-HEF,ga,Herefordshire
+GB-HIL,cy,Hillingdon
+GB-HIL,ga,Buirg Londan Hillingdon
+GB-HLD,cy,Cyngor yr Ucheldir
+GB-HLD,ga,Comhairle na Gáidhealtachd
+GB-HMF,cy,Hammersmith a Fulham
+GB-HMF,ga,Buirg Londan Hammersmith agus Fulham
+GB-HNS,cy,Hounslow
+GB-HNS,ga,Buirg Londan Hounslow
+GB-HPL,cy,Bwrdeistref Hartlepool
+GB-HRT,cy,Swydd Hertford
+GB-HRT,ga,Hertfordshire
+GB-HRW,cy,Harrow
+GB-HRW,ga,Buirg Londan Harrow
+GB-HRY,cy,Haringey
+GB-HRY,ga,Buirg Londan Haringey
+GB-IOS,cy,Ynysoedd Syllan
+GB-IOS,ga,Na Scillí
+GB-IOW,cy,Ynys Wyth
+GB-IOW,ga,Inis Iocht
+GB-ISL,cy,Islington
+GB-ISL,ga,Buirg Londan Islington
+GB-IVC,cy,Inverclyde
+GB-IVC,ga,Comhairle Inbhir Chluaidh
+GB-KEC,cy,Kensington a Chelsea
+GB-KEC,ga,Buirg Ríoga Kensington agus Chelsea
+GB-KEN,cy,Caint
+GB-KEN,ga,Kent
+GB-KHL,cy,Kingston upon Hull
+GB-KHL,ga,Kingston upon Hull
+GB-KIR,cy,Kirklees
+GB-KIR,ga,Kirklees
+GB-KTT,cy,Kingston upon Thames
+GB-KTT,ga,Ríoga Buirg an Kingston ar Tamais
+GB-KWL,cy,Bwrdeistref Fetropolitan Knowsley
+GB-KWL,ga,Knowsley
+GB-LAN,cy,Swydd Gaerhirfryn
+GB-LAN,ga,Lancashire
+GB-LBC,ga,Lios na gCearrbhach agus An Caisleán Riabhach
+GB-LBH,cy,Lambeth
+GB-LBH,ga,Buirg Londan Lambeth
+GB-LCE,cy,Dinas Caerlŷr
+GB-LCE,ga,Cathair Leicester
+GB-LDS,cy,Dinas Leeds
+GB-LDS,ga,Leeds
+GB-LEC,cy,Swydd Gaerlŷr
+GB-LEC,ga,Leicestershire
+GB-LEW,cy,Lewisham
+GB-LEW,ga,Buirg Londan Lewisham
+GB-LIN,cy,Swydd Lincoln
+GB-LIN,ga,Lincolnshire
+GB-LIV,cy,Dinas Lerpwl
+GB-LIV,ga,Learpholl
+GB-LND,cy,Dinas Llundain
+GB-LND,ga,Cathair Londan
+GB-LUT,cy,Luton
+GB-LUT,ga,Luton
+GB-MAN,cy,Dinas Manceinion
+GB-MAN,ga,Manchain
+GB-MDB,cy,Middlesbrough
+GB-MDB,ga,Middlesbrough
+GB-MDW,cy,Medway
+GB-MDW,ga,Medway
+GB-MEA,ga,Aontroim Láir agus Thoir
+GB-MIK,cy,Bwrdeistref Milton Keynes
+GB-MIK,ga,Cathair Milton Keynes
+GB-MLN,cy,Midlothian
+GB-MLN,ga,Labhaidh Láir
+GB-MON,cy,Sir Fynwy
+GB-MON,ga,Sir Fynwy
+GB-MRT,cy,Merton
+GB-MRT,ga,Buirg Londan Merton
+GB-MRY,cy,Moray
+GB-MRY,ga,Comhairle Mhoireibh
+GB-MTY,cy,Cyngor Bwrdeisdref Merthyr Tudful
+GB-MTY,ga,Merthyr Tudful
+GB-MUL,ga,Lár Uladh
+GB-NAY,cy,Gogledd Swydd Ayr
+GB-NAY,ga,Comhairle Shiorrachd Áir a Tuath
+GB-NBL,cy,Northumberland
+GB-NBL,ga,Northumberland
+GB-NEL,cy,Bwrdeistref Gogledd-ddwyrain Swydd Lincoln
+GB-NET,cy,Dinas Newcastle upon Tyne
+GB-NET,ga,Newcastle upon Tyne
+GB-NFK,cy,Norfolk
+GB-NFK,ga,Norfolk
+GB-NGM,cy,Nottingham
+GB-NGM,ga,Nottingham
+GB-NIR,cy,Gogledd Iwerddon
+GB-NIR,ga,Tuaisceart Éireann
+GB-NLK,cy,Gogledd Swydd Lanark
+GB-NLK,ga,Comhairle Shiorrachd Lannraig a Tuath
+GB-NLN,cy,Bwrdeistref Gogledd Swydd Lincoln
+GB-NLN,ga,Lincolnshire Thuaidh
+GB-NMD,ga,"an tIúr, Múrn, agus an Dún"
+GB-NSM,cy,Gogledd Gwlad yr Haf
+GB-NTL,cy,Castell-nedd Port Talbot
+GB-NTL,ga,Castell-nedd Port Talbot
+GB-NTT,cy,Swydd Nottingham
+GB-NTT,ga,Nottinghamshire
+GB-NTY,cy,Gogledd Tyneside
+GB-NTY,ga,Tyneside Thuaidh
+GB-NWM,cy,Newham
+GB-NWM,ga,Buirg Londan Newham
+GB-NWP,cy,Casnewydd
+GB-NWP,ga,Casnewydd
+GB-NYK,cy,Swydd Gogledd Efrog
+GB-NYK,ga,Yorkshire Thuaidh
+GB-OLD,cy,Bwrdeistref Fetropolitan Oldham
+GB-OLD,ga,Oldham
+GB-ORK,cy,Ynysoedd Erch
+GB-ORK,ga,Inse Orc
+GB-OXF,cy,Rhydychen
+GB-OXF,ga,Oxford
+GB-PEM,cy,Sir Benfro
+GB-PEM,ga,Sir Benfro
+GB-PKN,cy,Perth a Kinross
+GB-PKN,ga,Comhairle Pheairt is Cheann Rois
+GB-PLY,cy,Dinas Plymouth
+GB-PLY,ga,Cathair Plymouth
+GB-POR,cy,Portsmouth
+GB-POR,ga,Portsmouth
+GB-POW,cy,Powys
+GB-POW,ga,Powys
+GB-PTE,cy,Dinas Peterborough
+GB-PTE,ga,Cathair Peterborough
+GB-RCC,cy,Bwrdeistref Redcar a Cleveland
+GB-RCC,ga,Redcar agus Cleveland
+GB-RCH,cy,Bwrdeistref Fetropolitan Rochdale
+GB-RCH,ga,Rochdale
+GB-RCT,cy,Rhondda Cynon Taf
+GB-RCT,ga,Rhondda Cynon Taf
+GB-RDB,cy,Redbridge
+GB-RDB,ga,London Borough of Redbridge
+GB-RDG,cy,Reading
+GB-RDG,ga,Reading
+GB-RFW,cy,Swydd Renfrew
+GB-RFW,ga,Comhairle Shiorrachd Rinn Friú
+GB-RIC,cy,Richmond upon Thames
+GB-RIC,ga,Buirg Londan Richmond ar Tamais
+GB-ROT,cy,Bwrdeistref Fetropolitan Rotherham
+GB-ROT,ga,Rotherham
+GB-RUT,cy,Rutland
+GB-RUT,ga,Rutland
+GB-SAW,cy,Bwrdeistref Fetropolitan Sandwell
+GB-SAW,ga,Sandwell
+GB-SAY,cy,De Swydd Ayr
+GB-SAY,ga,Comhairle Shiorrachd Áir a Deas
+GB-SCB,cy,Gororau’r Alban
+GB-SCB,ga,Comhairle nan Críochan
+GB-SCT,cy,Yr Alban
+GB-SCT,ga,Albain
+GB-SCT,gd,Alba
+GB-SFK,cy,Suffolk
+GB-SFK,ga,Suffolk
+GB-SFT,cy,Bwrdeistref Fetropolitan Sefton
+GB-SFT,ga,Sefton
+GB-SGC,cy,De Swydd Gaerloyw
+GB-SGC,ga,Gloucestershire Theas
+GB-SHF,cy,Dinas Sheffield
+GB-SHF,ga,Sheffield
+GB-SHN,cy,Bwrdeistref Fetropolitan St Helens
+GB-SHN,ga,St Helens
+GB-SHR,cy,Swydd Amwythig
+GB-SHR,ga,Shropshire
+GB-SKP,cy,Bwrdeistref Fetropolitan Stockport
+GB-SKP,ga,Stockport
+GB-SLF,cy,Dinas Salford
+GB-SLF,ga,Salford
+GB-SLG,cy,Bwrdeistref Slough
+GB-SLK,cy,De Swydd Lanark
+GB-SLK,ga,Comhairle Shiorrachd Lannraig a Deas
+GB-SND,cy,Dinas Sunderland
+GB-SND,ga,Sunderland
+GB-SOL,cy,Bwrdeistref Fetropolitan Solihull
+GB-SOL,ga,Solihull
+GB-SOM,cy,Gwlad yr Haf
+GB-SOM,ga,Somerset
+GB-SOS,cy,Southend-on-Sea
+GB-SOS,ga,Southend-on-Sea
+GB-SRY,cy,Surrey
+GB-SRY,ga,Surrey
+GB-STE,cy,Dinas Stoke-on-Trent
+GB-STE,ga,Stoke-on-Trent
+GB-STG,cy,Stirling
+GB-STG,ga,Comhairle Shruighlea
+GB-STH,cy,Southampton
+GB-STH,ga,Southampton
+GB-STN,cy,Sutton
+GB-STN,ga,Buirg Londan Sutton
+GB-STS,cy,Swydd Stafford
+GB-STS,ga,Staffordshire
+GB-STT,cy,Bwrdeistref Stockton-on-Tees
+GB-STY,cy,Cyngor De Tyneside
+GB-STY,ga,Tyneside Theas
+GB-SWA,cy,Dinas a Sir Abertawe
+GB-SWA,ga,Abertawe
+GB-SWD,cy,Bwrdeistref Swindon
+GB-SWK,cy,Southwark
+GB-SWK,ga,Buirg Londan Southwark
+GB-TAM,cy,Tameside
+GB-TAM,ga,Tameside
+GB-TFW,cy,Telford a Wrekin
+GB-TFW,ga,Telford agus Wrekin
+GB-THR,cy,Bwrdeistref Thurrock
+GB-THR,ga,Thurrock
+GB-TOB,cy,Bwrdeistref Torbay
+GB-TOB,ga,Torbay
+GB-TOF,cy,Torfaen
+GB-TOF,ga,Tor-faen
+GB-TRF,cy,Bwrdeistref Fetropolitan Trafford
+GB-TRF,ga,Trafford
+GB-TWH,cy,Tower Hamlets
+GB-TWH,ga,Buirg Londan Tower Hamlets
+GB-VGL,cy,Bro Morgannwg
+GB-VGL,ga,Bro Morgannwg
+GB-WAR,cy,Swydd Warwick
+GB-WAR,ga,Warwickshire
+GB-WBK,cy,Gorllewin Berkshire
+GB-WBK,ga,Berkshire Thiar
+GB-WDU,cy,Gorllewin Swydd Dunbarton
+GB-WDU,ga,Comhairle Dhún Breatainn an Iar
+GB-WFT,cy,Waltham Forest
+GB-WFT,ga,Buirg Londan Waltham Forest
+GB-WGN,cy,Bwrdeisdref Fetropolitan Wigan
+GB-WGN,ga,Wigan
+GB-WIL,cy,Wiltshire (awdurdod unedol)
+GB-WIL,ga,Wiltshire
+GB-WKF,cy,Dinas Wakefield
+GB-WKF,ga,Wakefield
+GB-WLL,cy,Bwrdeistref Fetropolitan Walsall
+GB-WLL,ga,Walsall
+GB-WLN,cy,Gorllewin Lothian
+GB-WLN,ga,Labhaidh Thoir
+GB-WLS,cy,Cymru
+GB-WLS,ga,an Bhreatain Bheag
+GB-WLS,gd,A’ Chuimrigh
+GB-WLV,cy,Dinas Wolverhampton
+GB-WLV,ga,Wolverhampton
+GB-WND,cy,Wandsworth
+GB-WND,ga,London Borough of Wandsworth
+GB-WNM,cy,Bwrdeistref Frenhinol Windsor a Maidenhead
+GB-WNM,ga,Windsor agus Maidenhead
+GB-WOK,cy,Bwrdeistref Wokingham
+GB-WOR,cy,Swydd Gaerwrangon
+GB-WOR,ga,Worcestershire
+GB-WRL,cy,Bwrdeistref Fetropolitan Cilgwri
+GB-WRL,ga,Wirral
+GB-WRT,cy,Bwrdeistref Warrington
+GB-WRX,cy,Bwrdeistref Sirol Wrecsam
+GB-WRX,ga,Contaebhuirg Wrecsam
+GB-WSM,cy,Dinas Westminster
+GB-WSM,ga,Cathair Westminster
+GB-WSX,cy,Gorllewin Sussex
+GB-WSX,ga,Sussex Thiar
+GB-YOR,cy,Dinas Efrog
+GB-YOR,ga,Cathair Eabhrac
+GB-ZET,cy,Shetland
+GB-ZET,ga,Inse Shealtainn
+HR-01,it,regione di Zagabria
+HR-02,it,regione di Krapina e dello Zagorje
+HR-03,it,regione di Sisak e della Moslavina
+HR-04,it,regione di Karlovac
+HR-05,it,regione di Varaždin
+HR-06,it,regione di Koprivnica e Križevci
+HR-07,it,regione di Bjelovar e della Bilogora
+HR-08,it,regione litoraneo-montana
+HR-09,it,regione della Licca e di Segna
+HR-10,it,regione di Virovitica e della Podravina
+HR-11,it,regione di Požega e della Slavonia
+HR-12,it,regione di Brod e della Posavina
+HR-13,it,regione zaratina
+HR-14,it,regione di Osijek e della Baranja
+HR-15,it,regione di Sebenico e Tenin
+HR-16,it,regione di Vukovar e della Sirmia
+HR-17,it,regione spalatino-dalmata
+HR-18,it,regione istriana
+HR-19,it,regione raguseo-narentana
+HR-20,it,regione del Međimurje
+HR-21,it,Zagabria
+IN-AN,as,আন্দামান আৰু নিকোবৰ দ্বীপপুঞ্জ
+IN-AN,bn,আন্দামান ও নিকোবর দ্বীপপুঞ্জ
+IN-AN,gu,અંદામાન અને નિકોબાર દ્વીપસમૂહ
+IN-AN,kn,ಅಂಡಮಾನ್ ಮತ್ತು ನಿಕೊಬಾರ್ ದ್ವೀಪಗಳು
+IN-AN,ml,ആന്തമാൻ നിക്കോബാർ ദ്വീപുകൾ
+IN-AN,mr,अंदमान आणि निकोबार
+IN-AN,ne,अण्डमान र निकोबार द्वीप समूह
+IN-AN,or,ଆଣ୍ଡମାନ ଓ ନିକୋବର ଦ୍ଵୀପପୁଞ୍ଜ
+IN-AN,pa,ਅੰਡੇਮਾਨ ਅਤੇ ਨਿਕੋਬਾਰ ਦੀਪ ਸਮੂਹ
+IN-AN,ta,அந்தமான் நிக்கோபார் தீவுகள்
+IN-AN,te,అండమాన్ నికోబార్ దీవులు
+IN-AN,ur,جزائر انڈمان و نکوبار
+IN-AP,as,অন্ধ্ৰপ্ৰদেশ
+IN-AP,bn,অন্ধ্রপ্রদেশ
+IN-AP,gu,આંધ્ર પ્રદેશ
+IN-AP,kn,ಆಂಧ್ರ ಪ್ರದೇಶ
+IN-AP,ml,ആന്ധ്രാപ്രദേശ്‌
+IN-AP,mr,आंध्र प्रदेश
+IN-AP,ne,आन्ध्र प्रदेश
+IN-AP,or,ଆନ୍ଧ୍ର ପ୍ରଦେଶ
+IN-AP,pa,ਆਂਧਰਾ ਪ੍ਰਦੇਸ਼
+IN-AP,sd,آنڌرا پرديش
+IN-AP,ta,ஆந்திரப் பிரதேசம்
+IN-AP,te,ఆంధ్ర ప్రదేశ్
+IN-AP,ur,آندھرا پردیش
+IN-AR,as,অৰুণাচল প্ৰদেশ
+IN-AR,bn,অরুণাচল প্রদেশ
+IN-AR,gu,અરુણાચલ પ્રદેશ
+IN-AR,kn,ಅರುಣಾಚಲ ಪ್ರದೇಶ
+IN-AR,ml,അരുണാചൽ പ്രദേശ്
+IN-AR,mr,अरुणाचल प्रदेश
+IN-AR,ne,अरुणाचल प्रदेश
+IN-AR,or,ଅରୁଣାଚଳ ପ୍ରଦେଶ
+IN-AR,pa,ਅਰੁਨਾਚਲ ਪ੍ਰਦੇਸ਼
+IN-AR,sd,اروناچل پرديش
+IN-AR,ta,அருணாசலப் பிரதேசம்
+IN-AR,te,అరుణాచల్ ప్రదేశ్
+IN-AR,ur,اروناچل پردیش
+IN-AS,as,অসম
+IN-AS,bn,আসাম
+IN-AS,gu,આસામ
+IN-AS,kn,ಅಸ್ಸಾಂ
+IN-AS,ml,ആസാം
+IN-AS,mr,आसाम
+IN-AS,ne,आसाम
+IN-AS,or,ଆସାମ
+IN-AS,pa,ਅਸਾਮ
+IN-AS,sd,آسام
+IN-AS,ta,அசாம்
+IN-AS,te,అసోం
+IN-AS,ur,آسام
+IN-BR,as,বিহাৰ
+IN-BR,bn,বিহার
+IN-BR,gu,બિહાર
+IN-BR,kn,ಬಿಹಾರ
+IN-BR,ml,ബിഹാർ
+IN-BR,mr,बिहार
+IN-BR,ne,बिहार
+IN-BR,or,ବିହାର
+IN-BR,pa,ਬਿਹਾਰ
+IN-BR,sd,بھار (رياست)
+IN-BR,ta,பீகார்
+IN-BR,te,బీహార్
+IN-BR,ur,بہار
+IN-CG,as,ছত্তীছগঢ়
+IN-CG,bn,ছত্তিশগড়
+IN-CG,gu,છત્તીસગઢ
+IN-CG,kn,ಛತ್ತೀಸ್ಘಡ್
+IN-CG,ml,ഛത്തീസ്ഗഢ്
+IN-CG,mr,छत्तीसगड
+IN-CG,ne,छत्तीसगढ
+IN-CG,or,ଛତିଶଗଡ଼
+IN-CG,pa,ਛੱਤੀਸਗੜ੍ਹ
+IN-CG,sd,ڇتيس ڳڙھ
+IN-CG,ta,சத்தீசுகர்
+IN-CG,te,ఛత్తీస్గఢ్
+IN-CG,ur,چھتیس گڑھ
+IN-CH,as,চণ্ডীগড়
+IN-CH,bn,চণ্ডীগড়
+IN-CH,gu,ચંડીગઢ
+IN-CH,kn,ಚಂಡೀಗಡ
+IN-CH,ml,ചണ്ഡീഗഢ്
+IN-CH,mr,चंदिगढ
+IN-CH,ne,चण्डिगढ
+IN-CH,or,ଚଣ୍ଡୀଗଡ଼
+IN-CH,pa,ਚੰਡੀਗੜ੍ਹ
+IN-CH,sd,چندي ڳڙھ
+IN-CH,ta,சண்டிகர்
+IN-CH,te,చండీగఢ్
+IN-CH,ur,چندی گڑھ
+IN-DH,as,দাদৰা আৰু নগৰ হাভেলী আৰু দমন আৰু দিউ
+IN-DH,bn,দাদরা ও নগর হাভেলি এবং দমন ও দিউ
+IN-DH,gu,દાદરા અને નગર હવેલી અને દમણ અને દીવ
+IN-DH,kn,ದಾದ್ರಾ ಮತ್ತು ನಗರ್ ಹವೇಲಿ ಮತ್ತು ದಮನ್ ಮತ್ತು ದಿಯು
+IN-DH,ml,"ദാദ്രാ, നഗർ ഹവേലിയും ദാമൻ, ദിയുവും"
+IN-DH,mr,दादरा व नगर हवेली आणि दमण व दीव
+IN-DH,ne,दादरा र नगर हवेली
+IN-DH,pa,ਦਾਦਰਾ ਅਤੇ ਨਗਰ ਹਵੇਲੀ ਅਤੇ ਦਮਨ ਅਤੇ ਦੀਉ
+IN-DH,ta,தாத்ரா & நகர் ஹவேலி மற்றும் தாமன் & தியூ
+IN-DH,te,"దాద్రా నగర్ హవేలీ, డామన్ డయ్యూ"
+IN-DH,ur,دادرا و نگر حویلی و دمن و دیو
+IN-DL,as,দিল্লী
+IN-DL,bn,দিল্লি
+IN-DL,gu,દિલ્હી
+IN-DL,kn,ದೆಹಲಿ
+IN-DL,ml,ഡെൽഹി
+IN-DL,mr,दिल्ली
+IN-DL,ne,दिल्ली
+IN-DL,or,ଦିଲ୍ଲୀ
+IN-DL,pa,ਦਿੱਲੀ
+IN-DL,sd,دهلي
+IN-DL,ta,தில்லி
+IN-DL,te,ఢిల్లీ
+IN-DL,ur,دلی
+IN-GA,as,গোৱা
+IN-GA,bn,গোয়া
+IN-GA,gu,ગોઆ
+IN-GA,kn,ಗೋವಾ
+IN-GA,ml,ഗോവ
+IN-GA,mr,गोवा
+IN-GA,ne,गोआ
+IN-GA,or,ଗୋଆ
+IN-GA,pa,ਗੋਆ
+IN-GA,sd,گووا
+IN-GA,ta,கோவா
+IN-GA,te,గోవా
+IN-GA,ur,گوا
+IN-GJ,as,গুজৰাট
+IN-GJ,bn,গুজরাত
+IN-GJ,gu,ગુજરાત
+IN-GJ,kn,ಗುಜರಾತ್
+IN-GJ,ml,ഗുജറാത്ത്‌
+IN-GJ,mr,गुजरात
+IN-GJ,ne,गुजरात
+IN-GJ,or,ଗୁଜରାଟ
+IN-GJ,pa,ਗੁਜਰਾਤ
+IN-GJ,sd,گوجارات
+IN-GJ,ta,குசராத்
+IN-GJ,te,గుజరాత్
+IN-GJ,ur,گجرات
+IN-HP,as,হিমাচল প্ৰদেশ
+IN-HP,bn,হিমাচল প্রদেশ
+IN-HP,gu,હિમાચલ પ્રદેશ
+IN-HP,kn,ಹಿಮಾಚಲ ಪ್ರದೇಶ
+IN-HP,ml,ഹിമാചൽ പ്രദേശ്‌
+IN-HP,mr,हिमाचल प्रदेश
+IN-HP,ne,हिमाचल प्रदेश
+IN-HP,or,ହିମାଚଳ ପ୍ରଦେଶ
+IN-HP,pa,ਹਿਮਾਚਲ ਪ੍ਰਦੇਸ਼
+IN-HP,sd,هماچل پرديش
+IN-HP,ta,இமாசலப் பிரதேசம்
+IN-HP,te,హిమాచల్ ప్రదేశ్
+IN-HP,ur,ہماچل پردیش
+IN-HR,as,হাৰিয়ানা
+IN-HR,bn,হরিয়ানা
+IN-HR,gu,હરિયાણા
+IN-HR,kn,ಹರಿಯಾಣ
+IN-HR,ml,ഹരിയാണ
+IN-HR,mr,हरियाणा
+IN-HR,ne,हरियाणा
+IN-HR,or,ହରିୟାଣା
+IN-HR,pa,ਹਰਿਆਣਾ
+IN-HR,sd,هريانا
+IN-HR,ta,அரியானா
+IN-HR,te,హర్యానా
+IN-HR,ur,ہریانہ
+IN-JH,as,ঝাড়খণ্ড
+IN-JH,bn,ঝাড়খণ্ড
+IN-JH,gu,ઝારખંડ
+IN-JH,kn,ಝಾರ್ಖಂಡ್
+IN-JH,ml,ഝാർഖണ്ഡ്‌
+IN-JH,mr,झारखंड
+IN-JH,ne,झारखण्ड
+IN-JH,or,ଝାଡ଼ଖଣ୍ଡ
+IN-JH,pa,ਝਾਰਖੰਡ
+IN-JH,sd,جھرکنڊ
+IN-JH,ta,சார்க்கண்ட்
+IN-JH,te,జార్ఖండ్
+IN-JH,ur,جھاڑکھنڈ
+IN-JK,as,জম্মু আৰু কাশ্মীৰ
+IN-JK,bn,জম্মু ও কাশ্মীর
+IN-JK,gu,જમ્મુ અને કાશ્મીર
+IN-JK,kn,ಜಮ್ಮು ಮತ್ತು ಕಾಶ್ಮೀರ
+IN-JK,ml,ജമ്മു-കശ്മീർ
+IN-JK,mr,जम्मू आणि काश्मीर
+IN-JK,ne,जम्मु कश्मीर
+IN-JK,or,ଜମ୍ମୁ ଓ କଶ୍ମୀର
+IN-JK,pa,ਜੰਮੂ ਅਤੇ ਕਸ਼ਮੀਰ
+IN-JK,ta,சம்மு காசுமீர்
+IN-JK,te,జమ్మూ కాశ్మీరు
+IN-JK,ur,جموں و کشمیر
+IN-KA,as,কৰ্ণাটক
+IN-KA,bn,কর্ণাটক
+IN-KA,gu,કર્ણાટક
+IN-KA,kn,ಕರ್ನಾಟಕ
+IN-KA,ml,കർണാടക
+IN-KA,mr,कर्नाटक
+IN-KA,ne,कर्नाटक
+IN-KA,or,କର୍ଣ୍ଣାଟକ
+IN-KA,pa,ਕਰਨਾਟਕ
+IN-KA,sd,ڪرناٽڪا
+IN-KA,ta,கருநாடகம்
+IN-KA,te,కర్ణాటక
+IN-KA,ur,کرناٹک
+IN-KL,as,কেৰেলা
+IN-KL,bn,কেরল
+IN-KL,gu,કેરળ
+IN-KL,kn,ಕೇರಳ
+IN-KL,ml,കേരളം
+IN-KL,mr,केरळ
+IN-KL,ne,केरल
+IN-KL,or,କେରଳ
+IN-KL,pa,ਕੇਰਲਾ
+IN-KL,sd,ڪيرالا
+IN-KL,ta,கேரளம்
+IN-KL,te,కేరళ
+IN-KL,ur,کیرلا
+IN-LA,as,লাডাখ
+IN-LA,bn,লাদাখ
+IN-LA,gu,લડાખ
+IN-LA,kn,ಲಡಾಖ್
+IN-LA,ml,ലഡാക്
+IN-LA,mr,लडाख
+IN-LA,ne,लदाख
+IN-LA,or,ଲଦାଖ
+IN-LA,pa,ਲਦਾਖ਼
+IN-LA,ta,லடாக்
+IN-LA,te,లడఖ్
+IN-LA,ur,لداخ
+IN-LD,as,লাক্ষাদ্বীপ
+IN-LD,bn,লক্ষদ্বীপ
+IN-LD,gu,લક્ષદ્વીપ
+IN-LD,kn,ಲಕ್ಷದ್ವೀಪ
+IN-LD,ml,ലക്ഷദ്വീപ്
+IN-LD,mr,लक्षद्वीप
+IN-LD,ne,लक्षद्वीप
+IN-LD,or,ଲାକ୍ଷାଦ୍ଵୀପ
+IN-LD,pa,ਲਕਸ਼ਦੀਪ
+IN-LD,ta,இலட்சத்தீவுகள்
+IN-LD,te,లక్షద్వీపములు
+IN-LD,ur,لکشادیپ
+IN-MH,as,মহাৰাষ্ট্ৰ
+IN-MH,bn,মহারাষ্ট্র
+IN-MH,gu,મહારાષ્ટ્ર
+IN-MH,kn,ಮಹಾರಾಷ್ಟ್ರ
+IN-MH,ml,മഹാരാഷ്ട്ര
+IN-MH,mr,महाराष्ट्र
+IN-MH,ne,महाराष्ट्र
+IN-MH,or,ମହାରାଷ୍ଟ୍ର
+IN-MH,pa,ਮਹਾਰਾਸ਼ਟਰ
+IN-MH,sd,مھاراشٽر
+IN-MH,ta,மகாராட்டிரம்
+IN-MH,te,మహారాష్ట్ర
+IN-MH,ur,مہاراشٹر
+IN-ML,as,মেঘালয়
+IN-ML,bn,মেঘালয়
+IN-ML,gu,મેઘાલય
+IN-ML,kn,ಮೆಘಾಲಯ
+IN-ML,ml,മേഘാലയ
+IN-ML,mr,मेघालय
+IN-ML,ne,मेघालय
+IN-ML,or,ମେଘାଳୟ
+IN-ML,pa,ਮੇਘਾਲਿਆ
+IN-ML,ta,மேகாலயா
+IN-ML,te,మేఘాలయ
+IN-ML,ur,میگھالیہ
+IN-MN,as,মণিপুৰ
+IN-MN,bn,মণিপুর
+IN-MN,gu,મણિપુર
+IN-MN,kn,ಮಣಿಪುರ
+IN-MN,ml,മണിപ്പൂർ
+IN-MN,mr,मणिपूर
+IN-MN,ne,मणिपुर
+IN-MN,or,ମଣିପୁର
+IN-MN,pa,ਮਨੀਪੁਰ
+IN-MN,ta,மணிப்பூர்
+IN-MN,te,మణిపూర్
+IN-MN,ur,منی پور
+IN-MP,as,মধ্য প্ৰদেশ
+IN-MP,bn,মধ্যপ্রদেশ
+IN-MP,gu,મધ્ય પ્રદેશ
+IN-MP,kn,ಮಧ್ಯ ಪ್ರದೇಶ
+IN-MP,ml,മധ്യപ്രദേശ്‌
+IN-MP,mr,मध्य प्रदेश
+IN-MP,ne,मध्य प्रदेश
+IN-MP,or,ମଧ୍ୟ ପ୍ରଦେଶ
+IN-MP,pa,ਮੱਧ ਪ੍ਰਦੇਸ਼
+IN-MP,sd,مڌيا پرديش
+IN-MP,ta,மத்தியப் பிரதேசம்
+IN-MP,te,మధ్య ప్రదేశ్
+IN-MP,ur,مدھیہ پردیش
+IN-MZ,as,মিজোৰাম
+IN-MZ,bn,মিজোরাম
+IN-MZ,gu,મિઝોરમ
+IN-MZ,kn,ಮಿಝೋರಂ
+IN-MZ,ml,മിസോറം
+IN-MZ,mr,मिझोरम
+IN-MZ,ne,मिजोरम
+IN-MZ,or,ମିଜୋରାମ
+IN-MZ,pa,ਮਿਜ਼ੋਰਮ
+IN-MZ,ta,மிசோரம்
+IN-MZ,te,మిజోరాం
+IN-MZ,ur,میزورم
+IN-NL,as,নাগালেণ্ড
+IN-NL,bn,নাগাল্যান্ড
+IN-NL,gu,નાગાલેંડ
+IN-NL,kn,ನಾಗಲ್ಯಂಡ್
+IN-NL,ml,നാഗാലാ‌ൻഡ്
+IN-NL,mr,नागालँड
+IN-NL,ne,नागाल्याण्ड
+IN-NL,or,ନାଗାଲାଣ୍ଡ
+IN-NL,pa,ਨਾਗਾਲੈਂਡ
+IN-NL,ta,நாகாலாந்து
+IN-NL,te,నాగాలాండ్
+IN-NL,ur,ناگالینڈ
+IN-OD,as,ওড়িশা
+IN-OD,bn,ওড়িশা
+IN-OD,gu,ઑડિશા
+IN-OD,kn,ಒರಿಸ್ಸಾ
+IN-OD,ml,ഒഡീഷ
+IN-OD,mr,ओडिशा
+IN-OD,ne,उड़िसा
+IN-OD,or,ଓଡ଼ିଶା
+IN-OD,pa,ਓਡੀਸ਼ਾ
+IN-OD,sd,اوڙيسيا
+IN-OD,ta,ஒடிசா
+IN-OD,te,ఒరిస్సా
+IN-OD,ur,اڑیسہ
+IN-PB,as,"পঞ্জাব, ভাৰত"
+IN-PB,bn,"পাঞ্জাব, ভারত"
+IN-PB,gu,"પંજાબ, ભારત"
+IN-PB,kn,ಪಂಜಾಬ್
+IN-PB,ml,പഞ്ചാബ്
+IN-PB,mr,पंजाब
+IN-PB,ne,पञ्जाब
+IN-PB,or,ପଞ୍ଜାବ
+IN-PB,pa,ਪੰਜਾਬ
+IN-PB,sd,پنجاب، ڀارت
+IN-PB,ta,பஞ்சாப்
+IN-PB,te,పంజాబ్
+IN-PB,ur,پنجاب
+IN-PY,as,পুডুছেৰী
+IN-PY,bn,পুদুচেরি
+IN-PY,gu,પૉંડિચેરી
+IN-PY,kn,ಪುದುಚೇರಿ
+IN-PY,ml,പുതുച്ചേരി
+IN-PY,mr,पुडुचेरी
+IN-PY,ne,पुदुचेरी
+IN-PY,or,ପୁଡୁଚେରୀ
+IN-PY,pa,ਪਾਂਡੀਚਰੀ
+IN-PY,ta,புதுச்சேரி
+IN-PY,te,పుదుచ్చేరి
+IN-PY,ur,پونڈیچری
+IN-RJ,as,ৰাজস্থান
+IN-RJ,bn,রাজস্থান
+IN-RJ,gu,રાજસ્થાન
+IN-RJ,kn,ರಾಜಸ್ಥಾನ
+IN-RJ,ml,രാജസ്ഥാൻ
+IN-RJ,mr,राजस्थान
+IN-RJ,ne,राजस्थान
+IN-RJ,or,ରାଜସ୍ଥାନ
+IN-RJ,pa,ਰਾਜਸਥਾਨ
+IN-RJ,sd,راجستان
+IN-RJ,ta,இராச்சசுத்தான்
+IN-RJ,te,రాజస్థాన్
+IN-RJ,ur,راجستھان
+IN-SK,as,ছিক্কিম
+IN-SK,bn,সিক্কিম
+IN-SK,gu,સિક્કિમ
+IN-SK,kn,ಸಿಕ್ಕಿಂ
+IN-SK,ml,സിക്കിം
+IN-SK,mr,सिक्किम
+IN-SK,ne,सिक्किम
+IN-SK,or,ସିକିମ
+IN-SK,pa,ਸਿੱਕਮ
+IN-SK,ta,சிக்கிம்
+IN-SK,te,సిక్కిం
+IN-SK,ur,سکم
+IN-TN,as,তামিলনাডু
+IN-TN,bn,তামিলনাড়ু
+IN-TN,gu,તમિલનાડુ
+IN-TN,kn,ತಮಿಳುನಾಡು
+IN-TN,ml,തമിഴ്‌നാട്
+IN-TN,mr,तमिळनाडू
+IN-TN,ne,तमिलनाडु
+IN-TN,or,ତାମିଲନାଡୁ
+IN-TN,pa,ਤਾਮਿਲ ਨਾਡੂ
+IN-TN,sd,تامل ناڊو
+IN-TN,ta,தமிழ்நாடு
+IN-TN,te,తమిళనాడు
+IN-TN,ur,تامل ناڈو
+IN-TR,as,ত্ৰিপুৰা
+IN-TR,bn,ত্রিপুরা
+IN-TR,gu,ત્રિપુરા
+IN-TR,kn,ತ್ರಿಪುರ
+IN-TR,ml,ത്രിപുര
+IN-TR,mr,त्रिपुरा
+IN-TR,ne,त्रिपुरा
+IN-TR,or,ତ୍ରିପୁରା
+IN-TR,pa,ਤ੍ਰਿਪੁਰਾ
+IN-TR,ta,திரிபுரா
+IN-TR,te,త్రిపుర
+IN-TR,ur,تری پورہ
+IN-TS,as,তেলেংগানা
+IN-TS,bn,তেলেঙ্গানা
+IN-TS,gu,તેલંગાણા
+IN-TS,kn,ತೆಲಂಗಾಣ
+IN-TS,ml,തെലങ്കാന
+IN-TS,mr,तेलंगणा
+IN-TS,ne,तेलंगाना
+IN-TS,or,ତେଲେଙ୍ଗାନା
+IN-TS,pa,ਤੇਲੰਗਾਨਾ
+IN-TS,sd,تلنگانا
+IN-TS,ta,தெலுங்கானா
+IN-TS,te,తెలంగాణ
+IN-TS,ur,تلنگانہ
+IN-UK,as,উত্তৰাখণ্ড
+IN-UK,bn,উত্তরাখণ্ড
+IN-UK,gu,ઉત્તરાખંડ
+IN-UK,kn,ಉತ್ತರಾಖಂಡ
+IN-UK,ml,ഉത്തരാഖണ്ഡ്
+IN-UK,mr,उत्तराखंड
+IN-UK,ne,उत्तराखण्ड
+IN-UK,or,ଉତ୍ତରାଖଣ୍ଡ
+IN-UK,pa,ਉੱਤਰਖੰਡ
+IN-UK,sd,اتراکنڊ
+IN-UK,ta,உத்தராகண்டம்
+IN-UK,te,ఉత్తరాఖండ్
+IN-UK,ur,اتر کھنڈ
+IN-UP,as,উত্তৰ প্ৰদেশ
+IN-UP,bn,উত্তরপ্রদেশ
+IN-UP,gu,ઉત્તર પ્રદેશ
+IN-UP,kn,ಉತ್ತರ ಪ್ರದೇಶ
+IN-UP,ml,ഉത്തർ‌പ്രദേശ്
+IN-UP,mr,उत्तर प्रदेश
+IN-UP,ne,उत्तर प्रदेश
+IN-UP,or,ଉତ୍ତର ପ୍ରଦେଶ
+IN-UP,pa,ਉੱਤਰ ਪ੍ਰਦੇਸ਼
+IN-UP,sd,اتر پرديش
+IN-UP,ta,உத்தரப் பிரதேசம்
+IN-UP,te,ఉత్తర ప్రదేశ్
+IN-UP,ur,اتر پردیش
+IN-WB,as,পশ্চিমবঙ্গ
+IN-WB,bn,পশ্চিমবঙ্গ
+IN-WB,gu,પશ્ચિમ બંગાળ
+IN-WB,kn,ಪಶ್ಚಿಮ ಬಂಗಾಳ
+IN-WB,ml,പശ്ചിമ ബംഗാൾ
+IN-WB,mr,पश्चिम बंगाल
+IN-WB,ne,पश्चिम बङ्गाल
+IN-WB,or,ପଶ୍ଚିମବଙ୍ଗ
+IN-WB,pa,ਪੱਛਮੀ ਬੰਗਾਲ
+IN-WB,sd,اولھ بنگال
+IN-WB,ta,மேற்கு வங்காளம்
+IN-WB,te,పశ్చిమ బెంగాల్
+IN-WB,ur,مغربی بنگال
+IQ-AN,az,Əl-Anbar
+IQ-AR,az,Ərbil
+IQ-BA,az,Bəsrə
+IQ-BB,az,Babil
+IQ-BG,az,Bağdad
+IQ-DA,az,Dəhuk
+IQ-DI,az,Diyalə
+IQ-DQ,az,Ziqar
+IQ-KA,az,Kərbəla
+IQ-KI,az,Kərkük
+IQ-MA,az,Meysan
+IQ-MU,az,Əl-Müsənnə
+IQ-NA,az,Nəcəf
+IQ-NI,az,Ninəvə
+IQ-QA,az,Əl-Qədisiyə
+IQ-SD,az,Səlahəddin
+IQ-SU,az,Süleymaniyə
+IQ-WA,az,Vasit
+IT-21,fr,Piémont
+IT-23,fr,Vallée d’Aoste
+IT-25,fr,Lombardie
+IT-32,fr,Trentin-Haut-Adige
+IT-34,fr,Vénétie
+IT-36,fr,Frioul-Vénétie julienne
+IT-42,fr,Ligurie
+IT-45,fr,Émilie-Romagne
+IT-52,fr,Toscane
+IT-55,fr,Ombrie
+IT-57,fr,Marches
+IT-62,fr,Latium
+IT-65,fr,Abruzzes
+IT-67,fr,Molise
+IT-72,fr,Campanie
+IT-75,fr,Pouilles
+IT-77,fr,Basilicate
+IT-78,fr,Calabre
+IT-82,fr,Sicile
+IT-88,fr,Sardaigne
+IT-AG,fr,province d’Agrigente
+IT-AL,fr,Province d’Alexandrie
+IT-AN,fr,province d’Ancône
+IT-AP,fr,province d’Ascoli Piceno
+IT-AQ,fr,Province de L’Aquila
+IT-AR,fr,province d’Arezzo
+IT-AT,fr,Province d’Asti
+IT-AV,fr,province d’Avellino
+IT-BA,fr,province de Bari
+IT-BG,fr,Province de Bergame
+IT-BI,fr,Province de Biella
+IT-BL,fr,province de Belluno
+IT-BN,fr,province de Bénévent
+IT-BO,fr,Province de Bologne
+IT-BR,fr,Province de Brindisi
+IT-BS,fr,Province de Brescia
+IT-BT,fr,province de Barletta-Andria-Trani
+IT-BZ,fr,Province autonome de Bolzano
+IT-CA,fr,Province de Cagliari
+IT-CB,fr,Province de Campobasso
+IT-CE,fr,Province de Caserte
+IT-CH,fr,Province de Chieti
+IT-CL,fr,Province de Caltanissetta
+IT-CN,fr,Province de Coni
+IT-CO,fr,Province de Côme
+IT-CR,fr,Province de Crémone
+IT-CS,fr,Province de Cosenza
+IT-CT,fr,Province de Catane
+IT-CZ,fr,Province de Catanzaro
+IT-EN,fr,Province d’Enna
+IT-FC,fr,Province de Forlì-Cesena
+IT-FE,fr,Province de Ferrare
+IT-FG,fr,Province de Foggia
+IT-FI,fr,Province de Florence
+IT-FM,fr,Province de Fermo
+IT-FR,fr,Province de Frosinone
+IT-GE,fr,Ville métropolitaine de Gênes
+IT-GO,fr,Province de Gorizia
+IT-GR,fr,Province de Grosseto
+IT-IM,fr,Province d’Imperia
+IT-IS,fr,Province d’Isernia
+IT-KR,fr,Province de Crotone
+IT-LC,fr,Province de Lecco
+IT-LE,fr,Province de Lecce
+IT-LI,fr,Province de Livourne
+IT-LO,fr,Province de Lodi
+IT-LT,fr,province de Latina
+IT-LU,fr,Province de Lucques
+IT-MB,fr,Province de Monza et de la Brianza
+IT-MC,fr,Province de Macerata
+IT-ME,fr,Province de Messine
+IT-MI,fr,province de Milan
+IT-MN,fr,Province de Mantoue
+IT-MO,fr,Province de Modène
+IT-MS,fr,Province de Massa-Carrara
+IT-MT,fr,Province de Matera
+IT-NA,fr,Ville métropolitaine de Naples
+IT-NO,fr,Province de Novare
+IT-NU,fr,Province de Nuoro
+IT-OR,fr,Province d’Oristano
+IT-PA,fr,Province de Palerme
+IT-PC,fr,Province de Plaisance
+IT-PD,fr,Province de Padoue
+IT-PE,fr,Province de Pescara
+IT-PG,fr,Province de Pérouse
+IT-PI,fr,Province de Pise
+IT-PN,fr,Province de Pordenone
+IT-PO,fr,Province de Prato
+IT-PR,fr,Province de Parme
+IT-PT,fr,Province de Pistoia
+IT-PU,fr,Province de Pesaro et d’Urbino
+IT-PV,fr,province de Pavie
+IT-PZ,fr,Province de Potenza
+IT-RA,fr,Province de Ravenne
+IT-RC,fr,Province de Reggio de Calabre
+IT-RE,fr,Province de Reggio d’Émilie
+IT-RG,fr,Province de Raguse
+IT-RI,fr,Province de Rieti
+IT-RM,fr,Province de Rome
+IT-RN,fr,Province de Rimini
+IT-RO,fr,province de Rovigo
+IT-SA,fr,Province de Salerne
+IT-SI,fr,province de Sienne
+IT-SO,fr,province de Sondrio
+IT-SP,fr,Province de La Spezia
+IT-SR,fr,province de Syracuse
+IT-SS,fr,Province de Sassari
+IT-SU,fr,province de Sardaigne du Sud
+IT-SV,fr,Province de Savone
+IT-TA,fr,province de Tarente
+IT-TE,fr,province de Teramo
+IT-TN,fr,province autonome de Trente
+IT-TO,fr,province de Turin
+IT-TP,fr,province de Trapani
+IT-TR,fr,province de Terni
+IT-TS,fr,Province de Trieste
+IT-TV,fr,Province de Trévise
+IT-UD,fr,Province d’Udine
+IT-VA,fr,Province de Varèse
+IT-VB,fr,province du Verbano-Cusio-Ossola
+IT-VC,fr,Province de Verceil
+IT-VE,fr,province de Venise
+IT-VI,fr,province de Vicence
+IT-VR,fr,province de Vérone
+IT-VT,fr,province de Viterbe
+IT-VV,fr,province de Vibo Valentia
+MA-01,fr,Tanger-Tétouan
+MA-02,fr,Gharb-Chrarda-Beni Hssen
+MA-03,fr,Taza-Al Hoceïma-Taounate
+MA-04,fr,Oriental
+MA-05,fr,Fès-Boulemane
+MA-06,fr,Meknès-Tafilalet
+MA-07,fr,Rabat-Salé-Zemmour-Zaër
+MA-08,fr,Grand Casablanca
+MA-09,fr,Chaouia-Ouardigha
+MA-10,fr,Doukkala-Abda
+MA-11,fr,Marrakech-Tensift-Al Haouz
+MA-12,fr,Tadla-Azilal
+MA-AGD,fr,Agadir
+MA-AOU,fr,province d’Aousserd
+MA-ASZ,fr,province d’Assa-Zag
+MA-AZI,fr,province d’Azilal
+MA-BEM,fr,province de Béni-Mellal
+MA-BER,fr,province de Berkane
+MA-BES,fr,province de Benslimane
+MA-BOD,fr,province de Boujdour
+MA-BOM,fr,province de Boulemane
+MA-BRR,fr,Berrechid
+MA-CAS,fr,Casablanca
+MA-CHE,fr,province de Chefchaouen
+MA-CHI,fr,province de Chichaoua
+MA-CHT,fr,province de Chtouka-Aït Baha
+MA-DRI,fr,Driouch
+MA-ERR,fr,province d’Errachidia
+MA-ESI,fr,province d’Essaouira
+MA-ESM,fr,province d’Es-Semara
+MA-FAH,fr,province de Fahs-Anjra
+MA-FES,fr,Fès
+MA-FIG,fr,province de Figuig
+MA-FQH,fr,Fquih Ben Salah
+MA-GUE,fr,province de Guelmim
+MA-GUF,fr,Guercif
+MA-HAJ,fr,province d’El Hajeb
+MA-HAO,fr,province d’Al Haouz
+MA-HOC,fr,province d’Al Hoceïma
+MA-IFR,fr,province d’Ifrane
+MA-INE,fr,préfecture d’Inezgane-Aït Melloul
+MA-JDI,fr,province d’El Jadida
+MA-JRA,fr,province de Jerada
+MA-KEN,fr,province de Kénitra
+MA-KES,fr,province d’El Kelaâ des Sraghna
+MA-KHE,fr,province de Khémisset
+MA-KHN,fr,province de Khénifra
+MA-KHO,fr,province de Khouribga
+MA-LAA,fr,province de Laâyoune
+MA-LAR,fr,Larache
+MA-MAR,fr,Marrakech
+MA-MDF,fr,M’diq-Fnideq
+MA-MED,fr,province de Médiouna
+MA-MEK,fr,Meknès
+MA-MID,fr,Midelt
+MA-MOH,fr,Mohammédia
+MA-MOU,fr,province de Moulay Yaâcoub
+MA-NAD,fr,province de Nador
+MA-NOU,fr,province de Nouaceur
+MA-OUA,fr,province de Ouarzazate
+MA-OUD,fr,province d’Oued Ed-Dahab
+MA-OUJ,fr,Oujda
+MA-OUZ,fr,Ouezzane
+MA-RAB,fr,Rabat
+MA-REH,fr,Rehamna
+MA-SAF,fr,province de Safi
+MA-SAL,fr,Salé
+MA-SEF,fr,province de Séfrou
+MA-SET,fr,province de Settat
+MA-SIB,fr,province de Sidi Bennour
+MA-SIF,fr,Sidi Ifni
+MA-SIK,fr,province de Sidi Kacem
+MA-SIL,fr,Sidi Slimane
+MA-SKH,fr,Témara
+MA-TAF,fr,Tarfaya
+MA-TAI,fr,province de Taourirt
+MA-TAO,fr,province de Taounate
+MA-TAR,fr,province de Taroudannt
+MA-TAT,fr,province de Tata
+MA-TAZ,fr,province de Taza
+MA-TET,fr,province de Tétouan
+MA-TIN,fr,Tinghir
+MA-TIZ,fr,province de Tiznit
+MA-TNG,fr,Tanger
+MA-TNT,fr,province de Tan-Tan
+MA-YUS,fr,Youssoufia
+MA-ZAG,fr,province de Zagora
+MK-101,sq,Komuna e Velesit
+MK-102,sq,Komuna e Grackës
+MK-103,sq,Komuna e Demir Kapisë
+MK-104,sq,Komuna e Kavadarit
+MK-105,sq,Komuna e Llozovës
+MK-106,sq,Komuna e Negotinës
+MK-107,sq,Komuna e Rosomanit
+MK-108,sq,Komuna e Sveti Nikollës
+MK-109,sq,Komuna e Çashkës
+MK-201,sq,Komuna e Berovës
+MK-202,sq,Komuna e Vinicës
+MK-203,sq,Komuna e Dellçevës
+MK-204,sq,Komuna e Zërnocit
+MK-205,sq,Komuna e Karbincës
+MK-206,sq,Komuna e Koçanit
+MK-207,sq,Komuna e Kamenicës
+MK-208,sq,Komuna e Peçevës
+MK-209,sq,Komuna e Probishtipit
+MK-210,sq,Komuna e Çeshinovo-Obleshevës
+MK-211,sq,Komuna e Shtipit
+MK-301,sq,Komuna e Veçanit
+MK-303,sq,Komuna e Dibrës
+MK-304,sq,Komuna e Debarcës
+MK-307,sq,Komuna e Kërçovës
+MK-308,sq,Komuna e Brodit
+MK-310,sq,Komuna e Ohrit
+MK-311,sq,Komuna e Plasnicës
+MK-312,sq,Komuna e Strugës
+MK-313,sq,Komuna e Qendrës Zhupa
+MK-401,sq,Komuna e Bogdancës
+MK-402,sq,Komuna e Bosilovës
+MK-403,sq,Komuna e Vallandovës
+MK-404,sq,Komuna e Vasilevës
+MK-405,sq,Komuna e Gjevgjelisë
+MK-406,sq,Komuna e Dojranit
+MK-407,sq,Komuna e Konçës
+MK-408,sq,Komuna e Novosellës
+MK-409,sq,Komuna e Radovishtit
+MK-410,sq,Komuna e Strumicës
+MK-501,sq,Komuna e Manastirit
+MK-502,sq,Komuna e Demir Hisarit
+MK-503,sq,Komuna e Dollnenit
+MK-504,sq,Komuna e Krivogashtanit
+MK-505,sq,Komuna e Krushevës
+MK-506,sq,Komuna e Mogillës
+MK-507,sq,Komuna e Novacit
+MK-508,sq,Komuna e Prilepit
+MK-509,sq,Komuna e Resnjës
+MK-601,sq,Komuna e Bogovinës
+MK-602,sq,Komuna e Bërvenicës
+MK-603,sq,Komuna e Vrapçishtit
+MK-604,sq,Komuna e Gostivarit
+MK-605,sq,Komuna e Zhelinës
+MK-606,sq,Komuna e Jegunocit
+MK-607,sq,Komuna e Mavrovës dhe Radostushës
+MK-608,sq,Komuna e Tearcës
+MK-609,sq,Komuna e Tetovës
+MK-701,sq,Komuna e Kratovës
+MK-702,sq,Komuna e Kriva Pallankës
+MK-703,sq,Komuna e Kumanovës
+MK-704,sq,Komuna e Likovës
+MK-705,sq,Komuna e Rankocit
+MK-706,sq,Komuna e Nagoriçit të Vjetër
+MK-801,sq,Komuna e Aeorodromit
+MK-802,sq,Komuna e Haraçinës
+MK-803,sq,Komuna e Butelit
+MK-804,sq,Komuna e Gazi Babës
+MK-805,sq,Komuna e Gjorçe Petrovit
+MK-806,sq,Komuna e Zelenikovës
+MK-807,sq,Komuna e Belimbegut
+MK-808,sq,Komuna e Karposhit
+MK-809,sq,Komuna e Kisella Vodës
+MK-810,sq,Komuna e Petrovecit
+MK-811,sq,Komuna e Sarajit
+MK-812,sq,Komuna e Sopishtit
+MK-813,sq,Komuna e Studeniçanit
+MK-814,sq,Komuna e Qendrës
+MK-815,sq,Komuna e Çairit
+MK-816,sq,Komuna e Çuçer-Sandevës
+MK-817,sq,Komuna e Shutkës
+PH-00,ceb,Manila
+PH-01,ceb,Rehiyon sa Ilocos
+PH-02,ceb,Lupot sa Cagayan
+PH-03,ceb,Tunga-tungang Luzon
+PH-05,ceb,Bikol
+PH-06,ceb,Kasadpang Kabisay-an
+PH-07,ceb,Tunga-tungang Kabisay-an
+PH-08,ceb,Sidlakang Kabisay-an
+PH-09,ceb,Zamboanga
+PH-10,ceb,Amihanang Mindanao
+PH-11,ceb,Davao
+PH-12,ceb,SOCCSKSARGEN
+PH-13,ceb,Caraga
+PH-14,ceb,Mindanawng Muslim
+PH-15,ceb,Administratibong Rehiyon sa Cordillera
+PH-40,ceb,CALABARZON
+PH-41,ceb,MIMAROPA
+PH-ABR,ceb,Abra
+PH-AGN,ceb,Agusan del Norte
+PH-AGS,ceb,Agusan del Sur
+PH-AKL,ceb,Aklan
+PH-ALB,ceb,Albay
+PH-ANT,ceb,Antique
+PH-APA,ceb,Apayao
+PH-AUR,ceb,Aurora
+PH-BAN,ceb,Bataan
+PH-BAS,ceb,Basilan
+PH-BEN,ceb,Benguet
+PH-BIL,ceb,Biliran
+PH-BOH,ceb,Bohol
+PH-BTG,ceb,Batangas
+PH-BTN,ceb,Batanes
+PH-BUK,ceb,Bukidnon
+PH-BUL,ceb,Bulacan
+PH-CAG,ceb,Cagayan
+PH-CAM,ceb,Camiguin
+PH-CAN,ceb,Camarines Norte
+PH-CAP,ceb,Capiz
+PH-CAS,ceb,Camarines Sur
+PH-CAT,ceb,Catanduanes
+PH-CAV,ceb,Cavite
+PH-CEB,ceb,Sugbo
+PH-COM,ceb,Compostela Valley
+PH-DAO,ceb,Davao Oriental
+PH-DAS,ceb,Davao del Sur
+PH-DAV,ceb,Davao del Norte
+PH-DIN,ceb,Kapupud-ang Dinagat
+PH-DVO,ceb,Davao Occidental
+PH-EAS,ceb,Sidlakang Samar
+PH-GUI,ceb,Guimaras
+PH-IFU,ceb,Ifugao
+PH-ILI,ceb,Iloilo
+PH-ILN,ceb,Ilocos Norte
+PH-ILS,ceb,Ilocos Sur
+PH-ISA,ceb,Isabela
+PH-KAL,ceb,Kalinga
+PH-LAG,ceb,Laguna
+PH-LAN,ceb,Lanao del Norte
+PH-LAS,ceb,Lanao del Sur
+PH-LEY,ceb,Leyte
+PH-LUN,ceb,La Union
+PH-MAD,ceb,Marinduque
+PH-MAS,ceb,Masbate
+PH-MDC,ceb,Kasadpang Mindoro
+PH-MDR,ceb,Sidlakang Mindoro
+PH-MGN,ceb,Maguindánao del Norte
+PH-MGS,ceb,Maguindánao del Sur
+PH-MOU,ceb,Lalawigang Bulubundukin
+PH-MSC,ceb,Misamis Occidental
+PH-MSR,ceb,Misamis Oriental
+PH-NCO,ceb,Cotabato
+PH-NEC,ceb,Negros Occidental
+PH-NER,ceb,Negros Oriental
+PH-NSA,ceb,Amihanang Samar
+PH-NUE,ceb,Nueva Ecija
+PH-NUV,ceb,Nueva Vizcaya
+PH-PAM,ceb,Pampanga
+PH-PAN,ceb,Pangasinan
+PH-PLW,ceb,Palawan
+PH-QUE,ceb,Quezon
+PH-QUI,ceb,Quirino
+PH-RIZ,ceb,Rizal
+PH-ROM,ceb,Romblon
+PH-SAR,ceb,Sarangani
+PH-SCO,ceb,Habagatang Cotabato
+PH-SIG,ceb,Siquijor
+PH-SLE,ceb,Habagatang Leyte
+PH-SLU,ceb,Sulu
+PH-SOR,ceb,Sorsogon
+PH-SUK,ceb,Sultan Kudarat
+PH-SUN,ceb,Surigao del Norte
+PH-SUR,ceb,Surigao del Sur
+PH-TAR,ceb,Tarlac
+PH-TAW,ceb,Tawi-Tawi
+PH-WSA,ceb,Samar
+PH-ZAN,ceb,Zamboanga del Norte
+PH-ZAS,ceb,Zamboanga del Sur
+PH-ZMB,ceb,Zambales
+PH-ZSI,ceb,Zamboanga Sibugay
+PL-02,de,Woiwodschaft Niederschlesien
+PL-02,lt,Žemutinės Silezijos vaivadija
+PL-04,de,Woiwodschaft Kujawien-Pommern
+PL-04,lt,Kujavijos Pamario vaivadija
+PL-06,de,Woiwodschaft Lublin
+PL-06,lt,Liublino vaivadija
+PL-08,de,Woiwodschaft Lebus
+PL-08,lt,Liubušo vaivadija
+PL-10,de,Woiwodschaft Łódź
+PL-10,lt,Lodzės vaivadija
+PL-12,de,Woiwodschaft Kleinpolen
+PL-12,lt,Mažosios Lenkijos vaivadija
+PL-14,de,Woiwodschaft Masowien
+PL-14,lt,Mazovijos vaivadija
+PL-16,de,Woiwodschaft Opole
+PL-16,lt,Opolės vaivadija
+PL-18,de,Woiwodschaft Karpatenvorland
+PL-18,lt,Pakarpatės vaivadija
+PL-20,de,Woiwodschaft Podlachien
+PL-20,lt,Palenkės vaivadija
+PL-22,de,Woiwodschaft Pommern
+PL-22,lt,Pamario vaivadija
+PL-24,de,Woiwodschaft Schlesien
+PL-24,lt,Silezijos vaivadija
+PL-26,de,Woiwodschaft Heiligkreuz
+PL-26,lt,Švento Kryžiaus vaivadija
+PL-28,de,Woiwodschaft Ermland-Masuren
+PL-28,lt,Varmijos Mozūrų vaivadija
+PL-30,de,Woiwodschaft Großpolen
+PL-30,lt,Didžiosios Lenkijos vaivadija
+PL-32,de,Woiwodschaft Westpommern
+PL-32,lt,Vakarų Pamario vaivadija
+RS-00,hr,Beograd
+RS-00,hu,Belgrád
+RS-00,ro,Belgrad
+RS-00,sk,Belehrad
+RS-00,uk,Белград
+RS-01,hr,Sjevernobački upravni okrug
+RS-01,hu,Észak-bácskai körzet
+RS-01,ro,Districtul Bačka de Nord
+RS-01,uk,Північно-Бацький округ
+RS-02,hr,Srednjobanatski upravni okrug
+RS-02,hu,Közép-bánsági körzet
+RS-02,ro,Banatul Central
+RS-02,uk,Середньо-Банатський округ
+RS-03,hr,Sjevernobanatski upravni okrug
+RS-03,hu,Észak-bánsági körzet
+RS-03,ro,Banatul de Nord
+RS-03,sk,Severobanátsky okres
+RS-03,uk,Північно-Банатський округ
+RS-04,hr,Južnobanatski upravni okrug
+RS-04,hu,Dél-bánsági körzet
+RS-04,ro,Banatul de Sud
+RS-04,uk,Південно-Банатський округ
+RS-05,hr,Zapadnobački upravni okrug
+RS-05,hu,Nyugat-bácskai körzet
+RS-05,ro,Districtul Bačka de Vest
+RS-05,uk,Західно-Бацький округ
+RS-06,hr,Južnobački upravni okrug
+RS-06,hu,Dél-bácskai körzet
+RS-06,ro,Districtul Bačka de Sud
+RS-06,sk,Juhobáčsky obvod
+RS-06,uk,Південно-Бацький округ
+RS-07,hr,Srijemski upravni okrug
+RS-07,hu,Szerémségi körzet
+RS-07,ro,Districtul Srem
+RS-07,uk,Сремський округ
+RS-08,hr,Mačvanski upravni okrug
+RS-08,ro,Districtul Mačva
+RS-08,uk,Район Мачва
+RS-09,hr,Kolubarski upravni okrug
+RS-09,ro,Districtul Kolubara
+RS-09,uk,Район Колубара
+RS-10,hr,Podunavski upravni okrug
+RS-10,ro,Districtul Podunavlje
+RS-10,uk,Подунайський Район
+RS-11,hr,Braničevski upravni okrug
+RS-11,ro,Districtul Braničevo
+RS-11,uk,Бранічевський район
+RS-12,hr,Šumadijski upravni okrug
+RS-12,ro,Districtul Šumadija
+RS-12,uk,Район Шумадія
+RS-13,hr,Pomoravski upravni okrug
+RS-13,ro,Districtul Pomoravlje
+RS-13,uk,Поморавський Район
+RS-14,hr,Borski upravni okrug
+RS-14,hu,Bor körzet
+RS-14,ro,Districtul Bor
+RS-14,uk,Район Бор
+RS-15,hr,Zaječarski upravni okrug
+RS-15,hu,Zaječar körzet
+RS-15,ro,Zaječar
+RS-15,uk,Заєчарський район
+RS-16,hr,Zlatiborski upravni okrug
+RS-16,hu,Zlatibor körzet
+RS-16,ro,Districtul Zlatibor
+RS-16,sk,Zlatiborský obvod
+RS-16,uk,Район Златибор
+RS-17,hr,Moravički upravni okrug
+RS-17,ro,Districtul Moravica
+RS-17,uk,Моравичський район
+RS-18,hr,Raški upravni okrug
+RS-18,hu,Raskai körzet
+RS-18,ro,Districtul Raška
+RS-18,uk,Район Рашка
+RS-19,hr,Rasinski upravni okrug
+RS-19,hu,Rasina körzet
+RS-19,ro,Districtul Rasina
+RS-19,uk,Район Расина
+RS-20,hr,Nišavski upravni okrug
+RS-20,ro,Districtul Nišava
+RS-20,uk,Нишавський район
+RS-21,hr,Toplički upravni okrug
+RS-21,ro,Districtul Toplica
+RS-21,uk,Район Топліка
+RS-22,hr,Pirotski upravni okrug
+RS-22,ro,Districtul Pirot
+RS-22,uk,Район Пірот
+RS-23,hr,Jablanički upravni okrug
+RS-23,ro,Districtul Jablanica
+RS-23,uk,Район Ябланіка
+RS-24,hr,Pčinjski upravni okrug
+RS-24,ro,Districtul Pčinja
+RS-24,uk,Район Пчінья
+RS-26,uk,Пецький округ
+RS-27,uk,Прізренський округ
+RS-KM,hr,Kosovo i Metohija
+RS-KM,hu,Koszovó és Metóhia Autonóm Tartomány
+RS-KM,ro,Provincia Autonomă Kosovo și Metohia
+RS-KM,uk,Автономний край Косово і Метохія
+RS-VO,hr,Vojvodina
+RS-VO,hu,Vajdaság Autonóm Tartomány
+RS-VO,ro,Voivodina
+RS-VO,sk,Vojvodina
+RS-VO,uk,Воєводина
+RU-AD,az,Adıgey
+RU-AL,az,Altay Respublikası
+RU-ALT,az,Altay diyarı
+RU-AMU,az,Amur vilayəti
+RU-ARK,az,Arxangelsk vilayəti
+RU-AST,az,Həştərxan vilayəti
+RU-BA,az,Başqırdıstan
+RU-BEL,az,Belqorod vilayəti
+RU-BRY,az,Bryansk vilayəti
+RU-BU,az,Buryatiya
+RU-CE,az,Çeçenistan
+RU-CHE,az,Çelyabinsk vilayəti
+RU-CHU,az,Çukotka Muxtar Dairəsi
+RU-CU,az,Çuvaşıstan
+RU-DA,az,Dağıstan
+RU-IN,az,İnquşetiya
+RU-IRK,az,İrkutsk vilayəti
+RU-IVA,az,İvanovo vilayəti
+RU-KAM,az,Kamçatka diyarı
+RU-KB,az,Kabardin-Balkariya
+RU-KC,az,Qaraçay-Çerkesiya
+RU-KDA,az,Krasnodar diyarı
+RU-KEM,az,Kemerovo vilayəti
+RU-KGD,az,Kalininqrad vilayəti
+RU-KGN,az,Kurqan vilayəti
+RU-KHA,az,Xabarovsk diyarı
+RU-KHM,az,Xantı-Mansi Muxtar Dairəsi
+RU-KIR,az,Kirov vilayəti
+RU-KK,az,Xakasiya
+RU-KL,az,Kalmıkiya
+RU-KLU,az,Kaluqa vilayəti
+RU-KO,az,Komi Respublikası
+RU-KOS,az,Kostroma vilayəti
+RU-KR,az,Kareliya Respublikası
+RU-KRS,az,Kursk vilayəti
+RU-KYA,az,Krasnoyarsk diyarı
+RU-LEN,az,Leninqrad vilayəti
+RU-LIP,az,Lipetsk vilayəti
+RU-MAG,az,Maqadan vilayəti
+RU-ME,az,Mari El
+RU-MO,az,Mordoviya
+RU-MOS,az,Moskva vilayəti
+RU-MOW,az,Moskva
+RU-MUR,az,Murmansk vilayəti
+RU-NEN,az,Nenets Muxtar Dairəsi
+RU-NGR,az,Novqorod vilayəti
+RU-NIZ,az,Nijeqorod vilayəti
+RU-NVS,az,Novosibirsk vilayəti
+RU-OMS,az,Omsk vilayəti
+RU-ORE,az,Orenburq vilayəti
+RU-ORL,az,Orlov vilayəti
+RU-PER,az,Perm diyarı
+RU-PNZ,az,Penza vilayəti
+RU-PRI,az,Primorsk diyarı
+RU-PSK,az,Pskov vilayəti
+RU-ROS,az,Rostov vilayəti
+RU-RYA,az,Ryazan vilayəti
+RU-SA,az,Saxa Respublikası
+RU-SAK,az,Saxalin vilayəti
+RU-SAM,az,Samara vilayəti
+RU-SAR,az,Saratov vilayəti
+RU-SE,az,Şimali Osetiya
+RU-SMO,az,Smolensk vilayəti
+RU-SPE,az,Sankt-Peterburq
+RU-STA,az,Stavropol diyarı
+RU-SVE,az,Sverdlovsk vilayəti
+RU-TA,az,Tatarıstan
+RU-TAM,az,Tambov vilayəti
+RU-TOM,az,Tomsk vilayəti
+RU-TUL,az,Tula vilayəti
+RU-TVE,az,Tver vilayəti
+RU-TY,az,Tıva
+RU-TYU,az,Tümen vilayəti
+RU-UD,az,Udmurtiya
+RU-ULY,az,Ulyanovsk vilayəti
+RU-VGG,az,Volqoqrad vilayəti
+RU-VLA,az,Vladimir vilayəti
+RU-VLG,az,Voloqda vilayəti
+RU-VOR,az,Voronej vilayəti
+RU-YAN,az,Yamalo-Nenets Muxtar Dairəsi
+RU-YAR,az,Yaroslavl vilayəti
+RU-YEV,az,Yəhudi Muxtar Vilayəti
+RU-ZAB,az,Zabaykalsk diyarı
+SE-AB,fi,Tukholman lääni
+SE-AC,fi,Västerbottenin lääni
+SE-BD,fi,Norrbottenin lääni
+SE-C,fi,Uppsalan lääni
+SE-D,fi,Södermanlandin lääni
+SE-E,fi,Itä-Götanmaan lääni
+SE-F,fi,Jönköpingin lääni
+SE-G,fi,Kronobergin lääni
+SE-H,fi,Kalmarin lääni
+SE-I,fi,Gotlannin lääni
+SE-K,fi,Blekingen lääni
+SE-M,fi,Skånen lääni
+SE-N,fi,Hallandin lääni
+SE-O,fi,Länsi-Götanmaan lääni
+SE-S,fi,Värmlannin lääni
+SE-T,fi,Örebron lääni
+SE-U,fi,Västmanlandin lääni
+SE-W,fi,Taalainmaan lääni
+SE-X,fi,Gävleborgin lääni
+SE-Y,fi,Västernorrlandin lääni
+SE-Z,fi,Jämtlandin lääni
+UA-05,ru,Винницкая область
+UA-07,ru,Волынская область
+UA-09,ru,Луганская область
+UA-12,ru,Днепропетровская область
+UA-14,ru,Донецкая область
+UA-18,ru,Житомирская область
+UA-21,ru,Закарпатская область
+UA-23,ru,Запорожская область
+UA-26,ru,Ивано-Франковская область
+UA-30,ru,Киев
+UA-32,ru,Киевская область
+UA-35,ru,Кировоградская область
+UA-40,ru,Севастополь
+UA-43,ru,Автономная Республика Крым
+UA-46,ru,Львовская область
+UA-48,ru,Николаевская область
+UA-51,ru,Одесская область
+UA-53,ru,Полтавская область
+UA-56,ru,Ровненская область
+UA-59,ru,Сумская область
+UA-61,ru,Тернопольская область
+UA-63,ru,Харьковская область
+UA-65,ru,Херсонская область
+UA-68,ru,Хмельницкая область
+UA-71,ru,Черкасская область
+UA-74,ru,Черниговская область
+UA-77,ru,Черновицкая область
+US-AK,es,Alaska
+US-AL,es,Alabama
+US-AR,es,Arkansas
+US-AZ,es,Arizona
+US-CA,es,California
+US-CO,es,Colorado
+US-CT,es,Connecticut
+US-DC,es,Washington D. C.
+US-DE,es,Delaware
+US-FL,es,Florida
+US-GA,es,Georgia
+US-HI,es,Hawái
+US-IA,es,Iowa
+US-ID,es,Idaho
+US-IL,es,Illinois
+US-IN,es,Indiana
+US-KS,es,Kansas
+US-KY,es,Kentucky
+US-LA,es,Luisiana
+US-MA,es,Massachusetts
+US-MD,es,Maryland
+US-ME,es,Maine
+US-MI,es,Míchigan
+US-MN,es,Minnesota
+US-MO,es,Misuri
+US-MS,es,Misisipi
+US-MT,es,Montana
+US-NC,es,Carolina del Norte
+US-ND,es,Dakota del Norte
+US-NE,es,Nebraska
+US-NH,es,Nuevo Hampshire
+US-NJ,es,Nueva Jersey
+US-NM,es,Nuevo México
+US-NV,es,Nevada
+US-NY,es,Nueva York
+US-OH,es,Ohio
+US-OK,es,Oklahoma
+US-OR,es,Oregón
+US-PA,es,Pensilvania
+US-RI,es,Rhode Island
+US-SC,es,Carolina del Sur
+US-SD,es,Dakota del Sur
+US-TN,es,Tennessee
+US-TX,es,Texas
+US-UT,es,Utah
+US-VA,es,Virginia
+US-VT,es,Vermont
+US-WA,es,Washington
+US-WI,es,Wisconsin
+US-WV,es,Virginia Occidental
+US-WY,es,Wyoming
+ZA-EC,af,Oos-Kaap
+ZA-EC,zu,KwaXhosa
+ZA-FS,af,Vrystaat
+ZA-FS,zu,IFleyistata
+ZA-GP,af,Gauteng
+ZA-GP,zu,IGauteng
+ZA-KZN,af,KwaZulu-Natal
+ZA-KZN,zu,KwaZulu-Natal
+ZA-LP,af,Limpopo
+ZA-LP,zu,Limpopo
+ZA-MP,af,Mpumalanga
+ZA-MP,zu,Mpumalanga
+ZA-NC,af,Noord-Kaap
+ZA-NC,zu,IKipi laseNyakatho
+ZA-NW,af,Noordwes
+ZA-NW,zu,Nyakatho-Ntshonalanga
+ZA-WC,af,Wes-Kaap
+ZA-WC,zu,IKipi laseNtshonalanga

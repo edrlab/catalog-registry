@@ -27,7 +27,6 @@ only the source file.
 import argparse
 import asyncio
 import json
-import re
 import sys
 import uuid
 from collections.abc import Sequence
@@ -35,57 +34,34 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.core.config import Settings
 from registry.core.errors import ValidationError
-from registry.core.schema_validation import build_schema_validator
+from registry.core.schema_validation import SEED_INPUT_SCHEMA, build_schema_validator
 from registry.db.models.catalog import (
     Catalog,
-    CatalogKindRow,
-    CatalogLanguageRow,
-    CatalogPublicationTypeRow,
-    CatalogSubdivisionRow,
 )
-from registry.db.models.link import Link
-from registry.db.models.reference import Subdivision
+from registry.db.models.reference import Country, Subdivision
 from registry.db.session import build_session_factory, create_database_engine
-from registry.domain.enums import (
-    CatalogColor,
-    CatalogKind,
-    CatalogStatus,
-    CoverageScope,
-    LinkRel,
-    PublicationType,
+from registry.domain.catalog_document import (
+    build_catalog_id,
+    build_consistency_problems,
+    build_identity_href,
+    build_iso_code_problems,
 )
-from registry.domain.language import normalise_language_tag
-from registry.domain.links import IDENTITY_RELS
+from registry.domain.enums import CatalogStatus
+from registry.repositories.catalog_documents import build_catalog, persist_catalog_contents
 from registry.repositories.catalog_repository import CatalogRepository
 
 #: Presence in `data/recommended.json` is the recommended flag.
 RECOMMENDED_AT_LAUNCH = True
 
-#: Derived from the published schemas by `scripts/generate_seed_schema.py`.
-SEED_INPUT_SCHEMA = "generated/seed-input.schema.json"
 
-
-def link_rels(link: dict[str, Any]) -> list[LinkRel]:
-    """The rels on *link* that this registry stores, in the order they were written.
-
-    A Readium link's ``rel`` is a string *or* an array (`link.schema.json`), and it may name
-    relations the registry has no column for. `start` is a real OPDS rel and not one of ours;
-    it is skipped rather than raising, exactly as the `add` path skips it. A link left with no
-    known rel contributes nothing, which is what `next` and `self` already do.
-    """
-    rel = link.get("rel")
-    written = rel if isinstance(rel, list) else [rel]
-    return [LinkRel(value) for value in written if value in set(LinkRel)]
-
-
-# ponytail: href match, and only the fallback now - a catalog with no `metadata.identifier`
-# that changes its feed URL inserts a second row instead of updating the first. The fix is to
-# give it an identifier, which `resolve_existing_catalog` then matches on.
+# Limit: the href match is only the fallback now, but a catalog with no `metadata.identifier`
+# whose file changes its feed URL inserts a second row instead of updating the first. The fix is
+# to give it an identifier, which `resolve_existing_catalog` then matches on.
 def resolve_identity_href(document: dict[str, Any]) -> str:
     """The externally owned URL this catalog is matched on across seed runs.
 
@@ -93,10 +69,8 @@ def resolve_identity_href(document: dict[str, Any]) -> str:
     is derived from. `resolve_existing_catalog` prefers the id when there is one, because the
     href belongs to the library and can change under us.
     """
-    for rel in IDENTITY_RELS:
-        for link in document["links"]:
-            if rel in link_rels(link):
-                return str(link["href"])
+    if (href := build_identity_href(document)) is not None:
+        return href
     raise ValidationError(
         f"{document['metadata']['title']} has neither a `catalog` nor a `shelf` link, "
         "so it has no stable identity to upsert on"
@@ -132,10 +106,10 @@ def resolve_catalog_id(document: dict[str, Any], identity_href: str) -> uuid.UUI
                 f"{document['metadata']['title']} has an identifier that is not a UUID: "
                 f"{identifier!r}"
             ) from error
-    # ponytail: derived from the href, so it inherits the href's instability - a catalog that
+    # Limit: derived from the href, so it inherits the href's instability: a catalog that
     # moves its feed URL gets a new id as well as a new row. Supplying `metadata.identifier`
     # is the escape hatch, and is what to reach for if that becomes a problem.
-    return uuid.uuid5(uuid.NAMESPACE_URL, identity_href)
+    return build_catalog_id(identity_href)
 
 
 async def resolve_existing_catalog(
@@ -149,85 +123,29 @@ async def resolve_existing_catalog(
     `metadata.identifier`. That is a hard failure that aborts the whole seed transaction, so
     the other catalogs in the file are not updated either.
 
-    It is also the point of the field. Hadrien assigned those identifiers so that "a library
-    moving pre-prod to prod" stays one row (the Project Gutenberg case); matching on them is
-    what finally delivers that. See ADR-038.
+    It is also the point of the field. The identifiers exist so that a library moving from
+    pre-production to production stays one row (the Project Gutenberg case); matching on them
+    is what delivers that.
 
     The href lookup remains, and remains the fallback, for the two cases where it is the only
     identity available: `data/libraries.json`, which supplies no identifiers, and a catalog
     already stored under a different id than the one the file now names, which keeps the id it
     has, since an upsert does not rewrite a primary key.
+
+    **A document without an identifier that misses on href is then looked up by its derived
+    id.** An editor can change a catalog's main link, and the row keeps the id derived from the
+    old one. The file still names the old href, so the href lookup misses, and inserting would
+    collide on `pk_catalogs` and abort the whole seed. Matching on the id updates that row
+    instead, and its link goes back to the file's.
     """
     repository = CatalogRepository(session)
-    if document["metadata"].get("identifier"):
-        by_id = await repository.fetch_catalog_by_identity_id(catalog_id)
-        if by_id is not None:
-            return by_id
-    return await repository.fetch_catalog_by_identity_href(identity_href)
-
-
-def build_catalog(document: dict[str, Any], catalog_id: uuid.UUID, *, recommended: bool) -> Catalog:
-    """*catalog_id* comes from `resolve_catalog_id`. The caller resolves it, because it is also
-    what `resolve_existing_catalog` looks the row up by."""
-    metadata = document["metadata"]
-
-    return Catalog(
-        id=catalog_id,
-        status=CatalogStatus.PUBLISHED,
-        recommended=recommended,
-        title=metadata["title"],
-        description=metadata.get("description"),
-        color=CatalogColor(metadata.get("color", CatalogColor.GRAY.value)),
-        # No case folding. ISO 3166-1 is officially uppercase and the input schema enforces it,
-        # so a lowercase code is rejected in validation rather than quietly corrected here.
-        country_code=metadata.get("country"),
-        city=metadata.get("city"),
-        # Absent means NULL, not `global`. Storing an undeclared coverage as
-        # `global` would assert worldwide reach on the catalog's behalf.
-        coverage=(CoverageScope(metadata["coverage"]) if metadata.get("coverage") else None),
-        # ck_catalogs_published_when_published: a published catalog must carry a publication date.
-        published_at=None,
-        kinds=[CatalogKindRow(kind=CatalogKind(value)) for value in metadata["kind"]],
-        publication_types=[
-            CatalogPublicationTypeRow(publication_type=PublicationType(value))
-            for value in metadata.get("publicationTypes", ())
-        ],
-        # Languages are the one field still folded, and deliberately: BCP-47 writes a language
-        # subtag lowercase and a region subtag uppercase, `Accept-Language` arrives lowercase, and
-        # the published pattern accepts either case because the spec does (R2). Country and
-        # subdivision codes are *not* folded; their patterns admit uppercase only.
-        languages=[
-            CatalogLanguageRow(language_tag=normalise_language_tag(value))
-            for value in metadata.get("supportedLanguages", ())
-        ],
-        # Uppercase already, for the same reason as `country_code` above.
-        subdivisions=[
-            CatalogSubdivisionRow(subdivision_code=value)
-            for value in metadata.get("subdivisions", ())
-        ],
-        # One row per rel: a link declaring `["catalog", "start"]` is two relations to the
-        # same href, and the wire contract carries a single rel per link.
-        links=[
-            Link(
-                href=link["href"],
-                media_type=link.get("type"),
-                rel=rel,
-                templated=bool(link.get("templated", False)),
-                title=link.get("title"),
-            )
-            for link in document["links"]
-            for rel in link_rels(link)
-        ],
-    )
-
-
-#: ISO 3166-1 alpha-2, and ISO 3166-2 as `CC-` plus one to three characters. The same shapes as
-#: `schema/catalog.schema.json`, matched with `fullmatch` because the schema's `^...$` is applied
-#: with `re.search`, and Python's `$` also matches before a trailing newline: `"BE\n"` passes it.
-ISO_CODE_SHAPES = {
-    "country": re.compile(r"[A-Z]{2}"),
-    "subdivisions": re.compile(r"[A-Z]{2}-[A-Z0-9]{1,3}"),
-}
+    named = bool(document["metadata"].get("identifier"))
+    if named and (by_id := await repository.fetch_catalog_by_identity_id(catalog_id)) is not None:
+        return by_id
+    by_href = await repository.fetch_catalog_by_identity_href(identity_href)
+    if by_href is not None or named:
+        return by_href
+    return await repository.fetch_catalog_by_identity_id(catalog_id)
 
 
 def assert_iso_codes_are_uppercase(document: dict[str, Any]) -> None:
@@ -253,20 +171,7 @@ def assert_iso_codes_are_uppercase(document: dict[str, Any]) -> None:
     writes a region subtag uppercase, so `normalise_language_tag` folds those on ingest instead.
     """
     metadata = document["metadata"]
-    candidates: list[tuple[str, Any]] = []
-    if (country := metadata.get("country")) is not None:
-        candidates.append(("country", country))
-    candidates.extend(("subdivisions", code) for code in metadata.get("subdivisions") or ())
-
-    problems = []
-    for field, value in candidates:
-        shape = ISO_CODE_SHAPES[field]
-        if isinstance(value, str) and shape.fullmatch(value):
-            continue
-        if isinstance(value, str) and shape.fullmatch(value.upper()):
-            problems.append(f"{field} {value!r} should be {value.upper()!r}")
-        else:
-            problems.append(f"{field} {value!r} is not a well-formed ISO code")
+    problems = [problem.message for problem in build_iso_code_problems(metadata)]
 
     if problems:
         raise ValidationError(
@@ -274,6 +179,17 @@ def assert_iso_codes_are_uppercase(document: dict[str, Any]) -> None:
             "uppercase by specification and are enforced rather than converted, so fix them at "
             "the source."
         )
+
+
+def assert_document_is_consistent(document: dict[str, Any]) -> None:
+    """Refuse what the schema cannot see and the database would refuse by constraint name: a
+    repeated kind, language, publication type or subdivision, a templated link that is not
+    `search`, a repeated link, or `catalog` and `shelf` links sharing an href. Raises
+    `ValidationError`. The same checks the admin API reports field by field
+    (`build_consistency_problems`)."""
+    problems = [problem.message for problem in build_consistency_problems(document)]
+    if problems:
+        raise ValidationError(f"{document['metadata']['title']} is invalid: {'; '.join(problems)}.")
 
 
 async def import_catalog_document(
@@ -299,13 +215,14 @@ async def import_catalog_document(
     # Imported here, not at module level: only the write path needs it.
     from sqlalchemy import func  # noqa: PLC0415
 
-    # ponytail: created_at doubles as the sort key, so a row's position is spelled as a time
+    # Limit: created_at doubles as the sort key, so a row's position is spelled as a time
     # it was not created at. An explicit ordering column is the upgrade if the feed ever
     # needs an order the seed file cannot express.
     if ordered_at is None:
         ordered_at = datetime.now(UTC)
     assert_iso_codes_are_uppercase(document)
     identity_href = resolve_identity_href(document)
+    assert_document_is_consistent(document)
     catalog_id = resolve_catalog_id(document, identity_href)
     existing = await resolve_existing_catalog(session, document, identity_href, catalog_id)
     built = build_catalog(document, catalog_id, recommended=recommended)
@@ -316,24 +233,11 @@ async def import_catalog_document(
         session.add(built)
         return built, True
 
-    # Replace the child collections wholesale rather than diffing them: the source document
-    # is the whole truth for this catalog, and a diff is more code for the same result.
-    for model, column in (
-        (CatalogKindRow, CatalogKindRow.catalog_id),
-        (CatalogPublicationTypeRow, CatalogPublicationTypeRow.catalog_id),
-        (CatalogLanguageRow, CatalogLanguageRow.catalog_id),
-        (CatalogSubdivisionRow, CatalogSubdivisionRow.catalog_id),
-        (Link, Link.catalog_id),
-    ):
-        await session.execute(delete(model).where(column == existing.id))
-
-    existing.title = built.title
-    existing.description = built.description
-    existing.color = built.color
-    existing.country_code = built.country_code
-    existing.city = built.city
-    existing.coverage = built.coverage
+    await persist_catalog_contents(session, existing, built)
     existing.recommended = recommended
+    # The admin API's optimistic-concurrency check compares this, so an editor's open page
+    # must see a re-import as a change rather than overwrite it.
+    existing.version = Catalog.version + 1
     # ck_catalogs_published_when_published. A row that was a draft has no publication date,
     # and publishing it without one fails the constraint at commit.
     if existing.published_at is None:
@@ -343,11 +247,6 @@ async def import_catalog_document(
     if existing.status is CatalogStatus.DRAFT:
         existing.status = built.status
     existing.created_at = ordered_at
-    existing.kinds = built.kinds
-    existing.publication_types = built.publication_types
-    existing.languages = built.languages
-    existing.subdivisions = built.subdivisions
-    existing.links = built.links
     return existing, False
 
 
@@ -398,39 +297,67 @@ def assert_identities_are_unique(feed: dict[str, Any], *, source: str) -> None:
         by_id[catalog_id] = title
 
 
-async def assert_subdivisions_are_known(
+async def assert_places_are_known(
     session: AsyncSession, feed: dict[str, Any], *, source: str
 ) -> None:
-    """Refuse codes absent from `subdivisions` with a message. Raises `ValidationError`.
+    """Refuse unknown country and subdivision codes, and subdivisions outside their catalog's
+    country, with a message. Raises `ValidationError`.
 
     `subdivisions` is **not** a full copy of ISO 3166-2. It holds only the codes some catalog
     references, added per data migration. So a valid code the table has never heard of fails on
     `fk_catalog_subdivisions_subdivision_code_subdivisions` at flush time, as a raw
     `IntegrityError` that names a constraint rather than the code, the catalog or the remedy.
     `make add --subdivision NL-ZH` is the easiest way to hit it; the flag's own help says
-    "ISO 3166-2", which is a promise five rows cannot keep.
+    "ISO 3166-2", which is a promise five rows cannot keep. A well-formed country the
+    `countries` table lacks (`XK`) fails the same way on `fk_catalogs_country_code_countries`.
+
+    A subdivision must also belong to its catalog's country, the rule the admin API applies:
+    `FR` with `BE-WAL` contradicts itself, and subdivisions without a country have none to
+    belong to.
 
     One query for the whole document, before anything is written, listing every unknown code at
     once, so an operator fixes one migration rather than rediscovering this per catalog.
     """
-    requested = {
-        code
-        for document in feed["catalogs"]
-        for code in document["metadata"].get("subdivisions") or ()
-    }
-    if not requested:
+    metadata = [document["metadata"] for document in feed["catalogs"]]
+    countries = {item["country"] for item in metadata if item.get("country")}
+    subdivisions = {code for item in metadata for code in item.get("subdivisions") or ()}
+    if not countries and not subdivisions:
         return
 
-    known = set(
-        await session.scalars(select(Subdivision.code).where(Subdivision.code.in_(requested)))
+    # Country and subdivision codes never coincide (`BE` against `BE-WAL`), so one map holds
+    # both: each known code to the country it is in.
+    statement = union_all(
+        select(Country.alpha2, Country.alpha2).where(Country.alpha2.in_(countries)),
+        select(Subdivision.code, Subdivision.country_alpha2).where(
+            Subdivision.code.in_(subdivisions)
+        ),
     )
-    if unknown := sorted(requested - known):
+    known = dict((await session.execute(statement)).tuples().all())
+
+    if unknown := [
+        f"{item['title']} ({item['country']})"
+        for item in metadata
+        if item.get("country") and item["country"] not in known
+    ]:
+        raise ValidationError(
+            f"{source} names a country absent from the `countries` table, which holds the "
+            f"ISO 3166-1 codes: {', '.join(unknown)}."
+        )
+    if unknown := sorted(subdivisions - known.keys()):
         raise ValidationError(
             f"{source} references {', '.join(unknown)}, absent from the `subdivisions` table. "
             "That table holds only the ISO 3166-2 codes some catalog already uses, so a valid "
             "code can still be missing; add it in a migration, as `b41f7c9ade52` did for "
             "FR-IDF and CH-VS."
         )
+    for item in metadata:
+        country = item.get("country")
+        if outside := [c for c in item.get("subdivisions") or () if known[c] != country]:
+            raise ValidationError(
+                f"{item['title']} names {', '.join(outside)}, outside its country "
+                f"({country or 'none given'}). A subdivision must belong to the catalog's "
+                "`country`."
+            )
 
 
 async def import_feed_document(
@@ -452,7 +379,7 @@ async def import_feed_document(
         raise ValidationError(f"{source} is not valid seed input. {detail}")
 
     assert_identities_are_unique(feed, source=source)
-    await assert_subdivisions_are_known(session, feed, source=source)
+    await assert_places_are_known(session, feed, source=source)
 
     # One clock reading for the run: each catalog is written a millisecond earlier than the
     # one before it, so position in the file survives as `created_at` order. Re-read per
@@ -515,7 +442,7 @@ async def seed_from_file(
 def build_seed_parser() -> argparse.ArgumentParser:
     """Separate from `main` so the flags are testable without a database.
 
-    `--no-recommended` is the one that matters: getting it wrong seeds Hadrien's library data
+    `--no-recommended` is the one that matters: getting it wrong seeds `data/libraries.json`
     straight into the top-level feed, which is silent and wrong rather than loud and wrong.
     """
     parser = argparse.ArgumentParser(

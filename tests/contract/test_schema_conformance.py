@@ -1,11 +1,11 @@
 """The response body, validated against the repository's own JSON Schemas.
 
-Hadrien's stated use for those schemas (2026-08-18). Two things this catches that
+That is what the schemas are for. Two things this catches that
 nothing else does:
 
 * `additionalProperties: false` on `metadata`, an internal column that reaches the response
   fails here immediately. The no-internal-fields rule, made executable.
-* Schema drift. Hadrien edits the schemas independently; when he tightens a rule this goes
+* Schema drift. The schemas are edited independently of the code; when a rule tightens this goes
   red on the next run, so the service learns from CI rather than from a client bug report.
 """
 
@@ -59,9 +59,9 @@ async def test_the_rendered_identifier_is_the_catalog_id(
     ever disagree, a client following `self` lands on a catalog whose identifier is not the
     one it just read.
 
-    The hand-assigned values in `data/recommended.json` **are** what comes back, which is the
-    point of ADR-038 and is asserted here against the file itself. Under ADR-037 they were read
-    past and discarded, so an identifier Hadrien wrote down resolved to nothing.
+    The hand-assigned values in `data/recommended.json` **are** what comes back: the catalog id is
+    derived from the document, and this asserts it against the file itself. An earlier design
+    read them past and discarded them, so an identifier written in the file resolved to nothing.
     """
     response = await client.get("/")
 
@@ -82,10 +82,10 @@ async def test_the_rendered_identifier_is_the_catalog_id(
 async def test_a_not_recommended_catalog_validates_against_catalog_schema(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """R7 for `GET /catalogs/{id}`, which no contract test reached before.
+    """Schema validation for `GET /catalogs/{id}`, which no contract test reached before.
 
     Only the catalogs *inside the feed* were validated. A not-recommended catalog appears in no
-    feed, so after ADR-038 an entire data set (`data/libraries.json`) is rendered exclusively by
+    feed, so an entire data set (`data/libraries.json`) is rendered exclusively by
     a path nothing schema-checked, including the `self` link this endpoint synthesises, which
     `catalog.schema.json` requires via its `contains` constraint.
     """

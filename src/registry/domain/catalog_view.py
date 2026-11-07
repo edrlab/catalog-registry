@@ -1,11 +1,11 @@
 """A catalog as the public reads hand it to the renderer: plain values, no database in sight.
 
-The feed, one catalog and search each fetch a page of catalogs in one statement (ADR-060,
-ADR-062). Turning each row into an instrumented SQLAlchemy object cost about nine tenths of the
-Python time of a 1,000 catalog feed (measured with a profiler): a catalog and a row object per kind,
-language, subdivision and link, each carrying change tracking nobody uses on a read. These are
-slotted tuples with the same attribute names, so the renderer and the feed's language sort read
-them exactly as they read the ORM objects the importers load.
+The feed, one catalog and search each fetch a page of catalogs in one statement. Turning each row
+into an instrumented SQLAlchemy object cost about nine tenths of the Python time of a 1,000 catalog
+feed (measured with a profiler): a catalog and a row object per kind, language, subdivision and
+link, each carrying change tracking nobody uses on a read. These are slotted tuples with the same
+attribute names, so the renderer and the feed's language sort read them exactly as they read the
+ORM objects the importers load.
 
 `CatalogLike` and the `...Like` protocols are what the renderer needs, so both kinds fit.
 """
@@ -60,7 +60,7 @@ class LinkLike(Protocol):
 
 class CatalogLike(Protocol):
     """What `render_catalog` and the feed's language sort read. `created_at` is internal: it is
-    never rendered (R3), only used to order catalogs that rank equally."""
+    never rendered, only used to order catalogs that rank equally."""
 
     @property
     def id(self) -> uuid.UUID: ...

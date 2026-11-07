@@ -17,6 +17,8 @@ from registry.core.constants import HEADER_REQUEST_ID, PROBLEM_JSON_MEDIA_TYPE
 from registry.core.errors import (
     AdminUnavailableError,
     AuthenticationError,
+    ChecksBusyError,
+    FieldValidationError,
     PermissionDeniedError,
     RegistryError,
 )
@@ -92,8 +94,11 @@ async def handle_registry_error(_request: Request, exc: Exception) -> JSONRespon
         title=exc.title,
         detail=str(exc),
         problem_type=exc.problem_type,
+        errors=exc.errors if isinstance(exc, FieldValidationError) else None,
         instance=build_problem_instance(_request),
     )
+    if isinstance(exc, ChecksBusyError):
+        response.headers["retry-after"] = str(exc.retry_after)
     if isinstance(exc, AuthenticationError):
         # RFC 9110 §15.5.2: a 401 must say how to authenticate.
         response.headers["www-authenticate"] = 'Registry-Service-Key realm="registry-admin"'

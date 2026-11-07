@@ -11,9 +11,9 @@ import uuid
 
 import pytest
 
-from registry.cli.seed import SEED_INPUT_SCHEMA, resolve_catalog_id, resolve_identity_href
+from registry.cli.seed import resolve_catalog_id, resolve_identity_href
 from registry.core.errors import ValidationError
-from registry.core.schema_validation import build_schema_validator
+from registry.core.schema_validation import SEED_INPUT_SCHEMA, build_schema_validator
 
 pytestmark = pytest.mark.unit
 

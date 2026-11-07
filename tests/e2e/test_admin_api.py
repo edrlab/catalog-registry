@@ -213,6 +213,13 @@ async def test_a_401_says_how_to_authenticate(admin_client: AsyncClient) -> None
     assert response.headers["www-authenticate"].startswith("Registry-Service-Key")
 
 
+NO_CONFLICT_PATHS = {
+    "/admin/feed-checks",
+    "/admin/countries/{code}/subdivision-types",
+    "/admin/me",
+}
+
+
 async def test_the_openapi_document_describes_every_admin_problem(
     admin_client: AsyncClient,
 ) -> None:
@@ -222,7 +229,12 @@ async def test_the_openapi_document_describes_every_admin_problem(
         if not path.startswith("/admin"):
             continue
         for method, operation in operations.items():
-            expected = ("401", "403", "500", "503") + (("409",) if method != "get" else ())
+            # Every catalog or user change can conflict. A feed check writes nothing (it has 429),
+            # and a country's types are last-write-wins.
+            writes = method != "get" and path not in NO_CONFLICT_PATHS
+            expected = ("401", "403", "500", "503") + (("409",) if writes else ())
+            if path == "/admin/feed-checks":
+                expected += ("429",)
             for status in expected:
                 content = operation["responses"][status]["content"]
                 assert content["application/problem+json"]["schema"]["$ref"].endswith(
@@ -350,15 +362,22 @@ async def test_a_first_visit_creates_a_viewer(
     response = await admin_client.get("/admin/me", headers=admin_headers("New.Person@EDRLab.org"))
 
     assert response.status_code == 200
-    assert response.json() == {
+    stored = (
+        await db_session.execute(text("SELECT id::text, role::text, last_seen_at FROM actors"))
+    ).one()
+    body = response.json()
+    assert {key: body[key] for key in ("id", "email", "name", "name_is_set", "role")} == {
+        "id": stored[0],
         "email": "new.person@edrlab.org",
         "name": "new.person",
+        "name_is_set": False,
         "role": "viewer",
-        "permissions": ["backoffice.view", "catalog.view", "country.view"],
     }
-    stored = (await db_session.execute(text("SELECT role::text, last_seen_at FROM actors"))).one()
-    assert stored[0] == "viewer"
-    assert stored[1] is not None
+    assert body["permissions"] == ["backoffice.view", "catalog.view", "country.view"]
+    assert body["is_active"] is True
+    assert body["last_seen_at"] is None  # a first visit has no previous one
+    assert stored[1] == "viewer"
+    assert stored[2] is not None
 
 
 async def test_the_same_person_in_another_case_is_the_same_actor(
@@ -658,7 +677,7 @@ async def test_the_list_is_one_statement_whatever_its_size(
     db_connection: AsyncConnection,
     searchable_catalogs: None,
 ) -> None:
-    """R4. The login is one more statement; the list itself must not grow with the rows."""
+    """One statement per read, plus the login; the count does not grow with the rows."""
     await become(db_session, "count@edrlab.org", "viewer")
     seen: list[str] = []
 

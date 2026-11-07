@@ -1,5 +1,5 @@
 name: ci-lint
-on: [pull_request, push, workflow_call]
+on: [pull_request, push]
 
 # Least privilege: these jobs read the repository and nothing else.
 # Actions are pinned by commit digest, not by tag: a tag can be moved to point at
@@ -15,7 +15,8 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
         with:
           enable-cache: true
-      - run: uv sync --frozen
+      # --locked, not --frozen: a uv.lock that no longer matches pyproject.toml fails here.
+      - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run mypy src/
+      - run: uv run mypy src tests scripts

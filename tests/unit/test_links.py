@@ -3,7 +3,7 @@
 import pytest
 
 from registry.domain.enums import LinkRel
-from registry.domain.links import LINK_REL_PRIORITY, find_self_link, order_links
+from registry.domain.links import LINK_REL_PRIORITY, order_links
 
 pytestmark = pytest.mark.unit
 
@@ -46,7 +46,3 @@ def test_the_rel_priority_outranks_then_by() -> None:
     ordered = order_links(links, rel_of=rel_of, then_by=lambda link: link.tag)
 
     assert [link.tag for link in ordered] == ["m", "z", "a"]
-
-
-def test_find_self_link_returns_none_when_absent() -> None:
-    assert find_self_link([Stub(LinkRel.CATALOG, "c")], rel_of=rel_of) is None

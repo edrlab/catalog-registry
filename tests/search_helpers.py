@@ -41,7 +41,7 @@ ALL_TITLES = RECOMMENDED_TITLES + LIBRARY_TITLES
 
 
 def assert_valid_feed(body: dict[str, Any]) -> None:
-    """R7: the real response body, against the repository's own schema."""
+    """The real response body, against the repository's own schema."""
     errors = sorted(build_schema_validator("feed.schema.json").iter_errors(body), key=str)
     assert not errors, [error.message for error in errors]
 

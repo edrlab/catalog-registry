@@ -7,10 +7,12 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from registry.api.responses import OPDSResponse
 from registry.cli.seed import import_catalog_document
 from registry.core.constants import OPDS_CATALOG_MEDIA_TYPE, PROBLEM_JSON_MEDIA_TYPE
 from registry.db.models.catalog import Catalog
 from registry.domain.enums import CatalogStatus
+from registry.schemas.catalog import CatalogResponse
 
 pytestmark = pytest.mark.e2e
 
@@ -73,7 +75,7 @@ async def test_a_not_recommended_catalog_is_readable_at_its_derived_id(
     """The `data/libraries.json` case, end to end and through HTTP.
 
     Absent from the feed, present at `/catalogs/{id}`, and the id is computable from the
-    catalog's `catalog` href without asking the database, which is the only reason Hadrien can
+    catalog's `catalog` href without asking the database, which is the only way a client can
     fetch one of these at all.
     """
     href = "https://www.lirtuel.be/v1/home.opds2"
@@ -137,3 +139,27 @@ async def test_an_unpublished_or_archived_catalog_is_in_no_list(
 
     assert title not in [c["metadata"]["title"] for c in feed["catalogs"]]
     assert title not in [c["metadata"]["title"] for c in found["catalogs"]]
+
+
+async def test_head_on_a_catalog_answers_like_get(
+    client: AsyncClient, seeded_catalogs: int
+) -> None:
+    feed = (await client.get("/", headers={"Accept-Language": "*"})).json()
+    href = feed["catalogs"][0]["links"][0]["href"]
+    get = await client.get(href)
+    head = await client.head(href)
+
+    assert head.status_code == 200
+    assert head.content == b""
+    assert head.headers["content-type"] == get.headers["content-type"]
+    dumped = CatalogResponse.model_validate(get.json()).model_dump(
+        mode="json", by_alias=True, exclude_none=True
+    )
+    assert get.content == OPDSResponse(content=dumped).body  # the model in OpenAPI still matches
+
+
+async def test_head_on_an_unknown_id_returns_404(client: AsyncClient) -> None:
+    response = await client.head(f"/catalogs/{uuid.uuid4()}")
+
+    assert response.status_code == 404
+    assert response.content == b""

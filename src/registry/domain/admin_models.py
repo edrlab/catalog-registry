@@ -7,8 +7,7 @@ from typing import Final
 
 from registry.domain.enums import ActorRole, CatalogStatus
 
-#: `sort` values of the catalog list, and the page-size cap.
-SORT_VALUES: Final = ("name", "-name", "kind", "status")
+#: The page-size cap of the catalog list.
 MAX_PER_PAGE: Final = 100
 #: A page number that would overflow the database's 64-bit offset is a 422, not a 500.
 MAX_PAGE: Final = 100_000
@@ -23,6 +22,12 @@ class AdminActor:
     name: str | None
     role: ActorRole
     is_active: bool
+    #: For the person's own profile. Absent where an actor is built without a login.
+    created_at: datetime.datetime | None = None
+    #: The request before this one: the registry sees requests, not sign-ins.
+    previous_seen_at: datetime.datetime | None = None
+    identity_issuer: str | None = None
+    identity_subject: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,3 +165,16 @@ class AdminCountryDetail:
     recommended: int
     #: Published catalogs per kind; only kinds in use, the service fills the rest with 0.
     by_kind: dict[str, int]
+
+
+@dataclass(frozen=True, slots=True)
+class AdminUser:
+    """One person in `actors`, as the users page shows them."""
+
+    id: str
+    email: str
+    name: str | None
+    role: ActorRole
+    is_active: bool
+    last_seen_at: datetime.datetime | None
+    created_at: datetime.datetime
