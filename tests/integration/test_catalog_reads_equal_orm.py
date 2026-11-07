@@ -1,4 +1,4 @@
-"""The one-statement reads give exactly what the ORM load gives (ADR-062).
+"""The one-statement reads give exactly what the ORM load gives.
 
 `fetch_recommended_catalogs` and `fetch_catalog_by_id` return fresh transient objects built from
 one row each; the importers' `fetch_catalog_by_identity_id` is the unchanged ORM load (attached,
@@ -84,7 +84,11 @@ async def add_subdivisions(session: AsyncSession, codes: list[str]) -> None:
     """Reference rows for the test's transaction only (the seeded table holds a handful)."""
     for code in codes:
         await session.execute(
-            text("INSERT INTO subdivisions (code, country_alpha2) VALUES (:c, 'FR')"), {"c": code}
+            text(
+                "INSERT INTO subdivisions (code, country_alpha2) VALUES (:c, 'FR') "
+                "ON CONFLICT DO NOTHING"
+            ),
+            {"c": code},
         )
 
 

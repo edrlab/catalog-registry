@@ -1,4 +1,4 @@
-"""Helpers shared by the suites of the feed and `GET /catalogs/{id}` reads (ADR-062).
+"""Helpers shared by the suites of the feed and `GET /catalogs/{id}` reads.
 
 Those two reads run on their own pool (`build_read_engine(settings, READ_CONNECTION_SETTINGS)`),
 one statement each. Tests of that pool need rows another connection can see, so the rows here are

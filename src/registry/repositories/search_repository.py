@@ -1,13 +1,13 @@
-"""Catalog search: one statement for the matches, the page and every child of it (ADR-051, ADR-060).
+"""Catalog search: one statement for the matches, the page and every child of it.
 
 The statement is the tested search SQL with its last SELECT widened: instead of returning ids for a
 second query to load, it returns each catalog's own columns, its kinds, publication types, languages
 and subdivisions as arrays, and its links as one JSON array. One statement is one round trip to the
 database whatever the page size, which is what keeps search under 100 ms when the database is a
-region away (docs/search.md). It is still no N+1 (R4): there is no per-row query at all.
+region away (docs/search.md). It is still no N+1: there is no per-row query at all.
 
 Rows become plain `CatalogView` values with the attribute names `render_catalog` already
-reads, so the renderer, and with it the whitelist projection (R3), is untouched. Parameters are
+reads, so the renderer, and with it the whitelist projection, is untouched. Parameters are
 bound with explicit array types because asyncpg will not infer them, and the `CAST`s make the
 same types explicit to PostgreSQL.
 """
@@ -30,9 +30,9 @@ from registry.repositories.protocols import SearchPage
 
 #: `ts_rank` weights in PostgreSQL's order {D, C, B, A}. Labels are fixed per field when the
 #: document is built (A title, B city, C country names and subdivision names, D unused), so the
-#: ranking policy lives here and changes with no rebuild (ADR-052). Current: title, then city,
-#: then countries and subdivisions (Hadrien, 2026-10-14; before that country was B and the city
-#: shared C with the subdivisions). Moving a field to another label does need a rebuild.
+#: ranking policy lives here and changes with no rebuild. Current: title, then city, then
+#: countries and subdivisions (since 2026-10-14; before that country was B and the city shared C
+#: with the subdivisions). Moving a field to another label does need a rebuild.
 RANK_WEIGHTS: Final = (0.1, 0.2, 0.4, 1.0)
 
 #: How alike a typed word and a stored one must be for the trigram half to match (pg_trgm
@@ -43,7 +43,7 @@ RANK_WEIGHTS: Final = (0.1, 0.2, 0.4, 1.0)
 #: stays untouched and nothing reaches other connections.
 WORD_SIMILARITY_THRESHOLD: Final = 0.5
 
-#: The statement timeout that turns a runaway search into a 503 (ADR-046, ADR-058).
+#: The statement timeout that turns a runaway search into a 503.
 SEARCH_STATEMENT_TIMEOUT_MS: Final = 1000
 
 #: Sent once per connection, in the startup packet, to the search pool only (`build_read_engine`).
@@ -53,9 +53,6 @@ SEARCH_CONNECTION_SETTINGS: Final = {
     "default_transaction_read_only": "on",
     "pg_trgm.word_similarity_threshold": str(WORD_SIMILARITY_THRESHOLD),
 }
-
-#: SQLSTATE `query_canceled`, what `statement_timeout` raises.
-_QUERY_CANCELED: Final = "57014"
 
 _SEARCH_SQL: Final = (
     """

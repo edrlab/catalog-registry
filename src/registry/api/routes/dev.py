@@ -1,4 +1,4 @@
-"""The console: a page to try search and the feed as the real reader apps would (ADR-063).
+"""The console: a page to try search and the feed as the real reader apps would.
 
 Mounted in every environment (see `create_app`). It reads only public data, through paths the
 registry already serves, and one console request makes exactly one request to the app, so it adds
@@ -8,7 +8,7 @@ A browser cannot set `Accept-Encoding` or `User-Agent`, so a plain page cannot b
 asks the server to call the app's own ASGI stack, in-process, with a client's exact headers.
 `/dev/simulate` has no network and no URL to follow: the path is checked against a short
 allow-list, and the call goes through the real middleware, so compression behaves as it would.
-Those inner calls are marked so the client log (ADR-061) does not count the console as a reader.
+Those inner calls are marked so the client log does not count the console as a reader.
 
 Reading a library's own feed (`/dev/fetch`) makes the server request a URL a visitor chose, so it
 lives in `dev_fetch` and is mounted only when `REGISTRY_ENVIRONMENT=local`.

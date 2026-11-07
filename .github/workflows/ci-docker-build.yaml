@@ -7,18 +7,10 @@ on: [pull_request, push]
 permissions:
   contents: read
 
+# Lint, tests and schemas run in their own workflows on the same events; calling them from here as
+# well ran the Postgres suite twice per push.
 jobs:
-  # Reused as reusable workflows so a red lint/test/schema run blocks the build check too,
-  # same dependency shape the old publish-image.yaml used before Docker Hub push was removed.
-  lint:
-    uses: ./.github/workflows/ci-lint.yaml
-  test:
-    uses: ./.github/workflows/ci-test.yaml
-  schema:
-    uses: ./.github/workflows/ci-schema.yaml
-
   docker-build:
-    needs: [lint, test, schema]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

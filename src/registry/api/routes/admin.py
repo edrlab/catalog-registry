@@ -6,10 +6,11 @@ action in the service, where the action is known.
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import StringConstraints
 
 from registry.api.admin_dependencies import require_permission
+from registry.core.errors import ChecksBusyError
 from registry.domain.admin_models import (
     MAX_PAGE,
     MAX_PER_PAGE,
@@ -17,23 +18,43 @@ from registry.domain.admin_models import (
     AdminActor,
     AdminCatalogQuery,
 )
-from registry.domain.enums import CatalogKind, CatalogStatus, CoverageScope, PublicationType
+from registry.domain.enums import (
+    ActorRole,
+    CatalogKind,
+    CatalogStatus,
+    CoverageScope,
+    PublicationType,
+)
 from registry.schemas.admin import (
+    CatalogCreateRequest,
     CatalogDetail,
     CatalogListResponse,
+    CatalogUpdateRequest,
     CountryDetail,
     CountryListResponse,
+    FeedCheckRequest,
+    FeedCheckResponse,
     FilterOptionsResponse,
     MeResponse,
+    MeUpdateRequest,
     ProblemDocument,
     RecommendedRequest,
     StatsResponse,
+    SubdivisionTypesRequest,
     TransitionRequest,
     TransitionResponse,
+    UserItem,
+    UserListResponse,
+    UserRoleRequest,
 )
 from registry.services.admin_service import (
+    apply_admin_catalog_creation,
+    apply_admin_catalog_deletion,
+    apply_admin_catalog_edit,
+    apply_admin_name,
     apply_admin_recommendation,
     apply_admin_transition,
+    apply_country_subdivision_types,
     resolve_admin_catalog_detail,
     resolve_admin_catalog_list,
     resolve_admin_country_detail,
@@ -41,6 +62,12 @@ from registry.services.admin_service import (
     resolve_admin_me,
     resolve_admin_stats,
     resolve_filter_options,
+)
+from registry.services.feed_check_service import resolve_feed_check
+from registry.services.user_service import (
+    apply_user_activation,
+    apply_user_role_change,
+    resolve_admin_users,
 )
 
 PROBLEM_CONTENT = {
@@ -76,6 +103,20 @@ async def read_admin_me(
     actor: Annotated[AdminActor, Depends(require_permission("backoffice.view"))],
 ) -> MeResponse:
     return resolve_admin_me(actor)
+
+
+@router.patch(
+    "/me",
+    summary="Change your own display name",
+    responses={422: problem_response("The name is invalid; `errors` names it.")},
+)
+async def update_admin_me(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("backoffice.view"))],
+    body: MeUpdateRequest,
+) -> MeResponse:
+    async with request.app.state.open_actor_store() as store:
+        return await apply_admin_name(store, actor, body.name)
 
 
 @router.get("/stats", summary="Catalog counts by status")
@@ -242,3 +283,205 @@ async def replace_admin_catalog_recommended(
         return await resolve_admin_catalog_detail(
             reader, actor, normalised, base_url=request.app.state.settings.base_url
         )
+
+
+INVALID_BODY = "The body is invalid; `errors` names each field."
+
+
+@router.post(
+    "/catalogs",
+    status_code=201,
+    summary="Add a catalog, as a draft or published",
+    responses={
+        409: problem_response(
+            "`duplicate-catalog`: another catalog already has this catalog or shelf link, or was "
+            "created from this address and now uses another one."
+        ),
+        422: problem_response(INVALID_BODY),
+    },
+)
+async def create_admin_catalog(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    body: CatalogCreateRequest,
+) -> CatalogDetail:
+    async with request.app.state.open_admin_writer() as writer:
+        catalog_id = await apply_admin_catalog_creation(
+            writer,
+            actor,
+            body.model_dump(mode="json", exclude={"publish"}),
+            publish=body.publish,
+        )
+    async with request.app.state.open_admin_reader() as reader:
+        return await resolve_admin_catalog_detail(
+            reader, actor, catalog_id, base_url=request.app.state.settings.base_url
+        )
+
+
+@router.patch(
+    "/catalogs/{catalog_id}",
+    summary="Change some fields of a catalog",
+    responses={
+        404: problem_response(NOT_FOUND),
+        409: problem_response(
+            "`version-conflict`: it changed since it was read. "
+            "`archived-read-only`: an archived catalog cannot be edited. "
+            "`duplicate-catalog`: another catalog already has this catalog or shelf link, or was "
+            "created from this address and now uses another one."
+        ),
+        422: problem_response(INVALID_BODY),
+    },
+)
+async def update_admin_catalog(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    catalog_id: str,
+    body: CatalogUpdateRequest,
+) -> CatalogDetail:
+    async with request.app.state.open_admin_writer() as writer:
+        normalised = await apply_admin_catalog_edit(
+            writer,
+            actor,
+            catalog_id,
+            version=body.version,
+            changes=body.model_dump(mode="json", exclude_unset=True, exclude={"version"}),
+        )
+    async with request.app.state.open_admin_reader() as reader:
+        return await resolve_admin_catalog_detail(
+            reader, actor, normalised, base_url=request.app.state.settings.base_url
+        )
+
+
+@router.delete(
+    "/catalogs/{catalog_id}",
+    status_code=204,
+    summary="Delete a draft",
+    responses={
+        404: problem_response(NOT_FOUND),
+        409: problem_response(
+            "`version-conflict`: it changed since it was read. "
+            "`not-deletable`: only a draft can be deleted."
+        ),
+        422: problem_response("`version` is missing or invalid."),
+    },
+)
+async def delete_admin_catalog(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    catalog_id: str,
+    # A query string is text, so not `SeenVersion`, whose strictness is for JSON bodies.
+    version: Annotated[int, Query(ge=1)],
+) -> Response:
+    async with request.app.state.open_admin_writer() as writer:
+        await apply_admin_catalog_deletion(writer, actor, catalog_id, version=version)
+    return Response(status_code=204)
+
+
+@router.post(
+    "/feed-checks",
+    summary="Check a feed or web page address and say what a catalog would get from it",
+    responses={
+        404: problem_response(NOT_FOUND),
+        422: problem_response(INVALID_BODY),
+        429: problem_response(
+            "`checks-busy`: the maximum of checks is running; try again after `Retry-After`."
+        ),
+    },
+)
+async def create_admin_feed_check(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    body: FeedCheckRequest,
+) -> FeedCheckResponse:
+    """One synchronous check, nothing stored."""
+    slots = request.app.state.feed_check_slots
+    if slots.locked():
+        raise ChecksBusyError("Too many feed checks are running. Try again in a few seconds.")
+    async with (
+        slots,
+        request.app.state.open_admin_reader() as reader,
+        request.app.state.open_feed_fetcher() as fetcher,
+    ):
+        return await resolve_feed_check(
+            fetcher, reader, actor, body.url, catalog_id=body.catalog_id
+        )
+
+
+USER_NOT_FOUND = "No user with this id, or the id is not a UUID (type `user-not-found`)."
+USER_CONFLICT = "`self-change`: not on yourself. `last-admin`: it would leave no active admin."
+
+
+@router.get("/users", summary="Everyone with access to the back office, and what you may do")
+async def read_admin_users(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("backoffice.view"))],
+) -> UserListResponse:
+    async with request.app.state.open_actor_store() as store:
+        return await resolve_admin_users(store, actor)
+
+
+@router.patch(
+    "/users/{user_id}",
+    summary="Change someone's role",
+    responses={
+        404: problem_response(USER_NOT_FOUND),
+        409: problem_response(USER_CONFLICT),
+        422: problem_response(INVALID_BODY),
+    },
+)
+async def update_admin_user(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("user.change_role"))],
+    user_id: str,
+    body: UserRoleRequest,
+) -> UserItem:
+    async with request.app.state.open_actor_store() as store:
+        return await apply_user_role_change(store, actor, user_id, ActorRole(body.role))
+
+
+@router.post(
+    "/users/{user_id}/deactivate",
+    summary="Remove someone's access",
+    responses={404: problem_response(USER_NOT_FOUND), 409: problem_response(USER_CONFLICT)},
+)
+async def create_admin_user_deactivation(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("user.deactivate"))],
+    user_id: str,
+) -> UserItem:
+    async with request.app.state.open_actor_store() as store:
+        return await apply_user_activation(store, actor, user_id, active=False)
+
+
+@router.post(
+    "/users/{user_id}/reactivate",
+    summary="Give someone their access back",
+    responses={404: problem_response(USER_NOT_FOUND), 409: problem_response(USER_CONFLICT)},
+)
+async def create_admin_user_reactivation(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("user.deactivate"))],
+    user_id: str,
+) -> UserItem:
+    async with request.app.state.open_actor_store() as store:
+        return await apply_user_activation(store, actor, user_id, active=True)
+
+
+@router.put(
+    "/countries/{code}/subdivision-types",
+    summary="Choose which subdivision types a country offers",
+    responses={
+        404: problem_response("No country with this code (type `country-not-found`)."),
+        422: problem_response("A key is not one of the country's types; `errors` names it."),
+    },
+)
+async def replace_admin_country_subdivision_types(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("country.manage_subdivisions"))],
+    code: str,
+    body: SubdivisionTypesRequest,
+) -> CountryDetail:
+    async with request.app.state.open_admin_writer() as writer:
+        normalised = await apply_country_subdivision_types(writer, actor, code, body.keys)
+    async with request.app.state.open_admin_reader() as reader:
+        return await resolve_admin_country_detail(reader, normalised)

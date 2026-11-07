@@ -1,4 +1,4 @@
-"""`build_read_engine`: the pool search runs on (ADR-058 amended, ADR-060). No connection made."""
+"""`build_read_engine`: the search pool, its limits set per connection. No connection made."""
 
 from typing import Any
 

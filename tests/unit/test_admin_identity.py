@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from registry.core.errors import AdminUnavailableError, AuthenticationError, PermissionDeniedError
 from registry.services.admin_identity import (
+    KEY_FETCH_RETRY_SECONDS,
     AdminIdentity,
     build_identity,
     build_jwks_key_resolver,
@@ -40,7 +41,7 @@ def sign(key: Any = KEY, algorithm: str = "RS256", **overrides: Any) -> str:
         "exp": now + 300,
         "iat": now,
         "sub": "access-subject",
-        "email": "Roni@EDRLab.org",
+        "email": "Ada@EDRLab.org",
     }
     claims.update(overrides)
     return jwt.encode({k: v for k, v in claims.items() if v is not None}, key, algorithm=algorithm)
@@ -82,10 +83,10 @@ def test_no_configured_key_fails_closed_with_a_503() -> None:
 
 
 async def test_a_valid_token_yields_the_lowercased_email() -> None:
-    identity = await verify(sign(name="Roni"))
+    identity = await verify(sign(name="Ada"))
 
-    assert identity.email == "roni@edrlab.org"
-    assert identity.name == "Roni"
+    assert identity.email == "ada@edrlab.org"
+    assert identity.name == "Ada"
     assert identity.issuer == ISSUER
     assert identity.subject == "access-subject"
 
@@ -93,7 +94,7 @@ async def test_a_valid_token_yields_the_lowercased_email() -> None:
 async def test_a_token_for_any_accepted_audience_is_valid() -> None:
     identity = await verify(sign(aud=[OTHER_AUD]))
 
-    assert identity.email == "roni@edrlab.org"
+    assert identity.email == "ada@edrlab.org"
 
 
 @pytest.mark.parametrize(
@@ -127,7 +128,7 @@ async def test_a_bad_token_is_a_401(token: str | None) -> None:
 
 
 async def test_a_token_expired_within_the_clock_skew_is_accepted() -> None:
-    assert (await verify(sign(exp=int(time.time()) - 30))).email == "roni@edrlab.org"
+    assert (await verify(sign(exp=int(time.time()) - 30))).email == "ada@edrlab.org"
 
 
 async def test_an_unsigned_token_is_refused() -> None:
@@ -175,7 +176,7 @@ def test_the_dev_identity_skips_the_domain_check_but_is_lowercased() -> None:
     )
 
 
-@pytest.mark.parametrize("email", ["nobody", "@edrlab.org", "roni@", ""])
+@pytest.mark.parametrize("email", ["nobody", "@edrlab.org", "ada@", ""])
 def test_an_identity_that_is_not_an_email_address_is_a_401(email: str) -> None:
     with pytest.raises(AuthenticationError):
         build_identity(email, allowed_domains=None, issuer="dev")
@@ -198,3 +199,56 @@ async def test_a_failed_key_fetch_is_not_retried_by_the_next_request(
             await resolve("a.b.c")
 
     assert len(fetches) == 1
+
+
+def test_a_read_only_key_is_accepted_and_reported() -> None:
+    assert verify_service_key("preview", ("full",), ("preview",)) is True
+    assert verify_service_key("full", ("full",), ("preview",)) is False
+
+
+def test_only_read_only_keys_still_configure_the_api() -> None:
+    assert verify_service_key("preview", (), ("preview",)) is True
+    with pytest.raises(AuthenticationError):
+        verify_service_key("wrong", (), ("preview",))
+
+
+async def test_once_the_retry_window_has_passed_the_keys_are_fetched_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An outage of the key set ends: after the retry window, a fetch that works serves the key."""
+    clock = [1000.0]
+    answers: list[Exception | None] = [jwt.PyJWKClientConnectionError("down"), None]
+
+    class Found:
+        key = KEY.public_key()
+
+    def fetch(_client: Any, _token: str) -> Found:
+        failure = answers.pop(0)
+        if failure is not None:
+            raise failure
+        return Found()
+
+    monkeypatch.setattr(jwt.PyJWKClient, "get_signing_key_from_jwt", fetch)
+    monkeypatch.setattr("registry.services.admin_identity.time.monotonic", lambda: clock[0])
+    resolve = build_jwks_key_resolver("https://issuer.example.test/keys")
+
+    with pytest.raises(AdminUnavailableError):
+        await resolve("a.b.c")
+    clock[0] += KEY_FETCH_RETRY_SECONDS + 1
+
+    assert await resolve("a.b.c") is Found.key
+
+
+async def test_a_token_signed_by_a_key_the_issuer_does_not_publish_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """401, not 503: the key set was fetched, and this token is simply not signed by it."""
+
+    def no_match(_client: Any, _token: str) -> Any:
+        raise jwt.PyJWKClientError("Unable to find a signing key that matches")
+
+    monkeypatch.setattr(jwt.PyJWKClient, "get_signing_key_from_jwt", no_match)
+    resolve = build_jwks_key_resolver("https://issuer.example.test/keys")
+
+    with pytest.raises(AuthenticationError):
+        await resolve("a.b.c")

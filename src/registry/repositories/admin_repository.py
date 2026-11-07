@@ -1,6 +1,6 @@
-"""The admin API's reads: counts, the filtered catalog list, what the filters can offer, and countries.
+"""The admin API's reads and writes. Reads: counts, the filtered catalog list, what the filters can offer, and countries.
 
-Each public method is one statement (R4): the list returns its page of catalogs with their places
+Each public method is one statement: the list returns its page of catalogs with their places
 and languages, and the total, in a single round trip. Counting happens in SQL.
 
 The list's `ORDER BY` is picked from `_ORDER`, never built from the request, so a sort value cannot
@@ -10,11 +10,16 @@ reach the statement as text.
 # ruff: noqa: E501 - SQL kept on the lines the statement reads best on
 
 import json
+import uuid
+from collections.abc import Sequence
 from typing import Any, Final
 
-from sqlalchemy import text
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from registry.core.errors import DuplicateCatalogError
+from registry.db.models.catalog import Catalog
 from registry.domain.admin_models import (
     AdminCatalogDetail,
     AdminCatalogLink,
@@ -31,7 +36,14 @@ from registry.domain.admin_models import (
     UsedLanguage,
     UsedPlaces,
 )
+from registry.domain.catalog_document import build_identity_href
 from registry.domain.enums import CatalogStatus
+from registry.repositories.catalog_documents import (
+    build_catalog,
+    build_document_from_catalog,
+    persist_catalog_contents,
+)
+from registry.repositories.catalog_repository import EAGER_COLLECTIONS
 from registry.repositories.catalog_rows import fetch_rows
 
 _STATS: Final = text(
@@ -94,7 +106,7 @@ _ROW_COLUMNS: Final = """
 #: `m` is the filtered set; the heavy columns are read only for the page. The first host in the
 #: statement is the browse link's, the one a person recognises. The search text is split into
 #: words and every word must occur in the folded title, host, city, or any-language country or
-#: subdivision name; `public.fold` is the database's own folding (ADR-059).
+#: subdivision name; `public.fold` is the database's own folding.
 _LIST: Final = """
 WITH matched AS (
   SELECT c.id, c.status, lower(c.title) AS sort_name,
@@ -142,7 +154,7 @@ _LISTS: Final = {
     sort: text(_LIST.format(order=order, columns=_ROW_COLUMNS)) for sort, order in _ORDER.items()
 }
 
-#: One catalog with everything the detail page shows, in one statement (R4). A malformed id never
+#: One catalog with everything the detail page shows, in one statement. A malformed id never
 #: reaches it: the service answers 404 first.
 _DETAIL: Final = text(
     "SELECT"
@@ -171,9 +183,9 @@ _DETAIL: Final = text(
 
 
 #: Every country some catalog uses (any status, as `filter-options`), with its published catalogs,
-#: in one statement (R4) and one pass over `catalogs`. `published` is the predicate
+#: in one statement and one pass over `catalogs`. `published` is the predicate
 #: `/admin/catalogs?country=XX` uses by default, so the two counts always agree. The search text
-#: matches a name in any language, folded (ADR-059), or the ISO code exactly. The English name is
+#: matches a name in any language, folded, or the ISO code exactly. The English name is
 #: the alphabetically first, the rule the catalog columns use.
 _COUNTRIES: Final = text(
     """
@@ -200,9 +212,9 @@ SELECT (SELECT count(*) FROM matched) AS total, p.code, p.name, p.published
 """
 )
 
-#: One country with its languages, subdivision types and catalog counts, in one statement (R4).
+#: One country with its languages, subdivision types and catalog counts, in one statement.
 #: The available types are those the database knows for the country: the offered ones and those
-#: its subdivisions carry. ISO 3166-2's full vocabulary is not loaded yet (ADR-055).
+#: its subdivisions carry. ISO 3166-2's full vocabulary is not loaded yet.
 _COUNTRY: Final = text(
     """
 SELECT k.alpha2 AS code,
@@ -371,6 +383,14 @@ class AdminRepository:
             ],
         )
 
+    async def fetch_admin_catalog_by_href(
+        self, href: str, derived_id: str
+    ) -> tuple[str, str] | None:
+        row = (
+            await self._session.execute(_CATALOG_BY_HREF, {"href": href, "id": derived_id})
+        ).first()
+        return (row.id, row.name) if row else None
+
     async def fetch_admin_country(self, code: str) -> AdminCountryDetail | None:
         rows = await fetch_rows(self._session, _COUNTRY, {"code": code})
         if not rows:
@@ -395,6 +415,24 @@ class AdminRepository:
             recommended=row["recommended"],
             by_kind=dict(_json(row["by_kind"])),
         )
+
+
+#: The catalog that already uses *href* as its identity (`catalog` or `shelf`), else the one whose
+#: id is derived from *href*: created from it, it has since moved, and its id still blocks a new
+#: catalog created from that address.
+_CATALOG_BY_HREF: Final = text(
+    """
+SELECT id, name FROM (
+  SELECT c.id::text AS id, c.title AS name, 0 AS rank
+    FROM links l JOIN catalogs c ON c.id = l.catalog_id
+   WHERE l.rel IN ('catalog', 'shelf') AND l.href = :href
+  UNION ALL
+  SELECT c.id::text, c.title, 1 FROM catalogs c WHERE c.id = CAST(:id AS uuid)
+) owners
+ORDER BY rank
+LIMIT 1
+"""
+)
 
 
 #: `FOR UPDATE` holds the row until the commit, so two editors acting at once are applied one after
@@ -424,9 +462,58 @@ _SET_RECOMMENDED: Final = text(
 )
 
 
+#: Whether the country is known, which subdivision codes are not, and which known ones lie in
+#: another country (all of them when the country is null), in one round trip. Country and
+#: subdivisions are foreign keys; checked first so the answer names the field, not a constraint.
+_UNKNOWN_PLACES: Final = text(
+    """
+SELECT (CAST(:country AS text) IS NULL
+        OR EXISTS (SELECT 1 FROM countries WHERE alpha2 = CAST(:country AS text))) AS country_known,
+       coalesce((SELECT array_agg(c.code ORDER BY c.code)
+                   FROM unnest(CAST(:subdivisions AS text[])) AS c(code)
+                  WHERE NOT EXISTS (SELECT 1 FROM subdivisions s WHERE s.code = c.code)),
+                CAST('{}' AS text[])) AS unknown_subdivisions,
+       coalesce((SELECT array_agg(s.code ORDER BY s.code)
+                   FROM subdivisions s
+                  WHERE s.code = ANY (CAST(:subdivisions AS text[]))
+                    AND s.country_alpha2 IS DISTINCT FROM CAST(:country AS text)),
+                CAST('{}' AS text[])) AS foreign_subdivisions
+"""
+)
+
+#: Whether the catalog with this id still uses this href as its identity.
+_STILL_AT_HREF: Final = text(
+    "SELECT EXISTS (SELECT 1 FROM links WHERE catalog_id = CAST(:id AS uuid)"
+    " AND rel IN ('catalog', 'shelf') AND href = :href)"
+)
+
+_DELETE_CATALOG: Final = text("DELETE FROM catalogs WHERE id = CAST(:id AS uuid)")
+
+#: Concurrent changes to one country's types are applied one after the other.
+_LOCK_COUNTRY: Final = text("SELECT alpha2 FROM countries WHERE alpha2 = :code FOR UPDATE")
+#: The types a country may offer: those it offers now, and those its subdivisions have.
+_AVAILABLE_TYPES: Final = text(
+    """
+SELECT subdivision_type FROM country_subdivision_types WHERE country_code = :code
+ UNION
+SELECT subdivision_type FROM subdivisions
+ WHERE country_alpha2 = :code AND subdivision_type IS NOT NULL
+"""
+)
+_CLEAR_TYPES: Final = text("DELETE FROM country_subdivision_types WHERE country_code = :code")
+_ADD_TYPES: Final = text(
+    "INSERT INTO country_subdivision_types (country_code, subdivision_type) "
+    "SELECT :code, unnest(CAST(:keys AS text[]))"
+)
+
+#: The constraints that mean "this catalog already exists": its id (derived from the identity
+#: href) or its identity href itself.
+_DUPLICATE_CONSTRAINTS: Final = ("pk_catalogs", "uq_links_identity_href")
+
+
 class AdminCatalogWriter:
-    """The admin API's catalog writes, on the main (read-write) engine. Status and recommendation
-    only; edits, creation and deletion arrive with their routes."""
+    """The admin API's catalog writes, on the main (read-write) engine. Rows are built by the
+    seed's own mapping (`repositories/catalog_documents.py`)."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -449,3 +536,82 @@ class AdminCatalogWriter:
 
     async def commit_admin_write(self) -> None:
         await self._session.commit()
+
+    async def fetch_unknown_places(
+        self, country: str | None, subdivisions: Sequence[str]
+    ) -> tuple[bool, list[str], list[str]]:
+        row = (
+            await self._session.execute(
+                _UNKNOWN_PLACES, {"country": country, "subdivisions": list(subdivisions)}
+            )
+        ).one()
+        return (
+            row.country_known,
+            list(row.unknown_subdivisions),
+            list(row.foreign_subdivisions),
+        )
+
+    async def persist_new_catalog(
+        self, document: dict[str, Any], catalog_id: uuid.UUID, *, publish: bool
+    ) -> None:
+        catalog = build_catalog(document, catalog_id, recommended=False)
+        catalog.status = CatalogStatus.PUBLISHED if publish else CatalogStatus.DRAFT
+        # ck_catalogs_published_when_published.
+        catalog.published_at = func.now() if publish else None
+        self._session.add(catalog)
+        try:
+            await self._flush_catalog()
+        except DuplicateCatalogError:
+            # The id is taken. If its catalog has since moved to another address, say so: nothing
+            # uses this address now, yet a catalog created from it would get the same id.
+            await self._session.rollback()
+            href = build_identity_href(document)
+            still_there = await self._session.scalar(
+                _STILL_AT_HREF, {"id": str(catalog_id), "href": href}
+            )
+            if still_there is False:
+                raise DuplicateCatalogError(
+                    "A catalog created from this address already exists; it now uses another "
+                    "address."
+                ) from None
+            raise
+
+    async def fetch_catalog_document(self, catalog_id: str) -> dict[str, Any]:
+        return build_document_from_catalog(await self._load_catalog(catalog_id))
+
+    async def persist_catalog_document(self, catalog_id: str, document: dict[str, Any]) -> None:
+        existing = await self._load_catalog(catalog_id)
+        built = build_catalog(document, existing.id, recommended=existing.recommended)
+        await persist_catalog_contents(self._session, existing, built)
+        existing.version = Catalog.version + 1
+        await self._flush_catalog()
+
+    async def lock_country_types(self, code: str) -> list[str] | None:
+        """The types *code* may offer, with the country locked; None if no such country."""
+        if (await self._session.execute(_LOCK_COUNTRY, {"code": code})).first() is None:
+            return None
+        return list((await self._session.execute(_AVAILABLE_TYPES, {"code": code})).scalars())
+
+    async def persist_country_types(self, code: str, keys: Sequence[str]) -> None:
+        await self._session.execute(_CLEAR_TYPES, {"code": code})
+        await self._session.execute(_ADD_TYPES, {"code": code, "keys": list(keys)})
+
+    async def persist_catalog_deletion(self, catalog_id: str) -> None:
+        await self._session.execute(_DELETE_CATALOG, {"id": catalog_id})
+
+    async def _load_catalog(self, catalog_id: str) -> Catalog:
+        # Already locked by `lock_admin_catalog` in this transaction.
+        statement = (
+            select(Catalog).where(Catalog.id == uuid.UUID(catalog_id)).options(*EAGER_COLLECTIONS)
+        )
+        return (await self._session.scalars(statement)).unique().one()
+
+    async def _flush_catalog(self) -> None:
+        try:
+            await self._session.flush()
+        except IntegrityError as error:
+            if any(name in str(error.orig) for name in _DUPLICATE_CONSTRAINTS):
+                raise DuplicateCatalogError(
+                    "Another catalog already has this catalog or shelf link."
+                ) from None
+            raise

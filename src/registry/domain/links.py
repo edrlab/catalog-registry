@@ -42,7 +42,3 @@ def order_links[T](
     catalog give the same document by every path and on every run.
     """
     return tuple(sorted(links, key=lambda link: (LINK_REL_PRIORITY[rel_of(link)], then_by(link))))
-
-
-def find_self_link[T](links: Sequence[T], *, rel_of: Callable[[T], LinkRel]) -> T | None:
-    return next((link for link in links if rel_of(link) is LinkRel.SELF), None)

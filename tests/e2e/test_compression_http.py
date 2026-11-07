@@ -1,4 +1,4 @@
-"""Compression over the real ASGI path: what each kind of client actually gets (ADR-061).
+"""Compression over the real ASGI path: what each kind of client actually gets.
 
 The clients are the ones measured in docs/search.md: Thorium Reader and browsers offer `br`, most
 libraries only `gzip`, KOReader and Python's urllib `identity` (the body must stay as it is), and

@@ -1,16 +1,16 @@
-"""The search table of the test plan (section 1) as plain data.
+"""The agreed search test cases as plain data.
 
 One `Case` per search: what it checks, the ideal answer ("Expected"), the measured answer
 ("Today"), and a note. `today` is `(title, tier)` in rank order, measured with the real migrations
 and the two data files. Tier 1 is a word match, tier 2 a trigram-only match, which always follows
-every word match (ADR-051). Where the plan calls a result known and accepted, the case says so and
+every word match. Where a result is known and accepted, the case says so and
 `today` pins the CURRENT behaviour, so a change is noticed and has to be decided rather than
 slipping in.
 
 Three things read this one file:
 * the exact-result regression tests (`CASES`: query and `today`),
 * the score (`tests/search_quality.py`, `scripts/score_search.py`): `today` against `expected`,
-* the page for Hadrien, generated into `docs/search-test-cases.md` (`make search-cases`).
+* the human-readable page, generated into `docs/search-test-cases.md` (`make search-cases`).
 """
 
 from dataclasses import dataclass
@@ -39,11 +39,11 @@ def trigrams(*titles: str) -> list[tuple[str, int]]:
 
 @dataclass(frozen=True)
 class Case:
-    """One search of the test plan: what we ask, what we would like back, and what we get today.
+    """One agreed search case: what we ask, what we would like back, and what we get today.
 
-    `expected` is the ideal answer, the "Expected" column of the plan: the catalogs a reader
+    `expected` is the ideal answer, the "Expected" column of the page: the catalogs a reader
     should get, with `first` pinned to rank 1 when that matters.
-    `None` means the plan gives no judgement (only "no error"), so the case is not scored. An
+    `None` means the case gives no judgement (only "no error"), so the case is not scored. An
     empty tuple means "nothing". `today` is the measured result, `(title, tier)` in rank order,
     which the regression tests pin exactly; the gap between the two is what the score measures.
     """
@@ -69,7 +69,7 @@ SYNTAX_SECTION = "Query syntax"
 COMMON = "Short common words (no stop words yet)"
 NO_COUNTRY = "Catalogs without a country"
 
-#: Every scored search of the plan, in the order of the plan. Ids are not spelled out: titles are
+#: Every scored search, in the order the page lists them. Ids are not spelled out: titles are
 #: unique in the data.
 QUALITY_CASES: list[Case] = [
     c(
@@ -89,7 +89,7 @@ QUALITY_CASES: list[Case] = [
         (PARIS,),
         words(PARIS, OPENBARE, LIRTUEL),
         "Both Belgian libraries come back because of 'de' (Région de Bruxelles-Capitale, "
-        "De Openbare). Accepted for now (Q5): there are no stop words.",
+        "De Openbare). Accepted for now: there are no stop words.",
         first=PARIS,
     ),
     c(PLACES, "France", "Country name, weight C", (PARIS,), words(PARIS)),
@@ -324,12 +324,12 @@ QUALITY_CASES: list[Case] = [
         "Three words, one of them 'de'",
         (PARIS,),
         words(PARIS, OPENBARE, ROMANDE, RUSSE, LIRTUEL),
-        "De Openbare comes second because of 'de' in its title. The stop word problem (Q5).",
+        "De Openbare comes second because of 'de' in its title. The stop word problem.",
         first=PARIS,
     ),
 ]
 
-#: A trailing section of the plan: countries of catalogs that have none, which no search finds.
+#: A trailing section: countries of catalogs that have none, which no search finds.
 QUALITY_CASES += [
     c(
         NO_COUNTRY,

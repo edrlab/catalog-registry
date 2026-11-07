@@ -1,4 +1,4 @@
-"""One statement, one round trip: what a search costs the database connection (ADR-060).
+"""One statement, one round trip: what a search costs the database connection.
 
 Search used to be 7 ORM statements, which was 14 round trips on the wire (a pre-ping, BEGIN, SET
 TRANSACTION, the settings call, the search, the catalog load, five child loads, COMMIT, and

@@ -49,6 +49,7 @@ LOCAL_EXAMPLES = {
     # Blank on purpose: a shipped default would be a key everyone knows. /admin answers 503 until a
     # developer sets their own (`openssl rand -base64 32`).
     "service_keys": "",
+    "read_only_service_keys": "",
     # Named like secrets, but they are public identifiers.
     "admin_token_issuer": "",
     "admin_token_audience": "",

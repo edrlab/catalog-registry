@@ -24,5 +24,5 @@ jobs:
           enable-cache: true
       # Runtime dependencies only, and gating: a known vulnerability in what production runs
       # fails the build. Test-only dependencies are not exported, so they cannot block a PR.
-      - run: uv export --frozen --no-dev --no-hashes --no-emit-project > runtime-requirements.txt
+      - run: uv export --locked --no-dev --no-hashes --no-emit-project > runtime-requirements.txt
       - run: uvx pip-audit -r runtime-requirements.txt

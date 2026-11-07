@@ -103,3 +103,17 @@ def build_schema_validator(schema_name: str) -> Draft7Validator:
     """A validator for ``schema/<schema_name>``, with refs resolved locally."""
     schema = load_schema_document(SCHEMA_DIR / schema_name)
     return Draft7Validator(schema, registry=build_schema_registry())
+
+
+#: The seed's input schema, derived from the published schemas by `scripts/generate_seed_schema.py`.
+SEED_INPUT_SCHEMA = "generated/seed-input.schema.json"
+
+
+@lru_cache(maxsize=1)
+def build_catalog_validator() -> Draft7Validator:
+    """The seed input schema's rules for one catalog (`{metadata, links}`), for writes that carry a
+    single catalog rather than a feed: the admin API's create and edit."""
+    feed = load_schema_document(SCHEMA_DIR / SEED_INPUT_SCHEMA)
+    return Draft7Validator(
+        feed["properties"]["catalogs"]["items"], registry=build_schema_registry()
+    )

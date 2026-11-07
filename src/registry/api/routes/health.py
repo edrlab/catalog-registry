@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 router = APIRouter(tags=["health"])
 
 
+@router.head("/health/live", include_in_schema=False)
 @router.get("/health/live")
 async def read_liveness() -> dict[str, str]:
     # Cloud Run sets K_REVISION; it is how the README badge shows what is deployed.
@@ -19,6 +20,7 @@ async def read_liveness() -> dict[str, str]:
     return {"status": "alive", **({"revision": revision} if revision else {})}
 
 
+@router.head("/health/ready", include_in_schema=False)
 @router.get("/health/ready")
 async def read_readiness(request: Request) -> JSONResponse:
     try:

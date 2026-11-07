@@ -1,4 +1,4 @@
-"""Read one OPDS document from a library's own server, for the dev console (ADR-063).
+"""Read one OPDS document from a library's own server, for the dev console.
 
 This route is mounted only when `REGISTRY_ENVIRONMENT=local` (see `create_app`), so none of the
 following applies in a deployed environment. Should it ever be mounted elsewhere, two limits keep it
@@ -8,8 +8,9 @@ from being an open relay on a public service:
   (`REGISTRY_DEV_FETCH_TOKEN`). With none configured the route answers 404.
 * **Where:** outside `local` only hosts that appear in a registered catalog's `catalog` link.
 
-On top of both: public http(s) hosts only, every redirect hop checked, size and time capped.
-`httpx` is a development dependency, so an image built without dev dependencies cannot serve it.
+On top of both: public http(s) hosts only, every redirect hop checked, size and time capped, and
+the connection made through `PublicOnlyTransport`, so it goes to the public address that was checked
+(no DNS rebinding).
 """
 
 import asyncio
@@ -28,6 +29,8 @@ from fastapi.responses import JSONResponse
 
 from registry.api.routes.dev import CLIENTS
 from registry.core.config import Settings
+from registry.domain.fetching import FetchError
+from registry.network.public_backend import PublicOnlyTransport
 
 router = APIRouter(prefix="/dev", tags=["dev"], include_in_schema=False)
 
@@ -77,8 +80,8 @@ async def require_public_host(url: str) -> None:
 
     `/dev/fetch` runs on a developer's machine, where `localhost`, the LAN and the cloud metadata
     address are all reachable. A feed URL comes from data this tool does not control, so it must not
-    be able to point the request at them. Residual risk: the name is resolved again when the
-    connection is made (DNS rebinding); acceptable for a local-only tool, not for anything deployed.
+    be able to point the request at them. This answers early with a clear status; the connection
+    itself is pinned to a vetted address by `PublicOnlyTransport`, so a second lookup cannot differ.
     """
     parts = urlsplit(url)
     if parts.scheme not in {"http", "https"} or not parts.hostname:
@@ -124,7 +127,10 @@ async def _fetch_hops(
 ) -> tuple[int, dict[str, str], bytes, int]:
     sends_encoding = any(name.lower() == "accept-encoding" for name in headers)
     async with httpx.AsyncClient(
-        transport=transport, timeout=FETCH_TIMEOUT_SECONDS, follow_redirects=False
+        transport=transport or PublicOnlyTransport(),
+        timeout=FETCH_TIMEOUT_SECONDS,
+        follow_redirects=False,
+        trust_env=False,
     ) as http:
         for _ in range(FETCH_MAX_REDIRECTS + 1):
             require_registered_host(url, allowed_hosts)
@@ -147,6 +153,9 @@ async def _fetch_hops(
                     response_headers = dict(response.headers)
                 finally:
                     await response.aclose()
+            except FetchError as refused:
+                status_code = 502 if refused.code == "host-unresolvable" else 422
+                raise HTTPException(status_code=status_code, detail=refused.detail) from None
             except httpx.HTTPError as error:
                 raise HTTPException(status_code=502, detail=f"fetch failed: {error!r}") from error
             location = response_headers.get("location")

@@ -1,4 +1,4 @@
-"""Response compression by negotiation (ADR-061).
+"""Response compression by negotiation.
 
 The client says what it can decode in `Accept-Encoding` (RFC 9110 §12.5.3); this picks from what
 the server offers. Measured on real clients (docs/search.md): gzip is the only coding every client
@@ -123,7 +123,7 @@ def configure_client_log() -> None:
 def log_client_request(
     scope: Scope, request_headers: Headers, *, status: int, encoding: str | None
 ) -> None:
-    """The one line per request, whichever path the response took (ADR-061).
+    """The one line per request, whichever path the response took.
 
     The console is not a reader. Its own pages (`/dev...`) and the requests it makes to the app on a
     visitor's behalf (marked in the scope by `call_app`) would pollute the count of real clients.
@@ -173,8 +173,9 @@ class CompressionMiddleware:
 
     The whole body is buffered: every response here is a JSON document, a few hundred KB at most.
 
-    A HEAD response carries the headers of the GET it stands for (its `Content-Length` is the size
-    of the body it does not send), so it is passed through untouched except for `Vary`.
+    A HEAD response carries the headers of the GET it stands for (RFC 9110 §9.3.2): the route builds
+    the same body, this compresses it the same way, sends the headers, and leaves the body out. An
+    app that already left the body out of its HEAD answer is passed through, with `Vary` added.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -208,15 +209,6 @@ class CompressionMiddleware:
 
         async def respond(message: Message) -> None:
             nonlocal start, logged
-            if is_head:
-                if message["type"] == "http.response.start":
-                    _add_vary(MutableHeaders(scope=message))
-                    log_client_request(
-                        scope, request_headers, status=message["status"], encoding=None
-                    )
-                    logged = True
-                await send(message)
-                return
             if message["type"] == "http.response.start":
                 start = message
                 return
@@ -230,6 +222,13 @@ class CompressionMiddleware:
             body = b"".join(chunks)
             headers = MutableHeaders(scope=start)
             _add_vary(headers)
+            if is_head and not body:
+                # The app left the body out itself; its headers already describe the GET.
+                log_client_request(scope, request_headers, status=start["status"], encoding=None)
+                logged = True
+                await send(start)
+                await send({"type": "http.response.body", "body": b""})
+                return
             applied = None
             if (
                 encoding is not None
@@ -245,7 +244,7 @@ class CompressionMiddleware:
             log_client_request(scope, request_headers, status=start["status"], encoding=applied)
             logged = True
             await send(start)
-            await send({"type": "http.response.body", "body": body})
+            await send({"type": "http.response.body", "body": b"" if is_head else body})
 
         try:
             await self.app(scope, receive, respond)

@@ -54,6 +54,11 @@ class Settings(BaseSettings):
         default=None,
         description="Keys accepted for admin requests, comma separated. Unset disables them.",
     )
+    read_only_service_keys: SecretStr | None = Field(
+        default=None,
+        description="Keys accepted for admin reads only (GET, HEAD and the feed check), comma "
+        "separated. Any other admin request with one of these keys is refused.",
+    )
     admin_token_issuer: str | None = Field(
         default=None, description="Token issuer (`iss`) for admin requests."
     )
@@ -82,13 +87,17 @@ class Settings(BaseSettings):
             raise ValueError(
                 "REGISTRY_ADMIN_DEV_IDENTITY cannot be on while REGISTRY_ADMIN_TOKEN_ISSUER is set"
             )
-        if deployed and self.service_key_values:
-            if any(key.lower() == PLACEHOLDER_SERVICE_KEY for key in self.service_key_values):
-                raise ValueError("REGISTRY_SERVICE_KEYS still holds a placeholder value")
-            if any(len(key) < MIN_SERVICE_KEY_LENGTH for key in self.service_key_values):
+        if set(self.service_key_values) & set(self.read_only_service_key_values):
+            raise ValueError(
+                "A key cannot be in both REGISTRY_SERVICE_KEYS and REGISTRY_READ_ONLY_SERVICE_KEYS"
+            )
+        every_key = self.service_key_values + self.read_only_service_key_values
+        if deployed and every_key:
+            if any(key.lower() == PLACEHOLDER_SERVICE_KEY for key in every_key):
+                raise ValueError("A service key still holds a placeholder value")
+            if any(len(key) < MIN_SERVICE_KEY_LENGTH for key in every_key):
                 raise ValueError(
-                    f"REGISTRY_SERVICE_KEYS: every key needs {MIN_SERVICE_KEY_LENGTH}+ characters "
-                    "outside local"
+                    f"Every service key needs {MIN_SERVICE_KEY_LENGTH}+ characters outside local"
                 )
             if not (self.admin_token_issuer and self.admin_token_audiences and self.admin_jwks_url):
                 raise ValueError(
@@ -102,8 +111,11 @@ class Settings(BaseSettings):
 
     @property
     def service_key_values(self) -> tuple[str, ...]:
-        raw = self.service_keys.get_secret_value() if self.service_keys else ""
-        return tuple(key.strip() for key in raw.split(",") if key.strip())
+        return _split_keys(self.service_keys)
+
+    @property
+    def read_only_service_key_values(self) -> tuple[str, ...]:
+        return _split_keys(self.read_only_service_keys)
 
     @property
     def admin_token_audiences(self) -> tuple[str, ...]:
@@ -117,3 +129,8 @@ class Settings(BaseSettings):
             for domain in self.admin_allowed_email_domains.split(",")
         )
         return tuple(domain for domain in parts if domain)
+
+
+def _split_keys(value: SecretStr | None) -> tuple[str, ...]:
+    raw = value.get_secret_value() if value else ""
+    return tuple(key.strip() for key in raw.split(",") if key.strip())

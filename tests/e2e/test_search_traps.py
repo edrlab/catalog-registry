@@ -1,4 +1,4 @@
-"""The traps (plan section 4, ADR-059): input that was a real bug or a near miss.
+"""The traps: input that was a real bug or a near miss.
 
 Everything goes through the real ASGI path. Whatever the text, the answer is a 200 and a valid
 feed; only the matches differ.

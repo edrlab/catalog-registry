@@ -30,13 +30,29 @@ HEADER_DEV_IDENTITY: Final = "x-registry-dev-identity"
 PERMISSION_ATTRIBUTE: Final = "required_permission"
 
 
+#: Requests a read-only key may make besides GET and HEAD: they change nothing.
+READ_ONLY_POSTS: Final = frozenset({"/admin/feed-checks"})
+
+
+def _is_read(request: Request) -> bool:
+    if request.method in {"GET", "HEAD"}:
+        return True
+    return request.method == "POST" and request.url.path.rstrip("/") in READ_ONLY_POSTS
+
+
 async def authenticate_admin_caller(request: Request) -> AdminIdentity:
     """Prove the call is allowed, and who is acting.
 
     A refusal is logged once by the error handler (`api/admin_log.py`); the key is never logged.
     """
     settings = request.app.state.settings
-    verify_service_key(request.headers.get(HEADER_SERVICE_KEY), settings.service_key_values)
+    read_only = verify_service_key(
+        request.headers.get(HEADER_SERVICE_KEY),
+        settings.service_key_values,
+        settings.read_only_service_key_values,
+    )
+    if read_only and not _is_read(request):
+        raise PermissionDeniedError("This key can only read.")
 
     dev_email = request.headers.get(HEADER_DEV_IDENTITY)
     # Never alongside a configured issuer: an unverified email must not outrank a verified token.

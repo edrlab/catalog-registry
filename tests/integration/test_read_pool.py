@@ -1,4 +1,4 @@
-"""The read pool of the feed and one catalog: its limits, its timeout and its one retry (ADR-062).
+"""The read pool of the feed and one catalog: its limits, its timeout and its one retry.
 
 Built for real (`build_read_engine(settings, READ_CONNECTION_SETTINGS)`), against the migrated
 database, and read back with `SHOW` on live connections. The slow statement is a real one: another

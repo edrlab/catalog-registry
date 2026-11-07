@@ -1,4 +1,4 @@
-"""Search output against the repository's own schemas (R7) and the no-leak rule (R3).
+"""Search output against the repository's own JSON Schemas; no internal field reaches it.
 
 A search result is the same catalog the detail endpoint serves, so each one is also compared
 with `GET /catalogs/{id}`: rendered identically, field for field.

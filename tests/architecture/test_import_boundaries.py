@@ -25,8 +25,19 @@ FORBIDDEN = {
         "registry.schemas",
         "registry.repositories",
         "registry.services",
+        "registry.network",
+        "httpx",
     },
-    "registry.services": {"sqlalchemy", "fastapi", "registry.api"},
+    # The network is reached through `FeedFetcher` only.
+    "registry.services": {"sqlalchemy", "fastapi", "registry.api", "registry.network", "httpx"},
+    "registry.network": {
+        "sqlalchemy",
+        "fastapi",
+        "registry.api",
+        "registry.services",
+        "registry.repositories",
+        "registry.schemas",
+    },
     "registry.api": {"sqlalchemy", "registry.repositories"},
     "registry.rendering": {"sqlalchemy", "fastapi"},
 }
@@ -74,7 +85,7 @@ def _imports_of(relative: str) -> set[str]:
 
 
 def test_the_search_query_parser_imports_only_the_standard_library() -> None:
-    """`domain/search_query.py` is pure (ADR-059): no framework, no database, no registry."""
+    """`domain/search_query.py` is pure: no framework, no database, no registry."""
     imported = _imports_of("domain/search_query.py")
 
     assert imported, "the parser imports nothing at all? the scan is broken"

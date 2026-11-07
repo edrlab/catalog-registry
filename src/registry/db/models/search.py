@@ -1,4 +1,4 @@
-"""The derived search table (ADR-051, ADR-052, ADR-056).
+"""The derived search table.
 
 **Read-only from the application.** Database triggers own every row: `refresh_catalog_search()`
 rebuilds it in the same transaction as any change to a catalog's title, city, country, status or

@@ -1,6 +1,6 @@
 # Performance
 
-Hadrien's target for search: **under 100 ms warm from Europe, 150 ms acceptable.** This page is
+The target for search: **under 100 ms warm from Europe, 150 ms acceptable.** This page is
 what makes that true, and how to check it.
 
 ## One read, one round trip
@@ -44,10 +44,10 @@ on a read, was nine tenths of the Python time. The reads now build plain slotted
 unchanged. That took the feed to 39.5 ms on one machine and 67.5 ms at 20 ms.
 
 What remains in a 1,000 catalog feed, by profile: the database round trip, validating and
-serialising the response model (about 20%, kept: it is the whitelist, R3), compression and JSON.
+serialising the response model (about 20%, kept: the response model is the whitelist that keeps internal fields out of the output), compression and JSON.
 
 Tests count the round trips on the wire (they would have caught the 14): a run of bytes the client
-sends, then the server's answer, is one, however the network cuts it into reads. Still no N+1 (R4):
+sends, then the server's answer, is one, however the network cuts it into reads. Still no N+1 queries:
 there is no per-row query at all. This is the first claim to re-check after any change to the read
 path: `tests/integration/test_search_query_count.py` and `test_read_one_statement.py`.
 

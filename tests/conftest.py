@@ -43,8 +43,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_FILE = REPO_ROOT / "data" / "recommended.json"
 LIBRARIES_FILE = REPO_ROOT / "data" / "libraries.json"
 
-#: Derived, never hardcoded. Hadrien extends `data/recommended.json`; a test that spells the
-#: count out fails on his commit rather than on a defect.
+#: Derived, never hardcoded. `data/recommended.json` is expected to grow; a test that spells the
+#: count out would fail on that commit rather than on a defect.
 SEED_CATALOG_COUNT = len(json.loads(SEED_FILE.read_text(encoding="utf-8"))["catalogs"])
 
 #: The file's own order, which the seed turns into the feed's order by staggering

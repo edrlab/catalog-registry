@@ -1,7 +1,10 @@
 """One e2e test per health route, over the real ASGI path."""
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+
+from registry.core.config import Settings
+from registry.main import create_app
 
 pytestmark = pytest.mark.e2e
 
@@ -40,3 +43,29 @@ async def test_liveness_names_the_cloud_run_revision_when_there_is_one(
     response = await client.get("/health/live")
 
     assert response.json() == {"status": "alive", "revision": "registry-00013-cnz"}
+
+
+@pytest.mark.parametrize("path", ["/health/live", "/health/ready"])
+async def test_a_health_route_answers_head(client: AsyncClient, path: str) -> None:
+    """Uptime checks often probe with HEAD; a 405 there reads as the service being down."""
+    response = await client.head(path)
+
+    assert response.status_code == 200
+    assert response.content == b""
+
+
+async def test_readiness_returns_503_when_the_database_cannot_be_reached(
+    settings: Settings,
+) -> None:
+    """Nothing listens on port 1, so the probe's connection is refused at once."""
+    unreachable = settings.model_copy(
+        update={"database_url": "postgresql+asyncpg://registry:unused@127.0.0.1:1/registry"}
+    )
+    built = create_app(unreachable)
+    async with (
+        built.router.lifespan_context(built),
+        AsyncClient(transport=ASGITransport(app=built), base_url="http://testserver") as client,
+    ):
+        response = await client.get("/health/ready")
+
+    assert (response.status_code, response.json()) == (503, {"status": "not ready"})

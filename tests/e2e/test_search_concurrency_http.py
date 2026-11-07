@@ -1,4 +1,4 @@
-"""Thirty searches at once on the real app and its search pool (ADR-060).
+"""Thirty searches at once on the real app and its search pool.
 
 Each request checks out its own connection from the dedicated pool and runs one statement. Under
 load the pages must be the ones a lone request gets, and every connection must come back: a leak

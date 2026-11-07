@@ -1,10 +1,10 @@
 """What every public read shares: the columns of a catalog and its children in one SELECT list, the
 mapping from such a row to the `CatalogView` the renderer reads, and the one place a read statement
-is run (ADR-060, ADR-062).
+is run.
 
 A catalog's kinds, publication types, languages and subdivisions come back as arrays and its links
 as one JSON array, each from a correlated sub-select on an indexed `catalog_id`. So a page of
-catalogs is one statement, one round trip, whatever its size: no N+1 (R4), and no row multiplication
+catalogs is one statement, one round trip, whatever its size: no N+1, and no row multiplication
 from joining five collections at once.
 """
 
@@ -32,7 +32,7 @@ from registry.domain.enums import (
     PublicationType,
 )
 
-#: A SELECT list. The alias `c` is `catalogs`. Explicit columns: a new column cannot leak (R3).
+#: A SELECT list. The alias `c` is `catalogs`. Explicit columns: a new column cannot leak.
 CATALOG_COLUMNS: Final = """c.id AS catalog_id, c.created_at, c.title, c.description,
        c.color::text AS color, c.country_code, c.city, c.coverage::text AS coverage,
   (SELECT coalesce(array_agg(k.kind::text), '{}') FROM catalog_kinds k
@@ -63,7 +63,7 @@ def build_catalog_from_row(row: Any) -> CatalogView:
         links = json.loads(links)
     return CatalogView(
         id=row["catalog_id"],
-        # Not rendered (the renderer is a whitelist, R3): the feed's language sort ties on it.
+        # Not rendered (the renderer is a whitelist): the feed's language sort ties on it.
         created_at=row["created_at"],
         title=row["title"],
         description=row["description"],
