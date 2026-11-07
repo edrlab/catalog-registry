@@ -27,6 +27,7 @@ only the source file.
 import argparse
 import asyncio
 import json
+import sys
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -494,3 +495,7 @@ def main(argv: Sequence[str] = ()) -> int:
     flag = "" if arguments.recommended else ", not recommended"
     print(f"seeded {seed_file}: {created} created, {updated} updated{flag}")
     return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
