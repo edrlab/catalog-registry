@@ -16,7 +16,6 @@ file. The back office (v1.0) will drive that same path from a browser.
 import argparse
 import asyncio
 import json
-import sys
 from collections.abc import Sequence
 from typing import Any
 
@@ -201,7 +200,3 @@ def main(argv: Sequence[str] = ()) -> int:
     created = asyncio.run(add_catalog_from_url(arguments.url, document, Settings()))
     print(f"{'created' if created else 'updated'}: {document['metadata']['title']}")
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))

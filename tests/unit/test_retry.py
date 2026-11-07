@@ -43,6 +43,8 @@ def test_a_long_retry_after_means_no_retry() -> None:
         ("Thu, 05 Nov 2026 12:00:02 GMT", 2.0),
         ("Thu, 05 Nov 2026 11:00:00 GMT", 0.0),
         ("soon", None),
+        # `-0000` is RFC 5322's "zone unknown": no instant to count from.
+        ("Thu, 05 Nov 2026 12:00:02 -0000", None),
         ("", None),
         (None, None),
         ("-1", None),

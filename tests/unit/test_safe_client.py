@@ -345,6 +345,19 @@ async def test_a_dropped_connection_is_retried_then_reported() -> None:
     assert (await refused(down)).code == "fetch-failed"
 
 
+async def test_a_server_that_keeps_timing_out_is_reported_as_timed_out() -> None:
+    """Told apart from a refused connection: the admin sees "too slow", not "down"."""
+
+    def silent(_: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("no answer")
+
+    assert (await refused(silent)).code == "fetch-timed-out"
+
+
+async def test_closing_a_client_that_was_never_opened_is_harmless() -> None:
+    await SafeHttpClient().__aexit__(None, None, None)
+
+
 async def test_no_retry_starts_past_the_deadline() -> None:
     sleeps: list[float] = []
 

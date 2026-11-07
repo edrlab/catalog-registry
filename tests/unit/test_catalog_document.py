@@ -92,6 +92,10 @@ def test_a_valid_document_has_no_problems() -> None:
             [(("metadata", "city"), "Remove the spaces at the start or end.")],
         ),
         (
+            document(city="A" * 101),
+            [(("metadata", "city"), "Use at most 100 characters.")],
+        ),
+        (
             document(city="Liège "),
             [(("metadata", "city"), "Remove the spaces at the start or end.")],
         ),

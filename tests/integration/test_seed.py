@@ -1,5 +1,6 @@
 """The seed path, against real Postgres."""
 
+import asyncio
 import json
 import re
 import uuid
@@ -7,19 +8,23 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from registry.cli import seed as seed_module
 from registry.cli.seed import (
     import_catalog_document,
     import_feed_document,
     seed_catalogs,
 )
+from registry.cli.seed import main as seed_main
+from registry.core.config import Settings
 from registry.core.errors import ValidationError
 from registry.core.schema_validation import build_schema_validator
 from registry.db.models.catalog import Catalog, CatalogLanguageRow
 from registry.db.models.link import Link
+from registry.db.session import build_session_factory, create_database_engine
 from registry.domain.enums import CatalogStatus, CoverageScope, LinkRel
 from registry.repositories.catalog_repository import CatalogRepository
 from tests.conftest import SEED_CATALOG_COUNT, SEED_FILE
@@ -1003,3 +1008,64 @@ async def test_a_subdivision_of_its_own_country_passes(db_session: AsyncSession)
     )
 
     assert created == 1
+
+
+def test_the_command_commits_a_named_file_and_reports_what_it_did(
+    settings: Settings,
+    migrated_database: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`seed FILE --no-recommended` writes for real, outside any request, and says the catalogs
+    it imported stay out of the feed."""
+    title = "Seeded By The Command"
+    seed_file = tmp_path / "libraries.json"
+    seed_file.write_text(
+        json.dumps(
+            {
+                "metadata": {"title": "One library"},
+                "catalogs": [
+                    {
+                        "metadata": {"title": title, "kind": ["public"]},
+                        "links": [
+                            {
+                                "href": "https://seed-command.example/opds",
+                                "type": "application/opds+json",
+                                "rel": "catalog",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(seed_module, "Settings", lambda: settings)
+    try:
+        status = seed_main([str(seed_file), "--no-recommended"])
+        stored = asyncio.run(read_recommended(settings, title))
+    finally:
+        asyncio.run(delete_catalog(settings, title))
+
+    assert (status, stored) == (0, [False])
+    assert capsys.readouterr().out == f"seeded {seed_file}: 1 created, 0 updated, not recommended\n"
+
+
+async def read_recommended(settings: Settings, title: str) -> list[bool]:
+    engine = create_database_engine(settings)
+    try:
+        async with build_session_factory(engine)() as session:
+            found = await session.scalars(select(Catalog.recommended).where(Catalog.title == title))
+            return list(found)
+    finally:
+        await engine.dispose()
+
+
+async def delete_catalog(settings: Settings, title: str) -> None:
+    engine = create_database_engine(settings)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(delete(Catalog).where(Catalog.title == title))
+    finally:
+        await engine.dispose()

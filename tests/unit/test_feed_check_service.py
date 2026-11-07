@@ -19,6 +19,7 @@ from registry.domain.fetching import FetchError, FetchResult, Hop
 from registry.services.feed_check_service import MAX_CHECKED_LINKS, resolve_feed_check
 
 FEED = "https://feeds.example.org/opds"
+AUTH = "https://feeds.example.org/auth.json"
 EDITOR = AdminActor(id="a", email="e@edrlab.org", name=None, role=ActorRole.EDITOR, is_active=True)
 VIEWER = AdminActor(id="v", email="v@edrlab.org", name=None, role=ActorRole.VIEWER, is_active=True)
 
@@ -80,10 +81,14 @@ class FakeReader:
     *stored* is the one catalog `fetch_admin_catalog` finds, under its database id."""
 
     def __init__(
-        self, owners: dict[str, tuple[str, str]] | None = None, stored: str | None = None
+        self,
+        owners: dict[str, tuple[str, str]] | None = None,
+        stored: str | None = None,
+        stored_links: list[Any] | None = None,
     ) -> None:
         self.owners = owners or {}
         self.stored = stored
+        self.stored_links = stored_links or []
         self.read_ids: list[str] = []
 
     async def fetch_admin_catalog_by_href(
@@ -96,7 +101,9 @@ class FakeReader:
         if catalog_id != self.stored:
             return None
         return SimpleNamespace(
-            row=SimpleNamespace(name="Mine", languages=["fr"]), description=None, links=[]
+            row=SimpleNamespace(name="Mine", languages=["fr"]),
+            description=None,
+            links=self.stored_links,
         )
 
 
@@ -190,6 +197,16 @@ async def test_re_checking_with_an_uppercase_id_is_not_a_duplicate_of_itself() -
     assert reader.read_ids == [mine]
     assert report.duplicate is None
     assert "duplicate-catalog" not in codes(report)
+
+
+async def test_re_checking_reports_no_link_change_when_the_links_are_the_same() -> None:
+    mine = "0f8fad5b-d9cb-469f-a165-70867728950e"
+    same = SimpleNamespace(rel="catalog", href=FEED, media_type=None, title=None, templated=False)
+    reader = FakeReader({FEED: (mine, "Mine")}, stored=mine, stored_links=[same])
+
+    report = await check({FEED: answer(FEED, opds())}, reader=reader, catalog_id=mine)
+
+    assert [change.field for change in report.changes] == ["name"]
 
 
 async def test_an_address_a_catalog_was_created_from_is_a_duplicate() -> None:
@@ -366,6 +383,25 @@ async def test_a_sign_in_document_named_by_a_link_header_is_followed() -> None:
     assert report.feed.links[1].href == auth
 
 
+@pytest.mark.parametrize(
+    "target",
+    [
+        FetchError("fetch-failed", "The connection failed."),
+        answer(AUTH, b"not json", media_type="application/json"),
+        answer(AUTH, {"id": "urn:x"}, status=404),
+        answer(AUTH, {"title": "Not a sign-in document"}, media_type="application/json"),
+    ],
+)
+async def test_a_link_header_that_leads_to_no_sign_in_document_leaves_a_failed_fetch(
+    target: Answer,
+) -> None:
+    header = {"link": f'<{AUTH}>; rel="http://opds-spec.org/auth/document"'}
+
+    report = await check({FEED: answer(FEED, b"", status=401, headers=header), AUTH: target})
+
+    assert codes(report) == ["fetch-status"]
+
+
 async def test_a_401_without_an_authentication_document_is_a_failed_fetch() -> None:
     report = await check({FEED: answer(FEED, b"denied", status=401, media_type="text/plain")})
 
@@ -403,6 +439,66 @@ async def test_dead_links_warn_and_come_back_inactive() -> None:
     assert by_code["icon-not-image"].url == icon
     assert by_code["link-dead"].rel == "alternate"
     assert by_code["link-dead"].url == alternate
+
+
+async def test_a_template_with_unbalanced_braces_is_dead_without_a_request() -> None:
+    fetcher = FakeFetcher(
+        {
+            FEED: answer(
+                FEED,
+                opds({"rel": "search", "href": "/search{?query", "templated": True}),
+            )
+        }
+    )
+
+    report = await resolve_feed_check(fetcher, any_reader(), EDITOR, FEED)
+
+    assert [(f.code, f.rel) for f in report.findings] == [("link-dead", "search")]
+    assert fetcher.calls == [("GET", FEED)]
+
+
+async def test_a_sign_in_status_on_an_ordinary_link_means_it_is_dead() -> None:
+    """Only a shelf, an authentication or a profile link is meant to be members-only."""
+    alternate = "https://www.example.org/"
+
+    report = await check(
+        {
+            FEED: answer(FEED, opds({"rel": "alternate", "href": alternate})),
+            alternate: answer(alternate, status=403),
+        }
+    )
+
+    assert [(f.code, f.rel) for f in report.findings] == [("link-dead", "alternate")]
+
+
+@pytest.mark.parametrize(
+    ("link", "served", "code"),
+    [
+        (
+            {"rel": "http://opds-spec.org/auth/document"},
+            "application/json",
+            "authenticate-wrong-type",
+        ),
+        (
+            {"rel": "alternate", "type": "text/html; charset=utf-8"},
+            "application/pdf",
+            "link-type-mismatch",
+        ),
+    ],
+)
+async def test_a_link_served_as_another_type_than_expected_warns(
+    link: dict[str, str], served: str, code: str
+) -> None:
+    href = "https://feeds.example.org/other"
+
+    report = await check(
+        {
+            FEED: answer(FEED, opds({**link, "href": href})),
+            href: answer(href, media_type=served),
+        }
+    )
+
+    assert codes(report) == [code]
 
 
 async def test_a_link_that_fails_head_gets_one_get() -> None:
@@ -485,3 +581,44 @@ async def test_a_feed_cut_at_the_cap_is_too_large() -> None:
 
     assert report.verdict == "blocked"
     assert codes(report) == ["fetch-too-large"]
+
+
+async def test_links_that_answered_before_the_budget_ran_out_keep_their_result() -> None:
+    """A timeout keeps what finished: one slow link must not make every link look unchecked."""
+    fast = "https://fast.example.org/"
+    slow = "https://slow.example.org/"
+
+    class SlowLinkFetcher(FakeFetcher):
+        async def fetch(self, url: str, *, method: str = "GET", **options: Any) -> FetchResult:
+            if url == slow:
+                await asyncio.sleep(10)
+            return await super().fetch(url, method=method, **options)
+
+    fetcher = SlowLinkFetcher(
+        {
+            FEED: answer(
+                FEED, opds({"rel": "alternate", "href": fast}, {"rel": "alternate", "href": slow})
+            ),
+            fast: answer(fast),
+        }
+    )
+
+    report = await resolve_feed_check(fetcher, any_reader(), EDITOR, FEED, budget=0.6)
+
+    assert report.feed is not None
+    active = {link.href: link.active for link in report.feed.links}
+    assert active[fast] is True
+    assert active[slow] is None
+    assert "check-timed-out" in codes(report)
+
+
+async def test_a_check_that_runs_out_of_time_before_the_feed_is_read_is_blocked() -> None:
+    """No feed was read, so there is nothing to save: the verdict is blocked, not a warning."""
+    fetcher = FakeFetcher({FEED: answer(FEED, opds())}, delay=5)
+
+    report = await resolve_feed_check(fetcher, any_reader(), EDITOR, FEED, budget=0.2)
+
+    assert report.verdict == "blocked"
+    assert report.feed is None
+    assert {"check-timed-out", "fetch-timed-out"} <= set(codes(report))
+    assert [stage.state for stage in report.stages][1:] == ["failed", "skipped", "skipped"]

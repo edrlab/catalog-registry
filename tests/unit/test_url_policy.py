@@ -106,6 +106,19 @@ def test_a_malformed_address_is_invalid(url: str) -> None:
     assert refused.value.detail
 
 
+@pytest.mark.parametrize("host", ["a" * 64 + ".example.org", "feeds..example.org"])
+def test_a_host_name_idna_cannot_encode_is_invalid(host: str) -> None:
+    """A label over 63 characters, or an empty one, has no DNS form; the refusal reads as its
+    fixed sentence."""
+    with pytest.raises(FetchError) as refused:
+        validate_outbound_url(f"https://{host}/opds")
+
+    assert (refused.value.code, str(refused.value)) == (
+        "url-invalid",
+        "The host name is not valid.",
+    )
+
+
 @pytest.mark.parametrize(
     ("address", "public"),
     [

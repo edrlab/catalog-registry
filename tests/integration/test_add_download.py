@@ -10,6 +10,7 @@ reach this server open them for 127.0.0.1 only (URL policy and transport); one t
 and shows they stop the request before anything is sent.
 """
 
+import asyncio
 import contextlib
 import json
 import threading
@@ -20,10 +21,14 @@ from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy import delete
 
 from registry.cli import add as add_module
 from registry.cli.add import FEED_ACCEPT, MAX_FEED_BYTES, download_feed_document, main
+from registry.core.config import Settings
 from registry.core.errors import ValidationError
+from registry.db.models.catalog import Catalog
+from registry.db.session import create_database_engine
 from registry.domain.fetching import FetchError
 from registry.domain.url_policy import validate_outbound_url
 from registry.network import safe_client as safe_client_module
@@ -277,3 +282,28 @@ def test_add_dry_run_prints_the_document_built_from_the_fetched_feed(
         "type": "application/opds+json",
         "rel": "catalog",
     }
+
+
+@pytest.mark.usefixtures("reachable", "migrated_database")
+def test_add_writes_the_fetched_catalog_and_says_it_was_created(
+    origin: Origin,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(add_module, "Settings", lambda: settings)
+    try:
+        status = main([f"{origin.base}/ok", "--kind", "public"])
+    finally:
+        asyncio.run(delete_catalog(settings, "Local Test Library"))
+
+    assert (status, capsys.readouterr().out) == (0, "created: Local Test Library\n")
+
+
+async def delete_catalog(settings: Settings, title: str) -> None:
+    engine = create_database_engine(settings)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(delete(Catalog).where(Catalog.title == title))
+    finally:
+        await engine.dispose()

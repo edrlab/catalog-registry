@@ -1,19 +1,27 @@
 """The dev console, and which parts of it exist where."""
 
 import asyncio
+import gzip
 import json
 import logging
+import socket
+import zlib
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
+import brotli
 import httpx
 import pytest
+import zstandard
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import PlainTextResponse
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from starlette.types import Message, Receive, Scope, Send
 
 from registry.api.routes import dev, dev_fetch
 from registry.core.config import Settings
+from registry.domain.fetching import FetchError
 from registry.main import create_app
 
 pytestmark = pytest.mark.e2e
@@ -441,3 +449,159 @@ async def test_a_profile_without_accept_encoding_goes_out_without_one(
     assert "accept-encoding" not in seen[0].headers
     assert seen[0].headers["user-agent"] == dev.CLIENTS["curl"]["headers"]["User-Agent"]
     assert seen[1].headers["accept-encoding"] == "gzip, deflate, br"
+
+
+# --- the simulator's in-process call --------------------------------------------------------------
+
+
+async def test_a_simulated_request_carries_an_empty_body() -> None:
+    """The simulator makes a GET: the app reads one empty body and no more."""
+    received: list[Message] = []
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        received.append(await receive())
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"{}"})
+
+    await dev.call_app(app, "/", {})
+
+    assert received == [{"type": "http.request", "body": b"", "more_body": False}]
+
+
+async def test_trailers_do_not_become_response_headers() -> None:
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        await send({"type": "http.response.start", "status": 200, "headers": [], "trailers": True})
+        await send({"type": "http.response.body", "body": b"{}"})
+        await send({"type": "http.response.trailers", "headers": [(b"x-checksum", b"abc")]})
+
+    status, headers, body = await dev.call_app(app, "/", {})
+
+    assert (status, headers, body) == (200, {}, b"{}")
+
+
+@pytest.mark.parametrize(
+    ("encoding", "encode"),
+    [
+        ("br", brotli.compress),
+        ("zstd", zstandard.ZstdCompressor().compress),
+        ("gzip", gzip.compress),
+        ("deflate", zlib.compress),
+        (None, bytes),
+    ],
+)
+def test_every_coding_a_client_can_receive_is_decoded_for_display(
+    encoding: str | None, encode: Callable[[bytes], bytes]
+) -> None:
+    assert dev.decode(encode(b'{"ok": true}'), encoding) == b'{"ok": true}'
+
+
+async def test_a_simulated_answer_that_is_not_json_is_shown_as_text(settings: Settings) -> None:
+    app = _page_app(settings, "test")
+
+    @app.get("/")
+    async def plain() -> PlainTextResponse:
+        return PlainTextResponse("not a feed")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as http:
+        response = await http.get(SIMULATE, params={"path": "/", "client": "curl"})
+
+    assert (response.json()["is_json"], response.json()["body"]) == (False, "not a feed")
+
+
+# --- /dev/fetch: failures on the way, and what comes back -----------------------------------------
+
+
+async def test_a_name_that_does_not_resolve_is_a_bad_gateway(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def unresolvable(*_args: object, **_kwargs: object) -> list[object]:
+        raise socket.gaierror(socket.EAI_NONAME, "Name or service not known")
+
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", unresolvable)
+
+    with pytest.raises(HTTPException) as raised:
+        await dev_fetch.require_public_host("https://nowhere.invalid/feed")
+
+    assert raised.value.status_code == 502
+
+
+@pytest.mark.parametrize(("code", "status"), [("host-unresolvable", 502), ("url-unsafe", 422)])
+async def test_a_refusal_by_the_connection_guard_keeps_its_meaning(
+    monkeypatch: pytest.MonkeyPatch, code: str, status: int
+) -> None:
+    """A name that does not resolve is the library's server failing (502); an address the guard
+    will not connect to is a request that cannot be made (422)."""
+    _public(monkeypatch)
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise FetchError(code, "refused by the guard")
+
+    with pytest.raises(HTTPException) as raised:
+        await dev_fetch.fetch_public(
+            "https://lib.example/feed", {}, transport=httpx.MockTransport(refuse)
+        )
+
+    assert (raised.value.status_code, raised.value.detail) == (status, "refused by the guard")
+
+
+async def test_a_connection_failure_is_a_bad_gateway(monkeypatch: pytest.MonkeyPatch) -> None:
+    _public(monkeypatch)
+
+    def unreachable(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    with pytest.raises(HTTPException) as raised:
+        await dev_fetch.fetch_public(
+            "https://lib.example/feed", {}, transport=httpx.MockTransport(unreachable)
+        )
+
+    assert raised.value.status_code == 502
+
+
+def _fetch_app(settings: Settings) -> FastAPI:
+    app = FastAPI()
+    app.include_router(dev_fetch.router)
+    app.state.settings = settings.model_copy(update={"environment": "local"})
+    return app
+
+
+async def test_fetch_refuses_an_unknown_client(settings: Settings) -> None:
+    transport = ASGITransport(app=_fetch_app(settings))
+    async with AsyncClient(transport=transport, base_url="http://testserver") as http:
+        response = await http.get(
+            "/dev/fetch", params={"url": "https://lib.example/feed", "client": "nobody"}
+        )
+
+    assert response.status_code == 422
+
+
+def _answer(monkeypatch: pytest.MonkeyPatch, body: bytes) -> None:
+    async def fetched(
+        url: str, headers: object, *, allowed_hosts: object = None
+    ) -> tuple[int, dict[str, str], bytes, int]:
+        return 200, {"Content-Type": "application/opds+json"}, body, len(body)
+
+    monkeypatch.setattr(dev_fetch, "fetch_public", fetched)
+
+
+async def test_fetch_returns_a_json_feed_parsed(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _answer(monkeypatch, b'{"metadata": {"title": "A library"}}')
+    transport = ASGITransport(app=_fetch_app(settings))
+    async with AsyncClient(transport=transport, base_url="http://testserver") as http:
+        response = await http.get("/dev/fetch", params={"url": "https://lib.example/feed"})
+
+    assert response.json()["body"] == {"metadata": {"title": "A library"}}
+
+
+async def test_fetch_returns_a_page_that_is_not_json_as_text_cut_at_20000_characters(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _answer(monkeypatch, b"<p>" + b"x" * 30_000)
+    transport = ASGITransport(app=_fetch_app(settings))
+    async with AsyncClient(transport=transport, base_url="http://testserver") as http:
+        response = await http.get("/dev/fetch", params={"url": "https://lib.example/feed"})
+
+    shown = response.json()
+    assert (shown["is_json"], len(shown["body"])) == (False, 20_000)

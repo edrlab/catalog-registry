@@ -77,6 +77,10 @@ def test_a_nan_quality_does_not_scramble_the_order_of_the_others() -> None:
     assert tags("en;q=0.1, xx;q=nan, de;q=0.9") == ["xx", "de", "en"]
 
 
+def test_parse_accept_language_reads_q_among_other_parameters() -> None:
+    assert parse_accept_language("fr;level=1;q=0.5")[0].quality == 0.5
+
+
 def test_parse_accept_language_quality_is_truncated_to_three_decimals() -> None:
     assert parse_accept_language("fr;q=0.1234")[0].quality == 0.123
 
@@ -153,6 +157,14 @@ def test_rank_respects_header_order_when_every_q_is_equal() -> None:
 def test_a_regional_range_matches_a_plain_tag() -> None:
     """`fr-FR` asked for, `fr` held, the registry must still match."""
     assert rank_language_match(parse_accept_language("fr-FR"), ["fr"]) == LanguageMatch(
+        rank=0, depth=1
+    )
+
+
+def test_an_extension_is_not_a_more_specific_language() -> None:
+    """`de-a-value` is German with an extension (RFC 4647 §3.4), so a `de-ch` catalog matches it
+    as it matches `de`."""
+    assert rank_language_match(parse_accept_language("de-a-value"), ["de-ch"]) == LanguageMatch(
         rank=0, depth=1
     )
 

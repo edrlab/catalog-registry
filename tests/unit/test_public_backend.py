@@ -1,5 +1,6 @@
 """`PublicOnlyBackend`: resolve, check and connect in one step, so DNS rebinding cannot race."""
 
+import asyncio
 from collections.abc import Iterable
 from typing import Any
 
@@ -8,7 +9,11 @@ import httpx
 import pytest
 
 from registry.domain.fetching import FetchError
-from registry.network.public_backend import PublicOnlyBackend, PublicOnlyTransport
+from registry.network.public_backend import (
+    PublicOnlyBackend,
+    PublicOnlyTransport,
+    lookup_host_addresses,
+)
 
 
 class RecordingBackend:
@@ -17,12 +22,16 @@ class RecordingBackend:
     def __init__(self, failing: Iterable[str] = ()) -> None:
         self.connected: list[tuple[str, int]] = []
         self.failing = set(failing)
+        self.slept: list[float] = []
 
     async def connect_tcp(self, host: str, port: int, *_: Any, **__: Any) -> Any:
         self.connected.append((host, port))
         if host in self.failing:
             raise httpcore.ConnectError("refused")
         return object()
+
+    async def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
 
 
 def backend_with(answers: list[list[str]], inner: RecordingBackend) -> PublicOnlyBackend:
@@ -95,6 +104,37 @@ async def test_the_next_public_address_is_tried_when_one_refuses() -> None:
     await backend.connect_tcp("feeds.example.org", 443)
 
     assert inner.connected == [("93.184.215.14", 443), ("93.184.215.15", 443)]
+
+
+async def test_when_every_address_refuses_the_last_failure_is_raised() -> None:
+    inner = RecordingBackend(failing=["93.184.215.14", "93.184.215.15"])
+    backend = backend_with([["93.184.215.14", "93.184.215.15"]], inner)
+
+    with pytest.raises(httpcore.ConnectError):
+        await backend.connect_tcp("feeds.example.org", 443)
+
+
+async def test_a_name_the_system_cannot_resolve_is_unresolvable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def no_such_host(*_: Any, **__: Any) -> Any:
+        raise OSError("nodename nor servname provided, or not known")
+
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", no_such_host)
+
+    with pytest.raises(FetchError) as refused:
+        await lookup_host_addresses("nowhere.example", 443)
+
+    assert refused.value.code == "host-unresolvable"
+
+
+async def test_waits_go_to_the_socket_layer() -> None:
+    """httpcore sleeps through the backend between retries; the wrapper must not swallow it."""
+    inner = RecordingBackend()
+
+    await backend_with([], inner).sleep(0.25)
+
+    assert inner.slept == [0.25]
 
 
 async def test_unix_sockets_are_never_used() -> None:

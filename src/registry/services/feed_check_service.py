@@ -67,6 +67,8 @@ AUTHENTICATION_MAX_BYTES: Final = 262_144
 CHECK_BUDGET_SECONDS: Final = 18.0
 FEED_BUDGET_SECONDS: Final = 12.0
 LINK_BUDGET_SECONDS: Final = 4.0
+#: The links stage ends this much before the whole check, so it can keep what finished.
+REPORT_MARGIN_SECONDS: Final = 0.25
 MAX_CHECKED_LINKS: Final = 20
 LINK_CONCURRENCY: Final = 4
 PER_HOST_CONCURRENCY: Final = 2
@@ -147,6 +149,15 @@ async def resolve_feed_check(
                     break
     except TimeoutError:
         run.add(build_finding("check-timed-out", stage=current, seconds=f"{budget:g}"))
+        if run.fields is None:
+            # No feed was read, so there is nothing a catalog could get: that blocks.
+            run.add(
+                build_finding(
+                    "fetch-timed-out",
+                    detail=f"No complete answer within {budget:g} seconds.",
+                    url=run.url,
+                )
+            )
         run.states[current] = ("failed" if run.blocked_in(current) else "warned", _ms(started))
     return _build_response(run, stored, started)
 
@@ -310,7 +321,9 @@ async def _check_links(run: _Run, fetcher: FeedFetcher, ends_at: float) -> None:
         links[index] = dataclasses.replace(link, active=active)
         run.add(*findings)
 
-    remaining = ends_at - time.monotonic()
+    # Stop just before the whole check's deadline: when both fire together the outer one wins and
+    # the links that already answered would be lost with the rest.
+    remaining = ends_at - time.monotonic() - REPORT_MARGIN_SECONDS
     try:
         async with asyncio.timeout(max(0.0, remaining)):
             await asyncio.gather(*(probe(index) for index in checked))

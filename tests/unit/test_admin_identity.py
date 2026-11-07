@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from registry.core.errors import AdminUnavailableError, AuthenticationError, PermissionDeniedError
 from registry.services.admin_identity import (
+    KEY_FETCH_RETRY_SECONDS,
     AdminIdentity,
     build_identity,
     build_jwks_key_resolver,
@@ -209,3 +210,45 @@ def test_only_read_only_keys_still_configure_the_api() -> None:
     assert verify_service_key("preview", (), ("preview",)) is True
     with pytest.raises(AuthenticationError):
         verify_service_key("wrong", (), ("preview",))
+
+
+async def test_once_the_retry_window_has_passed_the_keys_are_fetched_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An outage of the key set ends: after the retry window, a fetch that works serves the key."""
+    clock = [1000.0]
+    answers: list[Exception | None] = [jwt.PyJWKClientConnectionError("down"), None]
+
+    class Found:
+        key = KEY.public_key()
+
+    def fetch(_client: Any, _token: str) -> Found:
+        failure = answers.pop(0)
+        if failure is not None:
+            raise failure
+        return Found()
+
+    monkeypatch.setattr(jwt.PyJWKClient, "get_signing_key_from_jwt", fetch)
+    monkeypatch.setattr("registry.services.admin_identity.time.monotonic", lambda: clock[0])
+    resolve = build_jwks_key_resolver("https://issuer.example.test/keys")
+
+    with pytest.raises(AdminUnavailableError):
+        await resolve("a.b.c")
+    clock[0] += KEY_FETCH_RETRY_SECONDS + 1
+
+    assert await resolve("a.b.c") is Found.key
+
+
+async def test_a_token_signed_by_a_key_the_issuer_does_not_publish_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """401, not 503: the key set was fetched, and this token is simply not signed by it."""
+
+    def no_match(_client: Any, _token: str) -> Any:
+        raise jwt.PyJWKClientError("Unable to find a signing key that matches")
+
+    monkeypatch.setattr(jwt.PyJWKClient, "get_signing_key_from_jwt", no_match)
+    resolve = build_jwks_key_resolver("https://issuer.example.test/keys")
+
+    with pytest.raises(AuthenticationError):
+        await resolve("a.b.c")
