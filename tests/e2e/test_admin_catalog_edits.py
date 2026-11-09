@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.cli.seed import seed_catalogs
+from registry.core.schema_validation import build_schema_validator
 from tests.conftest import REPO_ROOT, admin_headers
 from tests.e2e.test_admin_api import become
 from tests.e2e.test_admin_catalog_writes import problem_type, status_and_version, transition
@@ -382,6 +383,32 @@ async def test_null_clears_an_optional_field_and_a_list_replaces_the_list(
     assert edited["subdivisions"] == []
     assert sorted(edited["kinds"]) == ["open", "school"]
     assert [(link["rel"], link["href"]) for link in edited["links"]] == [("catalog", HREF)]
+
+
+async def test_links_added_on_edit_reach_readers_and_keep_the_contract(
+    admin_client: AsyncClient, editor: str
+) -> None:
+    catalog = (await create(admin_client, new_catalog(publish=True))).json()
+    body = form_body(catalog)
+    added = [
+        {"rel": "icon", "href": "https://example.org/icon.png", "type": "image/png"},
+        {"rel": "authenticate", "href": "https://example.org/auth.json"},
+        {"rel": "alternate", "href": "https://example.org/", "type": "text/html", "title": "Site"},
+        {"rel": "profile", "href": "https://example.org/profile"},
+    ]
+    body["links"] += added
+
+    response = await edit(admin_client, catalog["id"], body)
+
+    assert response.status_code == 200, response.text
+    expected = {(link["rel"], link["href"]) for link in body["links"]}
+    saved = {(link["rel"], link["href"]) for link in response.json()["links"]}
+    assert expected <= saved
+    public = (await admin_client.get(f"/catalogs/{catalog['id']}")).json()
+    served = {(link["rel"], link["href"]) for link in public["links"]}
+    assert expected <= served
+    errors = sorted(build_schema_validator("catalog.schema.json").iter_errors(public), key=str)
+    assert not errors, [error.message for error in errors]
 
 
 async def test_an_edit_that_changes_nothing_keeps_the_version(
