@@ -34,8 +34,11 @@ ISO_639_3_NAMES: Final = {
 
 
 def build_language_name(tag: str) -> str:
-    """ "fr" -> "French", "pt-br" -> "Brazilian Portuguese", "kha" -> "Khasi". A tag nobody names
-    is its own name."""
+    """ "fr" -> "French", "pt-br" -> "Portuguese (Brazil)", "kha" -> "Khasi", "tw" -> "Twi". A tag
+    nobody names is its own name."""
+    # CLDR's table first: `Locale.parse` follows aliases and would name "tw" (Twi) "Akan (Ghana)".
+    if name := _CLDR_ENGLISH_NAMES.get(tag.lower()):
+        return str(name)
     try:
         name = Locale.parse(tag, sep="-").get_display_name("en")
     except (UnknownLocaleError, ValueError):
