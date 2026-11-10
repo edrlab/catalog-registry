@@ -35,6 +35,7 @@ from registry.schemas.admin import (
     FeedCheckRequest,
     FeedCheckResponse,
     FilterOptionsResponse,
+    LanguageListResponse,
     MeResponse,
     MeUpdateRequest,
     ProblemDocument,
@@ -59,6 +60,7 @@ from registry.services.admin_service import (
     resolve_admin_catalog_list,
     resolve_admin_country_detail,
     resolve_admin_country_list,
+    resolve_admin_language_list,
     resolve_admin_me,
     resolve_admin_stats,
     resolve_filter_options,
@@ -193,6 +195,13 @@ async def read_filter_options(
 ) -> FilterOptionsResponse:
     async with request.app.state.open_admin_reader() as reader:
         return await resolve_filter_options(reader)
+
+
+@router.get("/languages", summary="Every language the registry can name, by name")
+async def read_admin_languages(
+    _actor: Annotated[AdminActor, Depends(require_permission("backoffice.view"))],
+) -> LanguageListResponse:
+    return resolve_admin_language_list()
 
 
 @router.get(

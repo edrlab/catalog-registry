@@ -371,6 +371,20 @@ async def test_every_official_language_has_an_english_name(db_session: AsyncSess
     assert build_language_name("cak") == "Kaqchikel"
 
 
+async def test_every_official_language_is_in_the_language_list(db_session: AsyncSession) -> None:
+    """The catalog form offers a country's languages first, then the whole list: none may be
+    missing from it."""
+    from registry.services.language_names import build_language_list  # noqa: PLC0415
+
+    tags = [
+        r[0] for r in await rows(db_session, "SELECT DISTINCT language_tag FROM country_languages")
+    ]
+    listed = {tag for tag, _ in build_language_list()}
+
+    assert tags
+    assert sorted(set(tags) - listed) == []
+
+
 async def test_no_stored_name_carries_an_xml_entity(db_session: AsyncSession) -> None:
     """CLDR XML is read with a regex, so `&amp;` once reached the table ("Brighton &amp; Hove")."""
     found = await rows(

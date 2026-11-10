@@ -56,6 +56,7 @@ from registry.schemas.admin import (
     CountryRef,
     FilterOptionsResponse,
     KindCounts,
+    LanguageListResponse,
     LanguageOption,
     LanguageRef,
     LinkItem,
@@ -70,7 +71,7 @@ from registry.schemas.admin import (
     Submitter,
 )
 from registry.services.admin_identity import AdminIdentity
-from registry.services.language_names import build_language_name
+from registry.services.language_names import build_language_list, build_language_name
 
 #: Who may see a submitter's name and email: the roles that review submissions by publishing them.
 SUBMITTER_PERMISSION = "catalog.publish"
@@ -461,6 +462,12 @@ async def resolve_admin_catalog_detail(
 
 def _build_options(labels: Mapping[str, str]) -> list[Option]:
     return [Option(value=value, label=label) for value, label in labels.items()]
+
+
+def resolve_admin_language_list() -> LanguageListResponse:
+    return LanguageListResponse(
+        items=[LanguageRef(tag=tag, name=name) for tag, name in build_language_list()]
+    )
 
 
 async def resolve_filter_options(reader: AdminReader) -> FilterOptionsResponse:

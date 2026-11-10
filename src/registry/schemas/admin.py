@@ -98,6 +98,10 @@ class LanguageRef(AdminModel):
     name: str
 
 
+class LanguageListResponse(AdminModel):
+    items: list[LanguageRef]
+
+
 class CatalogListItem(AdminModel):
     id: str
     name: str
