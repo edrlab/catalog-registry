@@ -7,6 +7,7 @@ network and the order of the stages are `services/feed_check_service.py`'s busin
 """
 
 import json
+import math
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -451,11 +452,28 @@ def build_severity_counts(findings: Iterable[Finding]) -> dict[Severity, int]:
 
 #: Only the start of a page is read: the head is all the registry wants.
 HTML_HEAD_BYTES = 262_144
-_ICON_RELS = frozenset({"icon", "shortcut icon", "apple-touch-icon"})
+_APPLE_ICON_RELS = frozenset({"apple-touch-icon", "apple-touch-icon-precomposed"})
+#: Where browsers look when a page names no icon; tried after the page's own, in this order.
+WELL_KNOWN_ICON_PATHS = ("/apple-touch-icon.png", "/favicon.ico")
+#: At most this many icon addresses are tried for one page.
+MAX_ICON_CANDIDATES = 4
+
+
+def _icon_area(sizes: str) -> float:
+    """The largest icon a `<link sizes>` value declares (HTML Standard, the link element's `sizes`
+    attribute: `any`, or `WxH` tokens). `any` is a scalable icon, so the largest; none is 0."""
+    largest = 0.0
+    for token in sizes.lower().split():
+        if token == "any":
+            return math.inf
+        width, _, height = token.partition("x")
+        if width.isdigit() and height.isdigit():
+            largest = max(largest, int(width) * int(height))
+    return largest
 
 
 class _HeadReader(HTMLParser):
-    """Collects `<html lang>`, `<title>`, `<meta name="description">` and the first icon link. The
+    """Collects `<html lang>`, `<title>`, `<meta name="description">` and the icon links. The
     stdlib parser only tokenises: nothing is fetched, run or rendered."""
 
     def __init__(self) -> None:
@@ -463,11 +481,14 @@ class _HeadReader(HTMLParser):
         self.lang: str | None = None
         self.title: list[str] = []
         self.description: str | None = None
-        self.icon: str | None = None
+        #: (is an Apple touch icon, declared area, href), in document order.
+        self.icons: list[tuple[bool, float, str]] = []
         self._in_title = False
         self.done = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self.done:  # the rest of a chunk can run past the head
+            return
         values = {name.lower(): value or "" for name, value in attrs}
         if tag == "html":
             self.lang = values.get("lang") or None
@@ -475,8 +496,12 @@ class _HeadReader(HTMLParser):
             self._in_title = True
         elif tag == "meta" and values.get("name", "").lower() == "description":
             self.description = self.description or values.get("content")
-        elif tag == "link" and values.get("rel", "").lower() in _ICON_RELS and values.get("href"):
-            self.icon = self.icon or values["href"]
+        elif tag == "link" and values.get("href"):
+            # `rel` is a set of tokens: "shortcut icon" and "icon shortcut" are both an icon.
+            rels = set(values.get("rel", "").lower().split())
+            apple = bool(rels & _APPLE_ICON_RELS)
+            if apple or "icon" in rels:
+                self.icons.append((apple, _icon_area(values.get("sizes", "")), values["href"]))
         elif tag == "body":
             self.done = True
 
@@ -491,22 +516,41 @@ class _HeadReader(HTMLParser):
             self.title.append(data)
 
 
-def build_page_fields(body: bytes, *, base_url: str, address: str) -> FeedFields:
-    """A catalog's fields from a web page's head: `<title>`, the meta description, `<html lang>`,
-    the page as the `catalog` link (`text/html`) and its icon (not checked yet: `active` None)."""
+def _read_head(body: bytes) -> _HeadReader:
     reader = _HeadReader()
     text = body[:HTML_HEAD_BYTES].decode("utf-8", errors="replace")
     for start in range(0, len(text), 8192):
         reader.feed(text[start : start + 8192])
         if reader.done:
             break
-    links = [FeedLink(rel=LinkRel.CATALOG.value, href=address, type="text/html", active=True)]
-    icon = urljoin(base_url, reader.icon.strip()) if reader.icon else None
-    if icon and urlsplit(icon).scheme in {"http", "https"}:
-        links.append(FeedLink(rel=LinkRel.ICON.value, href=icon))
+    return reader
+
+
+def build_page_fields(body: bytes, *, address: str) -> FeedFields:
+    """A catalog's fields from a web page's head: `<title>`, the meta description, `<html lang>`
+    and the page as the `catalog` link (`text/html`). Its icon is looked for when the links are
+    checked (`build_icon_candidates`), because only an icon that answers is worth suggesting."""
+    reader = _read_head(body)
     return FeedFields(
         name=_text("".join(reader.title), MAX_NAME_LENGTH),
         description=_text(reader.description, MAX_DESCRIPTION_LENGTH),
         languages=_languages(reader.lang),
-        links=tuple(links),
+        links=(FeedLink(rel=LinkRel.CATALOG.value, href=address, type="text/html", active=True),),
     )
+
+
+def build_icon_candidates(body: bytes, *, base_url: str) -> list[str]:
+    """Where a web page's icon may be, best first: its Apple touch icons, then its other icons by
+    largest declared size, then the well-known `/apple-touch-icon.png` and `/favicon.ico` on its
+    origin. Absolute, http(s) only, no repeats, at most `MAX_ICON_CANDIDATES`."""
+    ranked = sorted(_read_head(body).icons, key=lambda icon: (not icon[0], -icon[1]))
+    parts = urlsplit(base_url)
+    hrefs = [urljoin(base_url, href.strip()) for _, _, href in ranked] + [
+        f"{parts.scheme}://{parts.netloc}{path}" for path in WELL_KNOWN_ICON_PATHS
+    ]
+    kept = [
+        href
+        for href in dict.fromkeys(hrefs)
+        if urlsplit(href).scheme in {"http", "https"} and len(href.encode()) <= MAX_HREF_BYTES
+    ]
+    return kept[:MAX_ICON_CANDIDATES]

@@ -22,6 +22,7 @@ from registry.domain.feed_check import (
     build_feed_links,
     build_feed_shape_findings,
     build_finding,
+    build_icon_candidates,
     build_link_header_targets,
     build_page_fields,
     build_signed_in_fields,
@@ -155,7 +156,7 @@ def test_suggested_text_fits_the_admin_api_limits() -> None:
 
     for fields in (
         build_feed_fields(feed, base_url=FEED_URL, address=FEED_URL),
-        build_page_fields(page, base_url=FEED_URL, address=FEED_URL),
+        build_page_fields(page, address=FEED_URL),
         build_signed_in_fields(authentication, address=FEED_URL, authentication_url=FEED_URL),
     ):
         assert len(fields.name or "") == MAX_NAME_LENGTH
@@ -230,23 +231,59 @@ def test_a_web_page_gives_its_head() -> None:
       <script>document.title = "not this"</script>
     </head><body><title>Not this either</title></body></html>"""
 
-    fields = build_page_fields(
-        page, base_url="https://bib.example.org/", address="https://bib.example.org/"
-    )
+    fields = build_page_fields(page, address="https://bib.example.org/")
 
     assert fields.name == "Bibliotheek & Co"
     assert fields.description == "De bib."
     assert fields.languages == ("nl-be",)
     assert [(link.rel, link.href, link.type, link.active) for link in fields.links] == [
         ("catalog", "https://bib.example.org/", "text/html", True),
-        ("icon", "https://bib.example.org/favicon.png", None, None),
+    ]
+
+
+def test_icon_candidates_put_apple_touch_icons_first_then_the_largest() -> None:
+    page = b"""<html><head>
+      <link rel="mask-icon" href="/mask.svg">
+      <link rel="icon" sizes="16x16" href="/16.png">
+      <link rel="icon shortcut" sizes="32x32 192x192" href="/192.png">
+      <link rel="Apple-Touch-Icon-Precomposed" href="/apple.png">
+    </head><body><link rel="icon" href="/late.png"></body>"""
+
+    assert build_icon_candidates(page, base_url="https://bib.example.org/a/") == [
+        "https://bib.example.org/apple.png",
+        "https://bib.example.org/192.png",
+        "https://bib.example.org/16.png",
+        "https://bib.example.org/apple-touch-icon.png",
+    ]
+
+
+def test_icon_candidates_fall_back_to_the_well_known_paths_without_repeats() -> None:
+    page = b'<head><link rel="icon" sizes="any" href="https://bib.example.org/favicon.ico">'
+
+    assert build_icon_candidates(page, base_url="https://bib.example.org/a/b") == [
+        "https://bib.example.org/favicon.ico",
+        "https://bib.example.org/apple-touch-icon.png",
+    ]
+    assert build_icon_candidates(b"", base_url="http://x.example:8080/") == [
+        "http://x.example:8080/apple-touch-icon.png",
+        "http://x.example:8080/favicon.ico",
+    ]
+
+
+def test_a_scalable_icon_outranks_any_declared_size() -> None:
+    page = (
+        b'<link rel="icon" sizes="512x512" href="/big.png">'
+        b'<link rel="icon" sizes="any" href="/i.svg">'
+    )
+
+    assert build_icon_candidates(page, base_url=FEED_URL)[:2] == [
+        "https://feeds.example.org/i.svg",
+        "https://feeds.example.org/big.png",
     ]
 
 
 def test_a_web_page_without_a_title_or_language_gives_none() -> None:
-    fields = build_page_fields(
-        b"<html lang='not a tag!'><body>x", base_url=FEED_URL, address=FEED_URL
-    )
+    fields = build_page_fields(b"<html lang='not a tag!'><body>x", address=FEED_URL)
 
     assert fields.name is None
     assert fields.languages == ()
