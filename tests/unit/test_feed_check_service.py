@@ -16,6 +16,7 @@ from registry.core.errors import CatalogNotFoundError, PermissionDeniedError
 from registry.domain.admin_models import AdminActor
 from registry.domain.enums import ActorRole
 from registry.domain.fetching import FetchError, FetchResult, Hop
+from registry.services import feed_check_service
 from registry.services.feed_check_service import MAX_CHECKED_LINKS, resolve_feed_check
 
 FEED = "https://feeds.example.org/opds"
@@ -274,8 +275,163 @@ async def test_a_web_page_is_accepted_with_its_head_and_icon() -> None:
     assert report.feed.name == "Ma bib"
     assert [(link.rel, link.type, link.active) for link in report.feed.links] == [
         ("catalog", "text/html", True),
-        ("icon", None, True),
+        ("icon", "image/x-icon", True),
     ]
+
+
+SITE = "https://www.example.org/"
+
+
+def html(*links: str) -> FetchResult:
+    return answer(SITE, f"<head>{''.join(links)}</head>".encode(), media_type="text/html")
+
+
+def icon_links(report: Any) -> list[tuple[str, str | None]]:
+    return [(link.href, link.type) for link in report.feed.links if link.rel == "icon"]
+
+
+async def test_a_feed_without_an_icon_gets_its_websites_best_icon_that_answers() -> None:
+    feed = opds({"rel": "alternate", "href": SITE, "type": "text/html; charset=utf-8"})
+    page = html(
+        '<link rel="icon" href="/small.png">',
+        '<link rel="apple-touch-icon" href="/gone.png">',
+    )
+
+    report = await check(
+        {
+            FEED: answer(FEED, feed),
+            SITE: page,
+            f"{SITE}small.png": answer(f"{SITE}small.png", media_type="image/png"),
+        }
+    )
+
+    assert report.verdict == "ok"  # the Apple touch icon that failed is not reported
+    assert icon_links(report) == [(f"{SITE}small.png", "image/png")]
+
+
+async def test_a_page_with_no_icon_that_answers_suggests_none_and_says_nothing() -> None:
+    page = b'<html><head><title>Bib</title><link rel="icon" href="/gone.ico"></head>'
+
+    report = await check({FEED: answer(FEED, page, media_type="text/html")})
+
+    assert report.verdict == "ok"
+    assert codes(report) == ["html-page"]
+    assert icon_links(report) == []
+
+
+async def test_a_well_known_icon_is_used_when_the_page_names_none() -> None:
+    touch = "https://feeds.example.org/apple-touch-icon.png"
+    page = b"<html><head><title>Bib</title></head>"
+
+    report = await check(
+        {
+            FEED: answer(FEED, page, media_type="text/html"),
+            touch: answer(touch, media_type="text/html"),  # a soft 404: not an image
+            "https://feeds.example.org/favicon.ico": answer(touch, media_type="image/x-icon"),
+        }
+    )
+
+    assert icon_links(report) == [("https://feeds.example.org/favicon.ico", "image/x-icon")]
+
+
+async def test_a_slow_icon_search_gives_up_quietly(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(feed_check_service, "ICON_BUDGET_SECONDS", 0.08)
+    favicon = "https://feeds.example.org/favicon.ico"
+    page = b"<html><head><title>Bib</title></head>"
+    fetcher = FakeFetcher(
+        {
+            FEED: answer(FEED, page, media_type="text/html"),
+            favicon: answer(favicon, media_type="image/x-icon"),
+        },
+        delay=0.05,
+    )
+
+    report = await resolve_feed_check(fetcher, any_reader(), EDITOR, FEED)
+
+    # The first candidate fails at 0.05 s; the favicon would answer at 0.10 s, past the limit.
+    assert report.verdict == "ok"
+    assert codes(report) == ["html-page"]
+    assert icon_links(report) == []
+
+
+async def test_a_feed_with_its_own_icon_never_reads_its_website() -> None:
+    icon = "https://feeds.example.org/icon.png"
+    fetcher = FakeFetcher(
+        {
+            FEED: answer(
+                FEED,
+                opds(
+                    {"rel": "icon", "href": icon},
+                    {"rel": "alternate", "href": SITE, "type": "text/html"},
+                ),
+            ),
+            icon: answer(icon, media_type="image/png"),
+            SITE: answer(SITE, media_type="text/html"),
+        }
+    )
+
+    report = await resolve_feed_check(fetcher, any_reader(), EDITOR, FEED, website=SITE)
+
+    assert ("GET", SITE) not in fetcher.calls
+    assert icon_links(report) == [(icon, None)]
+
+
+async def test_a_given_website_becomes_the_alternate_link_and_gives_the_icon() -> None:
+    favicon = f"{SITE}favicon.ico"
+
+    report = await check(
+        {
+            FEED: answer(FEED, opds()),
+            SITE: html(),
+            favicon: answer(favicon, media_type="image/vnd.microsoft.icon"),
+        },
+        website=SITE,
+    )
+
+    assert report.verdict == "ok"
+    assert [(link.rel, link.href, link.type, link.active) for link in report.feed.links] == [
+        ("catalog", FEED, "application/opds+json", True),
+        ("alternate", SITE, "text/html", True),
+        ("icon", favicon, "image/vnd.microsoft.icon", True),
+    ]
+
+
+async def test_a_given_website_the_feed_already_links_is_not_repeated() -> None:
+    feed = opds({"rel": "alternate", "href": SITE, "type": "text/html"})
+
+    report = await check({FEED: answer(FEED, feed), SITE: html()}, website=SITE.rstrip("/"))
+
+    assert [link.rel for link in report.feed.links].count("alternate") == 1
+
+
+async def test_a_dead_website_warns_and_blocks_nothing() -> None:
+    report = await check({FEED: answer(FEED, opds())}, website=SITE)
+
+    assert report.verdict == "warnings"
+    assert [(f.code, f.rel) for f in report.findings] == [("link-dead", "alternate")]
+    assert icon_links(report) == []
+
+
+async def test_a_refused_website_blocks_before_any_request() -> None:
+    fetcher = FakeFetcher({})
+
+    report = await resolve_feed_check(
+        fetcher, any_reader(), EDITOR, FEED, website="http://127.0.0.1/"
+    )
+
+    assert report.verdict == "blocked"
+    assert [(f.code, f.rel, f.url) for f in report.findings] == [
+        ("url-unsafe", "alternate", "http://127.0.0.1/")
+    ]
+    assert fetcher.calls == []
+
+
+async def test_a_web_page_ignores_the_website() -> None:
+    page = b"<html><head><title>Bib</title></head>"
+
+    report = await check({FEED: answer(FEED, page, media_type="text/html")}, website=SITE)
+
+    assert [link.rel for link in report.feed.links] == ["catalog"]
 
 
 @pytest.mark.parametrize(

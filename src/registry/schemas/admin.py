@@ -362,6 +362,12 @@ class FeedCheckRequest(AdminModel):
     url: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2048)]
     #: Re-check an existing catalog: the report then carries `changes`.
     catalog_id: str | None = None
+    #: The feed's website: an OPDS feed gets it as its `alternate` link, and its icon is looked
+    #: for there. Ignored for a web page.
+    website: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2048)]
+        | None
+    ) = None
 
 
 class FeedCheckStage(AdminModel):

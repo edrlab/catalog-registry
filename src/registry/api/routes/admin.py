@@ -412,7 +412,7 @@ async def create_admin_feed_check(
         request.app.state.open_feed_fetcher() as fetcher,
     ):
         return await resolve_feed_check(
-            fetcher, reader, actor, body.url, catalog_id=body.catalog_id
+            fetcher, reader, actor, body.url, catalog_id=body.catalog_id, website=body.website
         )
 
 

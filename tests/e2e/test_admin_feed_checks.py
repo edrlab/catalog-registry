@@ -71,6 +71,9 @@ def library(request: httpx.Request) -> httpx.Response:
             headers={"content-type": "application/opds+json"},
         ),
         "https://feeds.example.org/page": httpx.Response(200),
+        "https://www.example.org/favicon.ico": httpx.Response(
+            200, content=b"\x00\x00\x01\x00", headers={"content-type": "image/x-icon"}
+        ),
     }
     return routes.get(url, httpx.Response(404))
 
@@ -213,6 +216,19 @@ async def test_a_web_page_is_accepted(admin_client: AsyncClient, editor: str) ->
     assert report["feed"]["links"][0]["type"] == "text/html"
 
 
+async def test_a_feeds_website_is_linked_and_gives_the_icon(
+    admin_client: AsyncClient, editor: str
+) -> None:
+    body = {"url": FEED, "website": " https://www.example.org/ "}
+    report = (await check(admin_client, body)).json()
+
+    assert report["verdict"] == "ok"
+    assert [(link["rel"], link["href"], link["type"]) for link in report["feed"]["links"]][-2:] == [
+        ("alternate", "https://www.example.org/", "text/html"),
+        ("icon", "https://www.example.org/favicon.ico", "image/x-icon"),
+    ]
+
+
 async def test_an_atom_feed_is_blocked(admin_client: AsyncClient, editor: str) -> None:
     report = (await check(admin_client, {"url": "https://feeds.example.org/atom"})).json()
 
@@ -310,7 +326,10 @@ async def test_a_viewer_cannot_check(admin_client: AsyncClient, editor: str) -> 
     assert response.status_code == 403
 
 
-@pytest.mark.parametrize("body", [{}, {"url": ""}, {"url": "x" * 3000}, {"url": FEED, "x": 1}])
+@pytest.mark.parametrize(
+    "body",
+    [{}, {"url": ""}, {"url": "x" * 3000}, {"url": FEED, "x": 1}, {"url": FEED, "website": ""}],
+)
 async def test_a_malformed_body_is_422(admin_client: AsyncClient, editor: str, body: Any) -> None:
     response = await check(admin_client, body)
 

@@ -7,6 +7,7 @@ client, so its tests drive it with a fake.
 """
 
 import asyncio
+import contextlib
 import dataclasses
 import itertools
 import time
@@ -23,6 +24,7 @@ from registry.domain.enums import LinkRel
 from registry.domain.feed_check import (
     AUTHENTICATION_MEDIA_TYPE,
     AUTHENTICATION_REL,
+    HTML_HEAD_BYTES,
     OPDS_MEDIA_TYPE,
     STAGE_LABELS,
     FeedFields,
@@ -33,6 +35,7 @@ from registry.domain.feed_check import (
     build_feed_fields,
     build_feed_shape_findings,
     build_finding,
+    build_icon_candidates,
     build_link_header_targets,
     build_page_fields,
     build_severity_counts,
@@ -67,6 +70,8 @@ AUTHENTICATION_MAX_BYTES: Final = 262_144
 CHECK_BUDGET_SECONDS: Final = 18.0
 FEED_BUDGET_SECONDS: Final = 12.0
 LINK_BUDGET_SECONDS: Final = 4.0
+#: The icon search gives up quietly after this: a nicety must not run the check to its limit.
+ICON_BUDGET_SECONDS: Final = 6.0
 #: The links stage ends this much before the whole check, so it can keep what finished.
 REPORT_MARGIN_SECONDS: Final = 0.25
 MAX_CHECKED_LINKS: Final = 20
@@ -96,6 +101,8 @@ class _Run:
     duplicate: tuple[str, str] | None = None
     #: A 401/403 that led to an OPDS Authentication document: (document, its URL).
     sign_in: tuple[dict[str, Any], str] | None = None
+    #: The feed's website, given with the check: its `alternate` link, where its icon is looked for.
+    website: str | None = None
 
     def add(self, *findings: Finding) -> None:
         self.findings.extend(findings)
@@ -115,10 +122,12 @@ async def resolve_feed_check(
     url: str,
     *,
     catalog_id: str | None = None,
+    website: str | None = None,
     budget: float = CHECK_BUDGET_SECONDS,
 ) -> FeedCheckResponse:
     """Check *url* and say what a catalog would get from it. With *catalog_id*, also what changed
-    against that catalog (raises `CatalogNotFoundError` if it does not exist).
+    against that catalog (raises `CatalogNotFoundError` if it does not exist). With *website*, an
+    OPDS feed also gets that page as its `alternate` link (ignored for a web page).
 
     Checking makes the registry request a URL, so it needs the permission to add a catalog, or to
     edit the one being re-checked; a viewer cannot use it to probe addresses."""
@@ -131,7 +140,7 @@ async def resolve_feed_check(
         catalog_id = _normalise_checked_id(catalog_id)
         stored = await _fetch_stored_catalog(reader, catalog_id)
     started = time.monotonic()
-    run = _Run(url=url, address=url)
+    run = _Run(url=url, address=url, website=website)
     stages: list[tuple[Stage, Callable[[], Awaitable[None]]]] = [
         (Stage.ADDRESS, lambda: _check_address(run, reader, catalog_id)),
         (Stage.FETCH, lambda: _check_fetch(run, fetcher, reader, catalog_id)),
@@ -171,6 +180,15 @@ async def _check_address(run: _Run, reader: AdminReader, catalog_id: str | None)
     except FetchError as refused:
         run.add(build_finding(refused.code, detail=refused.detail, url=run.url))
         return
+    if run.website is not None:
+        try:
+            validate_outbound_url(run.website)
+        except FetchError as refused:
+            alternate = LinkRel.ALTERNATE.value
+            run.add(
+                build_finding(refused.code, detail=refused.detail, url=run.website, rel=alternate)
+            )
+            return
     await _check_duplicate(run, reader, run.url, catalog_id)
 
 
@@ -242,7 +260,7 @@ async def _check_feed(run: _Run) -> None:
         return
     if markup == "html-page":
         run.format = "html"
-        run.fields = build_page_fields(result.body, base_url=result.final_url, address=run.address)
+        run.fields = build_page_fields(result.body, address=run.address)
         run.add(build_finding("html-page"))
         return
     if result.truncated:
@@ -306,57 +324,140 @@ async def _check_links(run: _Run, fetcher: FeedFetcher, ends_at: float) -> None:
     fields = run.fields
     assert fields is not None
     links = list(fields.links)
+    alternate = LinkRel.ALTERNATE.value
+    if (
+        run.website
+        and run.format == "opds2"
+        # "https://x.org" and "https://x.org/" are the same page.
+        and not any(
+            link.rel == alternate and link.href.rstrip("/") == run.website.rstrip("/")
+            for link in links
+        )
+    ):
+        links.append(FeedLink(rel=alternate, href=run.website, type="text/html"))
     pending = [index for index, link in enumerate(links) if link.active is None]
     checked, skipped = pending[:MAX_CHECKED_LINKS], pending[MAX_CHECKED_LINKS:]
     if skipped:
         run.add(build_finding("links-capped", cap=MAX_CHECKED_LINKS, skipped=len(skipped)))
-    every = asyncio.Semaphore(LINK_CONCURRENCY)
-    per_host: dict[str, asyncio.Semaphore] = {}
+    limited = _LimitedFetcher(fetcher)
+    icons: list[FeedLink] = []
 
     async def probe(index: int) -> None:
         link = links[index]
-        host = urlsplit(link.href).hostname or ""
-        async with every, per_host.setdefault(host, asyncio.Semaphore(PER_HOST_CONCURRENCY)):
-            active, findings = await _probe_link(fetcher, link)
+        active, findings = await _probe_link(limited, link)
         links[index] = dataclasses.replace(link, active=active)
         run.add(*findings)
+
+    async def find_icon() -> None:
+        if any(link.rel == LinkRel.ICON.value for link in links):
+            return
+        website = _find_website(run, links)
+        if not website:
+            return
+        with contextlib.suppress(TimeoutError):
+            async with asyncio.timeout(ICON_BUDGET_SECONDS):
+                icon = await _find_icon(limited, website)
+                if icon:
+                    icons.append(icon)
 
     # Stop just before the whole check's deadline: when both fire together the outer one wins and
     # the links that already answered would be lost with the rest.
     remaining = ends_at - time.monotonic() - REPORT_MARGIN_SECONDS
     try:
         async with asyncio.timeout(max(0.0, remaining)):
-            await asyncio.gather(*(probe(index) for index in checked))
+            await asyncio.gather(*(probe(index) for index in checked), find_icon())
     except TimeoutError:
         run.add(
             build_finding("check-timed-out", stage=Stage.LINKS, seconds=f"{CHECK_BUDGET_SECONDS:g}")
         )
-    run.fields = dataclasses.replace(fields, links=tuple(links))
+    run.fields = dataclasses.replace(fields, links=(*links, *icons))
 
 
-async def _probe_link(fetcher: FeedFetcher, link: FeedLink) -> tuple[bool, list[Finding]]:
-    """Whether *link* answers, and what is worth saying about it. HEAD first; a server that does not
-    answer HEAD properly gets one small GET."""
+class _LimitedFetcher:
+    """*fetcher*, at most `LINK_CONCURRENCY` requests at once, `PER_HOST_CONCURRENCY` per host."""
+
+    def __init__(self, fetcher: FeedFetcher) -> None:
+        self._fetcher = fetcher
+        self._every = asyncio.Semaphore(LINK_CONCURRENCY)
+        self._per_host: dict[str, asyncio.Semaphore] = {}
+
+    async def fetch(self, url: str, **options: Any) -> FetchResult:
+        host = urlsplit(url).hostname or ""
+        per_host = self._per_host.setdefault(host, asyncio.Semaphore(PER_HOST_CONCURRENCY))
+        async with self._every, per_host:
+            return await self._fetcher.fetch(url, **options)
+
+
+def _find_website(run: _Run, links: list[FeedLink]) -> str | FetchResult | None:
+    """Where the catalog's icon is looked for: a web page is its own website (already fetched); an
+    OPDS feed's is the one given with the check, else its first `alternate` link to an HTML page."""
+    if run.format == "html":
+        return run.result
+    return run.website or next(
+        (
+            link.href
+            for link in links
+            if link.rel == LinkRel.ALTERNATE.value
+            and (link.type or "").split(";", 1)[0].strip().lower() == "text/html"
+        ),
+        None,
+    )
+
+
+async def _find_icon(fetcher: _LimitedFetcher, website: str | FetchResult) -> FeedLink | None:
+    """The first of the website's icon candidates that answers with an image, typed as served; None
+    when the website or every candidate fails. Failures say nothing: no icon is suggested."""
+    if isinstance(website, str):
+        try:
+            website = await fetcher.fetch(
+                website,
+                accept="text/html",
+                max_bytes=HTML_HEAD_BYTES,
+                deadline=LINK_BUDGET_SECONDS,
+                truncate=True,
+            )
+        except FetchError:
+            return None
+        if not _ok(website.status):
+            return None
+    for href in build_icon_candidates(website.body, base_url=website.final_url):
+        try:
+            result = await _request(fetcher, href)
+        except FetchError:
+            continue
+        if _ok(result.status) and result.media_type.startswith("image/"):
+            return FeedLink(rel=LinkRel.ICON.value, href=href, type=result.media_type, active=True)
+    return None
+
+
+async def _request(fetcher: _LimitedFetcher, target: str) -> FetchResult:
+    """HEAD first; a server that does not answer HEAD properly gets one small GET."""
+    result = await fetcher.fetch(
+        target,
+        method="HEAD",
+        accept=PROBE_ACCEPT,
+        max_bytes=PROBE_MAX_BYTES,
+        deadline=LINK_BUDGET_SECONDS,
+        truncate=True,
+    )
+    if _ok(result.status) or result.status in SIGN_IN_STATUSES:
+        return result
+    return await fetcher.fetch(
+        target,
+        accept=PROBE_ACCEPT,
+        max_bytes=PROBE_MAX_BYTES,
+        deadline=LINK_BUDGET_SECONDS,
+        truncate=True,
+    )
+
+
+async def _probe_link(fetcher: _LimitedFetcher, link: FeedLink) -> tuple[bool, list[Finding]]:
+    """Whether *link* answers, and what is worth saying about it."""
     target = build_template_probe_url(link.href) if link.templated else link.href
     if target is None:
         return False, [_dead(link, "the template's braces do not match.")]
     try:
-        result = await fetcher.fetch(
-            target,
-            method="HEAD",
-            accept=PROBE_ACCEPT,
-            max_bytes=PROBE_MAX_BYTES,
-            deadline=LINK_BUDGET_SECONDS,
-            truncate=True,
-        )
-        if not _ok(result.status) and result.status not in SIGN_IN_STATUSES:
-            result = await fetcher.fetch(
-                target,
-                accept=PROBE_ACCEPT,
-                max_bytes=PROBE_MAX_BYTES,
-                deadline=LINK_BUDGET_SECONDS,
-                truncate=True,
-            )
+        result = await _request(fetcher, target)
     except FetchError as failed:
         return False, [_dead(link, failed.detail)]
     if result.status in SIGN_IN_STATUSES:
