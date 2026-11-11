@@ -7,6 +7,7 @@ client, so its tests drive it with a fake.
 """
 
 import asyncio
+import contextlib
 import dataclasses
 import itertools
 import time
@@ -69,6 +70,8 @@ AUTHENTICATION_MAX_BYTES: Final = 262_144
 CHECK_BUDGET_SECONDS: Final = 18.0
 FEED_BUDGET_SECONDS: Final = 12.0
 LINK_BUDGET_SECONDS: Final = 4.0
+#: The icon search gives up quietly after this: a nicety must not run the check to its limit.
+ICON_BUDGET_SECONDS: Final = 6.0
 #: The links stage ends this much before the whole check, so it can keep what finished.
 REPORT_MARGIN_SECONDS: Final = 0.25
 MAX_CHECKED_LINKS: Final = 20
@@ -325,7 +328,11 @@ async def _check_links(run: _Run, fetcher: FeedFetcher, ends_at: float) -> None:
     if (
         run.website
         and run.format == "opds2"
-        and not any(link.rel == alternate and link.href == run.website for link in links)
+        # "https://x.org" and "https://x.org/" are the same page.
+        and not any(
+            link.rel == alternate and link.href.rstrip("/") == run.website.rstrip("/")
+            for link in links
+        )
     ):
         links.append(FeedLink(rel=alternate, href=run.website, type="text/html"))
     pending = [index for index, link in enumerate(links) if link.active is None]
@@ -342,10 +349,16 @@ async def _check_links(run: _Run, fetcher: FeedFetcher, ends_at: float) -> None:
         run.add(*findings)
 
     async def find_icon() -> None:
-        if not any(link.rel == LinkRel.ICON.value for link in links):
-            website = _find_website(run, links)
-            icon = await _find_icon(limited, website) if website else None
-            icons.extend([icon] if icon else [])
+        if any(link.rel == LinkRel.ICON.value for link in links):
+            return
+        website = _find_website(run, links)
+        if not website:
+            return
+        with contextlib.suppress(TimeoutError):
+            async with asyncio.timeout(ICON_BUDGET_SECONDS):
+                icon = await _find_icon(limited, website)
+                if icon:
+                    icons.append(icon)
 
     # Stop just before the whole check's deadline: when both fire together the outer one wins and
     # the links that already answered would be lost with the rest.

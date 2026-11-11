@@ -16,6 +16,7 @@ from registry.core.errors import CatalogNotFoundError, PermissionDeniedError
 from registry.domain.admin_models import AdminActor
 from registry.domain.enums import ActorRole
 from registry.domain.fetching import FetchError, FetchResult, Hop
+from registry.services import feed_check_service
 from registry.services.feed_check_service import MAX_CHECKED_LINKS, resolve_feed_check
 
 FEED = "https://feeds.example.org/opds"
@@ -333,6 +334,26 @@ async def test_a_well_known_icon_is_used_when_the_page_names_none() -> None:
     assert icon_links(report) == [("https://feeds.example.org/favicon.ico", "image/x-icon")]
 
 
+async def test_a_slow_icon_search_gives_up_quietly(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(feed_check_service, "ICON_BUDGET_SECONDS", 0.08)
+    favicon = "https://feeds.example.org/favicon.ico"
+    page = b"<html><head><title>Bib</title></head>"
+    fetcher = FakeFetcher(
+        {
+            FEED: answer(FEED, page, media_type="text/html"),
+            favicon: answer(favicon, media_type="image/x-icon"),
+        },
+        delay=0.05,
+    )
+
+    report = await resolve_feed_check(fetcher, any_reader(), EDITOR, FEED)
+
+    # The first candidate fails at 0.05 s; the favicon would answer at 0.10 s, past the limit.
+    assert report.verdict == "ok"
+    assert codes(report) == ["html-page"]
+    assert icon_links(report) == []
+
+
 async def test_a_feed_with_its_own_icon_never_reads_its_website() -> None:
     icon = "https://feeds.example.org/icon.png"
     fetcher = FakeFetcher(
@@ -378,7 +399,7 @@ async def test_a_given_website_becomes_the_alternate_link_and_gives_the_icon() -
 async def test_a_given_website_the_feed_already_links_is_not_repeated() -> None:
     feed = opds({"rel": "alternate", "href": SITE, "type": "text/html"})
 
-    report = await check({FEED: answer(FEED, feed), SITE: html()}, website=SITE)
+    report = await check({FEED: answer(FEED, feed), SITE: html()}, website=SITE.rstrip("/"))
 
     assert [link.rel for link in report.feed.links].count("alternate") == 1
 
