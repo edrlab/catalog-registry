@@ -107,10 +107,12 @@ async def verify_admin_token(
     email = claims.get("email")
     if not isinstance(email, str) or not email:
         raise AuthenticationError("The token carries no email.")
+    # Some issuers put the name under the token's custom claims instead of at the top level.
+    custom = claims.get("custom")
     return build_identity(
         email,
         allowed_domains=allowed_domains,
-        name=claims.get("name"),
+        name=claims.get("name") or (custom.get("name") if isinstance(custom, dict) else None),
         issuer=issuer,
         subject=claims.get("sub"),
     )

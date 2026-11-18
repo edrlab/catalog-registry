@@ -91,6 +91,12 @@ async def test_a_valid_token_yields_the_lowercased_email() -> None:
     assert identity.subject == "access-subject"
 
 
+async def test_a_name_only_in_the_custom_claims_is_read() -> None:
+    identity = await verify(sign(custom={"name": "Ada Le Grand"}))
+
+    assert identity.name == "Ada Le Grand"
+
+
 async def test_a_token_for_any_accepted_audience_is_valid() -> None:
     identity = await verify(sign(aud=[OTHER_AUD]))
 
