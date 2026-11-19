@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.pool import QueuePool
 
 from registry.core.config import Settings
 from registry.db import session as session_module
@@ -121,6 +122,7 @@ def test_every_pool_takes_its_size_from_settings_and_is_recycled() -> None:
 
     for engine in (create_database_engine(sized), build_read_engine(sized, {})):
         pool = engine.sync_engine.pool
+        assert isinstance(pool, QueuePool)
         assert pool.size() == 2
         assert pool._max_overflow == 1
         assert pool._recycle == POOL_RECYCLE_SECONDS
