@@ -12,9 +12,21 @@ from sqlalchemy.ext.asyncio import (
 
 from registry.core.config import Settings
 
+#: Short enough that an idle connection is replaced before an intermediary can drop it. A drop that
+#: still happens is retried once by `fetch_rows` (one statement per read makes that safe).
+POOL_RECYCLE_SECONDS = 300
+
 
 def create_database_engine(settings: Settings) -> AsyncEngine:
-    return create_async_engine(str(settings.database_url), pool_pre_ping=True)
+    """Writes (the importers, admin) and the readiness probe. Recycled like the read pools: a
+    hosted database may close a connection held for too long."""
+    return create_async_engine(
+        str(settings.database_url),
+        pool_pre_ping=True,
+        pool_recycle=POOL_RECYCLE_SECONDS,
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_max_overflow,
+    )
 
 
 def build_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
@@ -28,11 +40,6 @@ async def check_database_connection(engine: AsyncEngine) -> None:
     """Raise if the database is unreachable. Used by the readiness probe."""
     async with engine.connect() as connection:
         await connection.execute(text("SELECT 1"))
-
-
-#: Short enough that an idle connection is replaced before an intermediary can drop it. A drop that
-#: still happens is retried once by `fetch_rows` (one statement per read makes that safe).
-READ_POOL_RECYCLE_SECONDS = 300
 
 
 def build_read_engine(settings: Settings, server_settings: Mapping[str, str]) -> AsyncEngine:
@@ -49,7 +56,9 @@ def build_read_engine(settings: Settings, server_settings: Mapping[str, str]) ->
     return create_async_engine(
         str(settings.database_url),
         pool_pre_ping=False,
-        pool_recycle=READ_POOL_RECYCLE_SECONDS,
+        pool_recycle=POOL_RECYCLE_SECONDS,
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_max_overflow,
         isolation_level="AUTOCOMMIT",
         connect_args={"server_settings": dict(server_settings)},
     )
