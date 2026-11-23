@@ -22,43 +22,48 @@ The top-level feed advertises it with a templated `search` link, `/search{?query
 | `bibliotheque -paris` | `-` leaves out catalogs containing that word (or `-"a phrase"`) |
 | `Suisse`, `Schweiz`, `Svizzera` | Place names work in English and the official languages of the country |
 | `PARIS`, `parís`, `Suiße` | Capitals and accents never matter. Folding is done in the database |
-| `bruxels` | A typo is caught by trigram similarity, listed after the exact matches |
+| `bruxels` | A typo is forgiven, listed after the exact matches (see Typos) |
+| `lib` | The last word also matches as the start of a word: Library, Librivox |
 | `paris OR valais` | `OR` is accepted and ignored: every search is already any-word |
 
 An empty query, spaces or only left-out words give an **empty feed** and touch no database.
 Punctuation alone (`!!!`) also gives an empty feed, but it does run the search statement: the parser
-only splits, and PostgreSQL discards chunks with no word in them. Input is cut at 256 characters and
+only splits, and the database discards chunks with no word in them. A word the index splits
+(`ile-de-france`) is searched as the phrase "ile de france". Input is cut at 256 characters and
 16 chunks. Not searchable: supported languages (a filter is planned) and descriptions.
 
 ## Order and paging
 
-1. Word matches first, scored by field: title 1.0, city 0.4, country names and subdivisions 0.2.
-2. Then catalogs found only through trigrams, by similarity.
+1. Matches on a word as typed, by BM25 score (TIN, PlanetScale's search index): rarer words and
+   shorter titles count more, and a field's boost multiplies it: title ×5, city ×2, country and
+   subdivision names ×1. Every typed word is scored, even one found in most catalogs.
+2. Then catalogs found only through a typo or the last word's prefix: TIN scores those 0.
 3. Ties: newest first, then id. The order is fixed, so pages never overlap or skip.
 
 50 results per page, and at most 100 results in all: `page` is 1 or 2 (422 outside that), so there is
 no paging through hundreds or thousands of catalogs. `numberOfItems` is the number of matches
 **capped at 100**, also on a page past the end. A search with more matches than that is narrowed with
 a longer query or `restrict`, not paged. Links: `self`, `search`, `first`, and `previous` / `next`
-only when there is one. Changing the weights is one constant, `RANK_WEIGHTS`, with no reindex.
+only when there is one. Changing a boost is one constant (`TITLE_BOOST`, `CITY_BOOST`), with no
+reindex.
 
 ## Typos
 
-A word matches a stored word when enough of their three-letter pieces are shared. The app asks for
-**0.5** (`WORD_SIMILARITY_THRESHOLD`); PostgreSQL's own default is 0.6. Measured on the seed data:
+A word of 6 letters or more may be 2 edits away (a letter dropped, added or replaced each count
+one, two neighbours swapped count two), a word of 4 or 5 letters 1 edit, a shorter word none. The
+first letter must be right. Measured on the seed data, one mistake per word:
 
-| One mistake | at 0.6 | **at 0.5** | at 0.4 |
-|---|---|---|---|
-| a letter dropped | 79% | **96%** | 99% |
-| a letter added | 75% | **96%** | 100% |
-| a letter replaced | 61% | **90%** | 97% |
-| two neighbours swapped | 24% | **66%** | 83% |
-| unrelated words that return something (of 40) | 0 | **1** | 3 |
+| One mistake | trigrams at 0.5 (before) | **TIN** |
+|---|---|---|
+| a letter dropped | 96% | **87%** |
+| a letter added | 96% | **89%** |
+| a letter replaced | 90% | **87%** |
+| two neighbours swapped | 66% | **81%** |
+| unrelated words that return something (of 40) | 1 | **0** |
 
-Over the 90 scored searches: 0.6 scores 0.815, **0.5 scores 0.877**, 0.4 scores 0.863. Long words
-survive one mistake; short words are forgiven less, and swapped letters in a short word (`pairs`) are
-often missed. Re-measure with real data before moving the threshold:
-`tests/integration/test_search_fuzzy.py` and `make search-score`.
+Every miss is a mistake in the first letter, or two letters swapped in a word of 4 or 5 letters
+(`pairs`). Over the 90 scored searches the score went from 0.877 to **0.950**. Re-measure before
+changing the allowance: `tests/integration/test_search_fuzzy.py` and `make search-score`.
 
 ## Test cases and score
 
@@ -106,23 +111,32 @@ adds a subdivision adds its names too. Never edit a merged migration.
 
 ## What is indexed
 
-`catalog_search` holds one row per **active** catalog, built by the database (never by the
-application) from the title (label A), the city (B), and the country and subdivision names (C). Place names are English plus the official languages of the country. Triggers rebuild the row in
-the same transaction as any change to the catalog, so `make seed`, `make add`, the back office and
-hand-written SQL all keep it current. The analyzer is `public.registry_simple`: default parser, then
-`unaccent`, then `simple`. No stemming and no stop words, so short common words such as "de" match
-anything containing them, ranked below the real match.
+`catalog_search` holds one row per **published** catalog, built by the database (never by the
+application): the title, the city and the place names (country and subdivision names, English plus
+the official languages of the country), each through `public.fold()` and each with its own TIN
+index. Place names are indexed without BM25 length normalisation, so a country with many languages
+is not penalised. The row also carries the three `restrict` flags. Triggers rebuild it in the same
+transaction as any change to the catalog, its subdivisions, links, kinds or publication types, so
+`make seed`, `make add`, the back office and hand-written SQL all keep it current. No stemming and
+no stop words, so short common words such as "de" match anything containing them, ranked below the
+real match.
+
+The query is built in the database too (`registry_tinql`), so typed and stored text are folded by
+the same function. TIN folds `è` and `Ö` itself but keeps `ß`, `æ`, `ø` and `ł`; `fold()` handles
+those.
 
 ## Operating it
 
-- **Extensions.** The migration creates `unaccent` and `pg_trgm`. On Cloud SQL the migration user
-  needs `cloudsqlsuperuser`.
+- **Extensions.** The migrations create `unaccent`, `pg_trgm` (unused since TIN, dropped later) and
+  `tin`. `tin` exists on PlanetScale; locally and in CI the database image is `planetscale/lead`,
+  TIN's open-source stand-in, which gives the same results but scans every row, so it says nothing
+  about speed.
 - **Grants.** If the app connects as a different user from the one that migrates, grant it
   `INSERT, UPDATE, DELETE` on `catalog_search` and `SELECT` on `country_languages`, `country_names`,
   `subdivision_names` and `country_subdivision_types`, or catalog saves fail.
-- **Its own connections.** Search runs on a separate pool whose connections are read-only, stop a
-  statement after 1 second (the answer is `503`, a problem document) and carry the typo threshold.
-  Nothing of that touches the feed or the importers.
+- **Its own connections.** Search runs on a separate pool whose connections are read-only and stop a
+  statement after 1 second (the answer is `503`, a problem document). Nothing of that touches the
+  feed or the importers.
 - **After a bulk import** run `VACUUM ANALYZE catalog_search;`.
 - **Rebuild**, if it is ever suspect: `SELECT public.refresh_catalog_search(array_agg(id)) FROM
   catalogs;`. It is derived data. `refresh_catalog_search` locks the catalog row, so two
@@ -134,13 +148,15 @@ anything containing them, ranked below the real match.
 cannot use: `opds` keeps catalogs with a `catalog` link of type `application/opds+json`, `no-open`
 drops those with `open` among their kinds, `no-audiobook` drops those whose publication types are
 audiobook and nothing else (mixed catalogs and catalogs with no types stay). The total, the pages
-and every page link follow the restriction, and the ranking is untouched. It is three `WHERE`
-clauses in the same single statement; the top-level feed applies the same three rules in Python (`registry/domain/restrictions.py`). At a million
-catalogs with BM25 a restriction that removes most hits will cost more; that is not measured yet.
+and every page link follow the restriction, and the ranking is untouched. Each is a column test on
+`catalog_search` in the same single statement; the top-level feed applies the same three rules in
+Python (`registry/domain/restrictions.py`). At a million catalogs a restriction that removes most
+hits will cost more; that is not measured yet.
 
 ## Known limits
 
-- "Belgio" and "Vallonia" (Italian, not loaded for Belgium) still find the Belgian catalogs, as
-  trigram matches.
-- A quoted phrase also lists fuzzy extras after the exact match: the fuzzy half ignores quotes.
-- BM25 ranking arrives with `pg_textsearch` once it is generally available on Cloud SQL.
+- A mistake in the first letter of a word is not forgiven (`xutenberg`).
+- A typo or prefix match scores 0, so among those the newest catalog comes first, not the closest.
+- "Belgio" (Italian, not loaded for Belgium) still finds the Belgian catalogs, as a typo of Belgie.
+- `French Guiana` also lists the other French catalogs: `french` is two letters from `france`.
+- `numberOfItems` counts at most 100 matches; beyond that the exact number is not computed.

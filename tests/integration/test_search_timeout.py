@@ -1,7 +1,7 @@
 """The search pool's limits, enforced by the connection itself.
 
-Search runs on `build_read_engine`: AUTOCOMMIT, with `statement_timeout`, read-only mode and the
-typo threshold sent once per connection in the startup packet. These tests build that engine for
+Search runs on `build_read_engine`: AUTOCOMMIT, with `statement_timeout` and read-only mode
+sent once per connection in the startup packet. These tests build that engine for
 real, against the migrated database, and read the settings back with `SHOW` on live connections.
 
 The slow statement is a real one: a second connection holds `ACCESS EXCLUSIVE` on
@@ -115,24 +115,16 @@ async def test_every_search_connection_carries_the_production_settings(settings:
     engine = build_read_engine(settings, SEARCH_CONNECTION_SETTINGS)
     try:
         async with engine.connect() as connection:
-            await connection.execute(text("SELECT public.word_similarity('a', 'a')"))
             seen = {
                 "statement_timeout": await connection.scalar(text("SHOW statement_timeout")),
                 "default_transaction_read_only": await connection.scalar(
                     text("SHOW default_transaction_read_only")
                 ),
-                "pg_trgm.word_similarity_threshold": await connection.scalar(
-                    text("SHOW pg_trgm.word_similarity_threshold")
-                ),
             }
     finally:
         await engine.dispose()
 
-    assert seen == {
-        "statement_timeout": "1s",
-        "default_transaction_read_only": "on",
-        "pg_trgm.word_similarity_threshold": "0.5",
-    }
+    assert seen == {"statement_timeout": "1s", "default_transaction_read_only": "on"}
 
 
 async def test_the_override_is_what_the_connection_enforces(settings: Settings) -> None:

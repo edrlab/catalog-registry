@@ -217,8 +217,10 @@ async def test_a_country_shows_its_languages_and_subdivision_types(
                 {"code": "BE-VOV", "name": "East Flanders"},
                 {"code": "BE-VBR", "name": "Flemish Brabant"},
                 {"code": "BE-WHT", "name": "Hainaut"},
-                {"code": "BE-VLI", "name": "Limburg"},
+                # Linguistic order (glibc en_US.UTF-8, as on the deployed databases): è sorts
+                # with e. musl, on Alpine images, compares bytes and would put Limburg first.
                 {"code": "BE-WLG", "name": "Liège"},
+                {"code": "BE-VLI", "name": "Limburg"},
                 {"code": "BE-WLX", "name": "Luxembourg"},
                 {"code": "BE-WNA", "name": "Namur"},
                 {"code": "BE-WBR", "name": "Walloon Brabant"},

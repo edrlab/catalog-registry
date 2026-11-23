@@ -190,19 +190,19 @@ async def test_a_bare_or_beside_a_word_changes_nothing(
     assert await titles(client, "OR paris or") == await titles(client, "paris") == [PARIS]
 
 
-async def test_a_negated_word_removes_the_trigram_only_match_too(
+async def test_a_negated_word_removes_the_typo_only_match_too(
     client: AsyncClient, searchable_catalogs: None
 ) -> None:
-    """`bibliothèques` reaches BnParis only through trigrams; `-paris` must still remove it."""
+    """`bibliothèques` reaches BnParis only as a typo; `-paris` must still remove it."""
     assert PARIS in await titles(client, "bibliothèques")
 
-    assert await titles(client, "bibliothèques -paris") == [ROMANDE, RUSSE, OPENBARE]
+    assert await titles(client, "bibliothèques -paris") == [ROMANDE, RUSSE]
 
 
 async def test_a_negated_word_removes_the_word_match_too(
     client: AsyncClient, searchable_catalogs: None
 ) -> None:
-    assert await titles(client, "bibliothèque -paris") == [ROMANDE, RUSSE, OPENBARE]
+    assert await titles(client, "bibliothèque -paris") == [ROMANDE, RUSSE]
 
 
 async def test_a_negated_phrase_removes_only_catalogs_with_the_phrase(

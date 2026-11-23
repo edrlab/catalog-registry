@@ -137,7 +137,7 @@ def _today_text(case: Case) -> str:
     if not case.today:
         return "nothing"
     return ", ".join(
-        _name(title) + (" (trigram only)" if tier == 2 else "") for title, tier in case.today
+        _name(title) + (" (typo or prefix only)" if tier == 2 else "") for title, tier in case.today
     )
 
 
@@ -179,7 +179,8 @@ def render_cases_markdown() -> str:
         "is Bibliothèque numérique Romande.",
         "",
         "**Expected** is the answer we want. **Today** is what search returns, pinned exactly by "
-        "the tests: word matches first, then catalogs found only through trigrams. **Score** is "
+        "the tests: word matches first, then catalogs found only through a typo or a prefix. "
+        "**Score** is "
         "how close Today is to Expected. A row with a note is worth a look; it is not a bug in "
         "the data.",
         "",
@@ -278,10 +279,10 @@ def render_cases_markdown() -> str:
         "## What this tells us so far",
         "",
         "Place names work in every language we load, with and without accents, and typos in both "
-        "titles and place names are found; plurals come through trigrams. Things to watch: short "
-        "common words match because there are no stop words yet, so 'de' pulls in the Belgian "
-        "libraries; swapped letters in short words are found only about two times in three; and "
-        "a quoted phrase gets fuzzy extras after the exact match.",
+        "titles and place names are found; plurals come through the typo allowance. Things to "
+        "watch: short common words match because there are no stop words yet, so 'de' pulls in "
+        "the Belgian libraries; a typo in the first letter is never forgiven; and two letters "
+        "swapped in a word of five letters or fewer is not found.",
         "",
     ]
     return "\n".join(lines)

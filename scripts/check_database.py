@@ -20,8 +20,8 @@ from registry.db.session import create_database_engine
 
 #: name → why this service cares, and which version needs it.
 EXTENSIONS = {
-    "pgcrypto": "gen_random_uuid(). V0 (built into PostgreSQL 13+, so often not required)",
-    "pg_trgm": "fuzzy search. V0.2",
+    "unaccent": "accent folding for search (public.fold)",
+    "tin": "BM25 search index (PlanetScale; Lead locally and in CI)",
     "postgis": "geo ranking. V1.2 (not needed yet; worth knowing now)",
 }
 

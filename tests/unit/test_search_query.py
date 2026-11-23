@@ -16,14 +16,12 @@ def test_words_become_positive_chunks_in_order() -> None:
 
     assert parsed.positives == ("standard", "ebooks")
     assert parsed.negatives == ()
-    assert parsed.trigram_text == "standard ebooks"
 
 
-def test_a_quoted_phrase_stays_one_chunk_and_the_trigram_text_drops_the_quotes() -> None:
+def test_a_quoted_phrase_stays_one_chunk_with_its_quotes() -> None:
     parsed = parse_search_query('"numérique de paris" wallis')
 
     assert parsed.positives == ('"numérique de paris"', "wallis")
-    assert parsed.trigram_text == "numérique de paris wallis"
 
 
 def test_a_leading_dash_negates_a_word_or_a_phrase() -> None:
@@ -31,7 +29,6 @@ def test_a_leading_dash_negates_a_word_or_a_phrase() -> None:
 
     assert parsed.positives == ("bibliotheque",)
     assert parsed.negatives == ("paris", '"de bruxelles"')
-    assert parsed.trigram_text == "bibliotheque"
 
 
 @pytest.mark.parametrize("text", [None, "", "   ", "-paris", '""', '"  "', "OR", "or OR"])
@@ -40,7 +37,7 @@ def test_input_without_a_positive_chunk_is_empty(text: str | None) -> None:
 
 
 def test_punctuation_alone_is_split_not_judged() -> None:
-    # The database drops chunks with no lexeme (`registry_query`); the parser only splits.
+    # The database drops chunks with no word in them (`registry_tinql`); the parser only splits.
     assert parse_search_query("!!! ???").positives == ("!!!", "???")
 
 
@@ -60,7 +57,6 @@ def test_nothing_is_folded_or_lowercased() -> None:
     parsed = parse_search_query("Suiße ÉCOLE")
 
     assert parsed.positives == ("Suiße", "ÉCOLE")
-    assert parsed.trigram_text == "Suiße ÉCOLE"
 
 
 def test_input_is_cut_at_the_character_limit() -> None:
@@ -126,7 +122,6 @@ def test_parsing_never_raises_and_always_respects_its_limits_for_random_unicode(
         assert all(chunk.strip() for chunk in chunks), context
         assert all(len(chunk) <= MAX_QUERY_CHARS + 2 for chunk in chunks), context
         assert not any(chunk.upper() == "OR" for chunk in parsed.positives), context
-        assert '"' not in parsed.trigram_text, context
         assert parsed.is_empty == (not parsed.positives), context
         assert parse_search_query(text) == parsed, context  # deterministic
 
@@ -146,25 +141,18 @@ def test_a_chunk_is_never_split_across_the_cap_into_an_extra_chunk() -> None:
     assert parsed.positives == ("a" * MAX_QUERY_CHARS,)
 
 
-def test_an_unbalanced_quote_stays_on_its_word_and_leaves_the_trigram_text() -> None:
-    """No closing quote, so no phrase: the quote is kept on the chunk, where
-    `websearch_to_tsquery` ignores it, and the trigram text never contains one."""
+def test_an_unbalanced_quote_stays_on_its_word() -> None:
+    """No closing quote, so no phrase: the quote is kept on the chunk, where the database
+    strips it (`registry_tinql`)."""
     parsed = parse_search_query('x "word other')
 
     assert parsed.positives == ("x", '"word', "other")
-    assert parsed.trigram_text == "x word other"
 
 
 def test_a_nul_byte_is_removed_because_postgresql_text_cannot_hold_it() -> None:
     assert parse_search_query("pa\x00ris").positives == ("paris",)
     assert parse_search_query("\x00").is_empty
     assert parse_search_query("\x00\x00 \x00").is_empty
-
-
-def test_the_trigram_text_is_the_positives_with_single_spaces() -> None:
-    parsed = parse_search_query('  one   "two  three"    four  -five ')
-
-    assert parsed.trigram_text == "one two three four"
 
 
 def test_mixed_case_or_is_dropped_but_only_as_a_whole_word() -> None:

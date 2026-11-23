@@ -1,7 +1,7 @@
 """Two transactions adding different subdivisions to one catalog (CodeRabbit finding).
 
 Without a lock, each transaction rebuilds the catalog's `catalog_search` row without seeing
-the other's uncommitted subdivision, and the last writer drops the other's names.
+the other's uncommitted subdivision, and the last writer drops the other's place names.
 `refresh_catalog_search` now takes `FOR NO KEY UPDATE` on the catalog row first, so the second
 rebuild waits for the first commit and then sees it.
 
@@ -10,14 +10,15 @@ the migrated database: the rollback fixtures cannot show a lock wait between tra
 Everything it creates is deleted in a `finally`, keyed by one id, and the database holds no
 other catalogs at that point, since every other test rolls back.
 
-The test proves its own point rather than trusting the final document alone: a third
+The test proves its own point rather than trusting the final row alone: a third
 connection watches `pg_blocking_pids` and the test only lets the first transaction commit once
 it has seen the second one blocked behind it. If the lock were removed, the second transaction
 would not block, that observation would time out, and the assertions on the wait and on the
-final document would both fail.
+final row would both fail.
 """
 
 import asyncio
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -50,7 +51,7 @@ async def wait_until_blocked(observer: AsyncConnection, victim: int, blocker: in
     return False
 
 
-async def test_two_transactions_adding_different_subdivisions_both_end_up_in_the_document(
+async def test_two_transactions_adding_different_subdivisions_both_end_up_in_the_places(
     engines: list[AsyncEngine],
 ) -> None:
     first_engine, second_engine, observer_engine = engines
@@ -115,10 +116,7 @@ async def test_two_transactions_adding_different_subdivisions_both_end_up_in_the
             async with observer_engine.connect() as reader:
                 row = (
                     await reader.execute(
-                        text(
-                            "SELECT document::text AS document, names FROM catalog_search "
-                            "WHERE catalog_id = :c"
-                        ),
+                        text("SELECT places FROM catalog_search WHERE catalog_id = :c"),
                         {"c": catalog_id},
                     )
                 ).one()
@@ -142,8 +140,7 @@ async def test_two_transactions_adding_different_subdivisions_both_end_up_in_the
     assert was_blocked, "the second transaction was never blocked behind the first"
     assert subdivisions == ["BE-BRU", "BE-WAL"]
     for word in ("wallonie", "bruxelles"):
-        assert f"'{word}'" in row.document, word
-        assert word in row.names, word
+        assert word in re.split(r"[\s-]+", row.places), word  # `bruxelles-capitale`
 
 
 async def test_the_probe_leaves_nothing_behind(engines: list[AsyncEngine]) -> None:
