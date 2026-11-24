@@ -477,6 +477,22 @@ async def test_a_bad_query_is_a_422_problem_that_names_the_field(admin_client: A
     assert response.headers["cache-control"] == "no-store"
 
 
+@pytest.mark.parametrize(("name", "value"), [("country", "FR"), ("language", "fr")])
+async def test_a_filter_list_longer_than_fifty_is_a_422(
+    admin_client: AsyncClient, name: str, value: str
+) -> None:
+    capped = await admin_client.get(
+        "/admin/catalogs", params={name: [value] * 50}, headers=admin_headers()
+    )
+    over = await admin_client.get(
+        "/admin/catalogs", params={name: [value] * 51}, headers=admin_headers()
+    )
+
+    assert capped.status_code == 200
+    assert over.status_code == 422
+    assert [error["field"] for error in over.json()["errors"]] == [name]
+
+
 async def test_a_page_past_the_cap_is_a_422_not_a_500(admin_client: AsyncClient) -> None:
     response = await admin_client.get(
         "/admin/catalogs", params={"page": 10**20}, headers=admin_headers()

@@ -16,6 +16,15 @@ from registry.core.config import Settings
 #: still happens is retried once by `fetch_rows` (one statement per read makes that safe).
 POOL_RECYCLE_SECONDS = 300
 
+#: Sent once per connection to the write pool, in the startup packet (no round trip). A write
+#: waiting on a lock, a runaway statement or a transaction left open fails instead of holding a pool
+#: slot and the rows it locked indefinitely; the admin API answers an error and stays usable.
+WRITE_CONNECTION_SETTINGS = {
+    "lock_timeout": "5000",
+    "statement_timeout": "30000",
+    "idle_in_transaction_session_timeout": "60000",
+}
+
 
 def create_database_engine(settings: Settings) -> AsyncEngine:
     """Writes (the importers, admin) and the readiness probe. Recycled like the read pools: a
@@ -26,6 +35,9 @@ def create_database_engine(settings: Settings) -> AsyncEngine:
         pool_recycle=POOL_RECYCLE_SECONDS,
         pool_size=settings.database_pool_size,
         max_overflow=settings.database_max_overflow,
+        # A database error's message would otherwise carry the statement's values (an email).
+        hide_parameters=True,
+        connect_args={"server_settings": WRITE_CONNECTION_SETTINGS},
     )
 
 
@@ -60,5 +72,6 @@ def build_read_engine(settings: Settings, server_settings: Mapping[str, str]) ->
         pool_size=settings.database_pool_size,
         max_overflow=settings.database_max_overflow,
         isolation_level="AUTOCOMMIT",
+        hide_parameters=True,
         connect_args={"server_settings": dict(server_settings)},
     )

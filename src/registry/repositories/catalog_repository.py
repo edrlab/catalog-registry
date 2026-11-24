@@ -37,6 +37,9 @@ READ_STATEMENT_TIMEOUT_MS: Final = 10_000
 READ_CONNECTION_SETTINGS: Final = {
     "statement_timeout": str(READ_STATEMENT_TIMEOUT_MS),
     "default_transaction_read_only": "on",
+    # The admin list and filters cost enough at scale to trigger JIT compilation, which then costs
+    # more (10-200 ms) than it saves on statements this short.
+    "jit": "off",
 }
 
 #: The top-level feed's only query. Hits `ix_catalogs_recommended`. Newest first, then title, then

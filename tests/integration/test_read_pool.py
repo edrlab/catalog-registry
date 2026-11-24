@@ -64,6 +64,7 @@ def test_the_production_constants() -> None:
     assert READ_CONNECTION_SETTINGS == {
         "statement_timeout": "10000",
         "default_transaction_read_only": "on",
+        "jit": "off",
     }
     # Different pools, different limits: the feed's allowance is not search's.
     assert SEARCH_CONNECTION_SETTINGS["statement_timeout"] == "1000"
@@ -101,14 +102,25 @@ async def test_the_search_pool_still_has_its_own_limits(settings: Settings) -> N
     assert seen == {"statement_timeout": "1s", "default_transaction_read_only": "on"}
 
 
-async def test_the_main_engine_has_no_timeout_and_is_not_read_only(settings: Settings) -> None:
+async def test_the_main_engine_writes_with_its_own_time_limits(settings: Settings) -> None:
     engine = create_database_engine(settings)
     try:
-        seen = await show(engine, "statement_timeout", "default_transaction_read_only")
+        seen = await show(
+            engine,
+            "statement_timeout",
+            "lock_timeout",
+            "idle_in_transaction_session_timeout",
+            "default_transaction_read_only",
+        )
     finally:
         await engine.dispose()
 
-    assert seen == {"statement_timeout": "0", "default_transaction_read_only": "off"}
+    assert seen == {
+        "statement_timeout": "30s",
+        "lock_timeout": "5s",
+        "idle_in_transaction_session_timeout": "1min",
+        "default_transaction_read_only": "off",
+    }
 
 
 async def test_a_write_through_the_read_pool_fails_with_read_only_sql_transaction(

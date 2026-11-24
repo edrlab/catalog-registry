@@ -129,6 +129,10 @@ async def read_admin_stats(
         return await resolve_admin_stats(reader)
 
 
+#: A filter is a short list someone picked; a longer one only makes the query bigger.
+MAX_FILTER_VALUES = 50
+
+
 @router.get(
     "/catalogs",
     summary="Catalogs, filtered, with what each row needs",
@@ -144,10 +148,12 @@ async def read_admin_catalogs(
     coverage: Annotated[list[CoverageScope] | None, Query()] = None,
     publication_type: Annotated[list[PublicationType] | None, Query()] = None,
     country: Annotated[
-        list[Annotated[str, StringConstraints(pattern=r"^[A-Za-z]{2}$")]] | None, Query()
+        list[Annotated[str, StringConstraints(pattern=r"^[A-Za-z]{2}$")]] | None,
+        Query(max_length=MAX_FILTER_VALUES),
     ] = None,
     language: Annotated[
-        list[Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9-]{1,35}$")]] | None, Query()
+        list[Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9-]{1,35}$")]] | None,
+        Query(max_length=MAX_FILTER_VALUES),
     ] = None,
     recommended: bool | None = None,
     sort: Literal["name", "-name", "kind", "status"] = "name",
