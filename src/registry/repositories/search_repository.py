@@ -59,7 +59,8 @@ excluded AS MATERIALIZED (
   SELECT x.catalog_id
     FROM catalog_search x
     CROSS JOIN q
-   WHERE x.title ==> q.exclude_q OR x.city ==> q.exclude_q OR x.places ==> q.exclude_q
+   WHERE q.exclude_q IS NOT NULL  -- no `-word`: never scanned
+     AND (x.title ==> q.exclude_q OR x.city ==> q.exclude_q OR x.places ==> q.exclude_q)
 ),
 hits AS (
   SELECT cs.catalog_id, tin.full_score(cs.ctid) AS score, c.created_at
