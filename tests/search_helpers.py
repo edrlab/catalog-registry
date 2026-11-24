@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from itertools import groupby
@@ -93,8 +94,8 @@ def in_lead_order(rows: list[tuple[str, int, float]], expected: list[tuple[str, 
         return False
     start = 0
     for _, group in groupby(rows, key=lambda row: row[2]):
-        tied = {(title, tier) for title, tier, _ in group}
-        if tied != set(expected[start : start + len(tied)]):
+        tied = [(title, tier) for title, tier, _ in group]
+        if Counter(tied) != Counter(expected[start : start + len(tied)]):
             return False
         start += len(tied)
     return True

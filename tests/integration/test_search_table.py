@@ -52,6 +52,10 @@ def test_lead_ties_may_come_in_any_order_but_nothing_else_moves() -> None:
     assert in_lead_order(rows, [("A", 1), ("C", 2), ("B", 2)])
     assert not in_lead_order(rows, [("B", 2), ("A", 1), ("C", 2)])
     assert not in_lead_order(rows, [("A", 1), ("B", 2)])
+    # Tier does not matter, only the score: two exact matches with equal scores swap too.
+    assert in_lead_order([("A", 1, 1.5), ("B", 1, 1.5)], [("B", 1), ("A", 1)])
+    # A duplicate never stands in for a missing catalog.
+    assert not in_lead_order([("A", 1, 1.0), ("A", 1, 1.0)], [("A", 1), ("B", 1)])
 
 
 def test_every_title_the_table_names_is_in_a_data_file() -> None:

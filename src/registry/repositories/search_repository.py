@@ -54,7 +54,8 @@ WITH q AS (
          public.registry_tinql(CAST(:negatives AS text[]), false) AS exclude_q
 ),
 -- Its own index scan: tested per hit instead, an exclusion took 0.5 s at 100k catalogs.
-excluded AS (
+-- MATERIALIZED so the planner cannot fold it back into the per-hit test.
+excluded AS MATERIALIZED (
   SELECT x.catalog_id
     FROM catalog_search x
     CROSS JOIN q
