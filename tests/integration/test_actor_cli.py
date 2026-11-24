@@ -9,11 +9,12 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from registry.cli import actor as actor_module
 from registry.cli.actor import build_actor_parser, main, persist_actor
 from registry.core.config import Settings
-from registry.core.errors import ValidationError
+from registry.core.errors import LastAdminError, ValidationError
 
 pytestmark = pytest.mark.integration
 
 EMAIL = "cli-actor@edrlab.org"
+OTHER = "cli-other-admin@edrlab.org"
 
 
 async def test_set_creates_changes_and_deactivates_without_losing_the_role(
@@ -22,6 +23,8 @@ async def test_set_creates_changes_and_deactivates_without_losing_the_role(
 ) -> None:
     engine = create_async_engine(settings.database_url)
     try:
+        # Another active admin, so taking this one's access is not removing the last admin.
+        await persist_actor(settings, email=OTHER, role="admin", name=None, active=None)
         created = await persist_actor(settings, email=EMAIL, role="admin", name="Cli", active=None)
         renamed = await persist_actor(settings, email=EMAIL, role=None, name=None, active=False)
         demoted = await persist_actor(settings, email=EMAIL, role="viewer", name=None, active=None)
@@ -35,7 +38,9 @@ async def test_set_creates_changes_and_deactivates_without_losing_the_role(
             ).scalar_one()
     finally:
         async with engine.begin() as connection:
-            await connection.execute(text("DELETE FROM actors WHERE email = :e"), {"e": EMAIL})
+            await connection.execute(
+                text("DELETE FROM actors WHERE email = ANY(:e)"), {"e": [EMAIL, OTHER]}
+            )
         await engine.dispose()
 
     assert created == (EMAIL, "admin", True)  # a new person is active
@@ -82,3 +87,33 @@ async def delete_actor(settings: Settings, email: str) -> None:
             await connection.execute(text("DELETE FROM actors WHERE email = :e"), {"e": email})
     finally:
         await engine.dispose()
+
+
+async def test_the_last_active_admin_cannot_be_demoted_or_deactivated_but_the_first_can_be_made(
+    settings: Settings,
+    migrated_database: str,
+) -> None:
+    engine = create_async_engine(settings.database_url)
+    try:
+        async with engine.begin() as connection:
+            assert not await connection.scalar(
+                text("SELECT count(*) FROM actors WHERE role = 'admin' AND is_active")
+            ), "this test needs a database with no active admin"
+        first = await persist_actor(settings, email=EMAIL, role="admin", name=None, active=None)
+        with pytest.raises(LastAdminError):
+            await persist_actor(settings, email=EMAIL, role="viewer", name=None, active=None)
+        with pytest.raises(LastAdminError):
+            await persist_actor(settings, email=EMAIL, role=None, name=None, active=False)
+        async with engine.connect() as connection:
+            kept = (
+                await connection.execute(
+                    text("SELECT role::text, is_active FROM actors WHERE email = :e"), {"e": EMAIL}
+                )
+            ).one()
+    finally:
+        async with engine.begin() as connection:
+            await connection.execute(text("DELETE FROM actors WHERE email = :e"), {"e": EMAIL})
+        await engine.dispose()
+
+    assert first == (EMAIL, "admin", True)  # with no admin at all, the CLI makes the first one
+    assert tuple(kept) == ("admin", True)  # both refusals rolled back

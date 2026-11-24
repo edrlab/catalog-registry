@@ -192,3 +192,40 @@ def test_an_editor_may_do_nothing_to_people() -> None:
     from registry.domain.permissions import EDITOR_PERMISSIONS  # noqa: PLC0415
 
     assert _user_actions(caller_permissions=EDITOR_PERMISSIONS) == []
+
+
+def test_a_transition_is_offered_exactly_when_the_table_has_a_target() -> None:
+    for status in CatalogStatus:
+        for action in TRANSITION_ACTIONS:
+            assert (action in STATUS_ACTIONS[status]) == ((status, action) in TRANSITIONS), (
+                status,
+                action,
+            )
+
+
+REFUSALS = {
+    "edit": "archived-read-only",
+    "delete": "not-deletable",
+    "recommend": "not-published",
+    "publish": "invalid-transition",
+    "unpublish": "invalid-transition",
+    "archive": "invalid-transition",
+    "unarchive": "invalid-transition",
+}
+
+
+@pytest.mark.parametrize("status", list(CatalogStatus))
+@pytest.mark.parametrize("action", ACTIONS)
+def test_the_service_refuses_exactly_what_the_lifecycle_does_not_offer(
+    status: CatalogStatus, action: str
+) -> None:
+    """One table decides both the buttons (`allowed_actions`) and the refusals, for every cell."""
+    from registry.core.errors import RegistryError  # noqa: PLC0415
+    from registry.services.admin_service import _require_lifecycle  # noqa: PLC0415
+
+    if action in STATUS_ACTIONS[status]:
+        _require_lifecycle(status, action)
+        return
+    with pytest.raises(RegistryError) as refused:
+        _require_lifecycle(status, action)
+    assert refused.value.problem_type.endswith("/" + REFUSALS[action])

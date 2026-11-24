@@ -16,7 +16,7 @@ from collections.abc import Sequence
 from sqlalchemy import text
 
 from registry.core.config import Settings
-from registry.core.errors import ValidationError
+from registry.core.errors import LastAdminError, ValidationError
 from registry.db.session import build_session_factory, create_database_engine
 from registry.domain.enums import ActorRole
 
@@ -34,6 +34,13 @@ ON CONFLICT (email) DO UPDATE
 RETURNING email, role::text AS role, is_active
 """
 )
+
+#: The active admins, locked in id order: the order the admin API locks them in, so a change here
+#: and one there serialise instead of each removing "the other" last admin.
+_LOCK_ACTIVE_ADMINS = text(
+    "SELECT id FROM actors WHERE role = 'admin' AND is_active ORDER BY id FOR UPDATE"
+)
+_COUNT_ACTIVE_ADMINS = text("SELECT count(*) FROM actors WHERE role = 'admin' AND is_active")
 
 
 def build_actor_parser() -> argparse.ArgumentParser:
@@ -58,6 +65,7 @@ async def persist_actor(
     engine = create_database_engine(settings)
     try:
         async with build_session_factory(engine)() as session:
+            admins_before = len((await session.execute(_LOCK_ACTIVE_ADMINS)).all())
             row = (
                 (
                     await session.execute(
@@ -68,6 +76,13 @@ async def persist_actor(
                 .mappings()
                 .one()
             )
+            # Same rule as the admin API. With no active admin to begin with (a new database,
+            # or a recovery), the CLI is how the first one is made, so that case stays open.
+            if admins_before and not await session.scalar(_COUNT_ACTIVE_ADMINS):
+                await session.rollback()
+                raise LastAdminError(
+                    f"{email} is the last active admin; make someone else admin first."
+                )
             await session.commit()
             return row["email"], row["role"], row["is_active"]
     finally:

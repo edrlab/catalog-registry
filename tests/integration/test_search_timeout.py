@@ -135,13 +135,14 @@ async def test_the_override_is_what_the_connection_enforces(settings: Settings) 
         assert await connection.scalar(text("SHOW statement_timeout")) == "150ms"
 
 
-async def test_the_timeout_and_read_only_mode_do_not_exist_on_the_main_engine(
+async def test_search_limits_and_read_only_mode_do_not_reach_the_main_engine(
     settings: Settings,
 ) -> None:
+    """The main engine has its own, longer write limit (30 s), never search's 1 s."""
     main = create_database_engine(settings)
     try:
         async with main.connect() as connection:
-            assert await connection.scalar(text("SHOW statement_timeout")) == "0"
+            assert await connection.scalar(text("SHOW statement_timeout")) == "30s"
             assert await connection.scalar(text("SHOW default_transaction_read_only")) == "off"
             assert await connection.scalar(text("SHOW transaction_read_only")) == "off"
     finally:
