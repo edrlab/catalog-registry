@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from registry.cli.add import build_catalog_document
 from registry.cli.seed import import_catalog_document, import_feed_document
+from registry.domain.restrictions import is_opds2_media_type
 from tests.conftest import LIBRARIES_FILE
 from tests.search_helpers import ALL_TITLES, catalog_search_row, search_rows
 
@@ -47,10 +48,10 @@ async def search_row_count(session: AsyncSession) -> int:
     return int(await session.scalar(text("SELECT count(*) FROM catalog_search")) or 0)
 
 
-def has_label(document: str, word: str, label: str) -> bool:
-    """Is *word* in the tsvector text with a position carrying *label*, e.g. `'paris':4A`?"""
-    match = re.search(rf"'{re.escape(word)}':([0-9A-D,]+)", document)
-    return match is not None and any(part.endswith(label) for part in match.group(1).split(","))
+def holds(text_: str, word: str) -> bool:
+    """Is *word* one of the words of a stored (already folded) field? Hyphens split words, as
+    TIN's tokenizer splits them (`bruxelles-capitale`)."""
+    return word in re.split(r"[\s-]+", text_)
 
 
 async def test_every_seeded_catalog_has_exactly_one_row(
@@ -61,17 +62,16 @@ async def test_every_seeded_catalog_has_exactly_one_row(
         assert await catalog_search_row(db_session, title) is not None, title
 
 
-async def test_subdivision_names_written_after_the_catalog_row_are_in_the_document(
+async def test_subdivision_names_written_after_the_catalog_row_are_in_the_places(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
     """The import writes the catalog, then its subdivisions; the second write must refresh."""
     row = await catalog_search_row(db_session, LIRTUEL)
 
     assert row is not None
-    for word in ("wallonie", "bruxelles", "brussel"):
-        assert has_label(row["document"], word, "C"), word
-    assert has_label(row["document"], "lirtuel", "A")
-    assert has_label(row["document"], "belgique", "C")
+    for word in ("wallonie", "bruxelles", "brussel", "belgique"):
+        assert holds(row["places"], word), word
+    assert row["title"] == "lirtuel"
 
 
 async def test_renaming_a_catalog_indexes_the_new_title_in_the_same_transaction(
@@ -85,12 +85,10 @@ async def test_renaming_a_catalog_indexes_the_new_title_in_the_same_transaction(
     assert LIBRIVOX not in await found(db_session, "librivox")
     row = await catalog_search_row(db_session, "Zanzibar archive")
     assert row is not None
-    assert has_label(row["document"], "zanzibar", "A")
-    assert "zanzibar" in row["names"]
-    assert "librivox" not in row["names"]
+    assert row["title"] == "zanzibar archive"
 
 
-async def test_a_city_set_by_a_plain_update_is_indexed_at_label_b_and_removing_it_unindexes_it(
+async def test_a_city_set_by_a_plain_update_is_indexed_folded_and_removing_it_unindexes_it(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
     await sql(db_session, "UPDATE catalogs SET city = 'Namur' WHERE title = :t", t=LIRTUEL)
@@ -98,12 +96,14 @@ async def test_a_city_set_by_a_plain_update_is_indexed_at_label_b_and_removing_i
     assert await found(db_session, "namur") == [LIRTUEL]
     row = await catalog_search_row(db_session, LIRTUEL)
     assert row is not None
-    assert has_label(row["document"], "namur", "B")
-    assert "namur" in row["names"]
+    assert row["city"] == "namur"
 
     await sql(db_session, "UPDATE catalogs SET city = NULL WHERE title = :t", t=LIRTUEL)
 
     assert await found(db_session, "namur") == []
+    row = await catalog_search_row(db_session, LIRTUEL)
+    assert row is not None
+    assert row["city"] == ""
 
 
 async def test_a_country_change_replaces_the_country_names(
@@ -115,8 +115,8 @@ async def test_a_country_change_replaces_the_country_names(
     assert VALAIS in await found(db_session, "france")
     row = await catalog_search_row(db_session, VALAIS)
     assert row is not None
-    assert has_label(row["document"], "france", "C")
-    assert not has_label(row["document"], "suisse", "C")
+    assert holds(row["places"], "france")
+    assert not holds(row["places"], "suisse")
 
 
 async def test_removing_the_country_keeps_the_row_and_drops_its_names(
@@ -126,7 +126,7 @@ async def test_removing_the_country_keeps_the_row_and_drops_its_names(
 
     row = await catalog_search_row(db_session, VALAIS)
     assert row is not None
-    assert "suisse" not in row["names"]
+    assert not holds(row["places"], "suisse")
     assert await found(db_session, "mediatheque") == [VALAIS]
 
 
@@ -143,7 +143,7 @@ async def test_adding_a_subdivision_indexes_its_names(
     assert set(await found(db_session, "ile-de-france")) == {PARIS, VALAIS}
 
 
-async def test_removing_a_subdivision_removes_its_names_from_the_document(
+async def test_removing_a_subdivision_removes_its_names_from_the_places(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
     assert LIRTUEL in await found(db_session, "wallonie")
@@ -158,8 +158,8 @@ async def test_removing_a_subdivision_removes_its_names_from_the_document(
     assert await found(db_session, "wallonie") == []
     row = await catalog_search_row(db_session, LIRTUEL)
     assert row is not None
-    assert "wallonie" not in row["names"]
-    assert has_label(row["document"], "bruxelles", "C")  # BE-BRU is still there
+    assert not holds(row["places"], "wallonie")
+    assert holds(row["places"], "bruxelles")  # BE-BRU is still there
 
 
 async def test_changing_a_subdivision_code_swaps_the_names(
@@ -299,8 +299,8 @@ async def test_a_new_subdivision_name_is_searchable_only_after_the_affected_cata
 async def test_a_full_rebuild_equals_the_rows_the_triggers_built(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
-    query = "SELECT catalog_id, document::text AS document, names FROM catalog_search"
-    built = {r.catalog_id: (r.document, r.names) for r in await db_session.execute(text(query))}
+    query = "SELECT * FROM catalog_search"
+    built = {r.catalog_id: tuple(r) for r in await db_session.execute(text(query))}
     assert len(built) == len(ALL_TITLES)
 
     # Empty the table first, otherwise the rebuild's upsert would trivially "equal" itself.
@@ -308,7 +308,7 @@ async def test_a_full_rebuild_equals_the_rows_the_triggers_built(
     assert await search_row_count(db_session) == 0
     await sql(db_session, "SELECT public.refresh_catalog_search(array_agg(id)) FROM catalogs")
 
-    rebuilt = {r.catalog_id: (r.document, r.names) for r in await db_session.execute(text(query))}
+    rebuilt = {r.catalog_id: tuple(r) for r in await db_session.execute(text(query))}
     assert rebuilt == built
 
 
@@ -320,8 +320,9 @@ async def test_a_rebuild_removes_rows_of_catalogs_that_are_not_active(
     await sql(db_session, "UPDATE catalogs SET status = 'draft' WHERE id = :c", c=valais)
     await sql(
         db_session,
-        "INSERT INTO catalog_search (catalog_id, document, names) "
-        "VALUES (:c, to_tsvector('simple', 'stray'), 'stray')",
+        "INSERT INTO catalog_search "
+        "(catalog_id, title, city, places, has_opds_catalog, is_open, audiobook_only) "
+        "VALUES (:c, 'stray', '', '', false, false, false)",
         c=valais,
     )
     assert await search_row_count(db_session) == len(ALL_TITLES)
@@ -356,13 +357,14 @@ async def test_reseeding_with_a_changed_city_updates_the_row(
     assert await search_row_count(db_session) == len(ALL_TITLES)
 
 
-async def test_the_paris_city_is_indexed_at_label_b_and_dropping_it_removes_that_label(
+async def test_the_paris_city_is_its_own_field_and_dropping_it_empties_that_field(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
+    """Paris is in the title and the city: two fields, two weights."""
     row = await catalog_search_row(db_session, PARIS)
     assert row is not None
-    assert has_label(row["document"], "paris", "A")
-    assert has_label(row["document"], "paris", "B")
+    assert holds(row["title"], "paris")
+    assert row["city"] == "paris"
 
     feed = json.loads(LIBRARIES_FILE.read_text(encoding="utf-8"))
     document = next(c for c in feed["catalogs"] if c["metadata"]["title"] == PARIS)
@@ -372,8 +374,8 @@ async def test_the_paris_city_is_indexed_at_label_b_and_dropping_it_removes_that
 
     row = await catalog_search_row(db_session, PARIS)
     assert row is not None
-    assert has_label(row["document"], "paris", "A")
-    assert not has_label(row["document"], "paris", "B")
+    assert holds(row["title"], "paris")
+    assert row["city"] == ""
 
 
 async def test_reseeding_a_changed_subdivision_list_updates_the_row(
@@ -415,3 +417,125 @@ async def test_a_catalog_imported_the_way_make_add_does_is_searchable_with_its_p
     ]:
         titles = [title for title, _tier, _score in await search_rows(db_session, query)]
         assert "Zanzibar Reading Room" in titles, why
+
+
+# --- restriction flags: kept on the row by triggers on links, kinds and publication types --------
+
+
+async def flags(session: AsyncSession, title: str) -> tuple[bool, bool, bool]:
+    row = await catalog_search_row(session, title)
+    assert row is not None
+    return row["has_opds_catalog"], row["is_open"], row["audiobook_only"]
+
+
+async def plain_catalog(session: AsyncSession) -> uuid.UUID:
+    """A published catalog with no links, kinds or types: every flag starts false."""
+    value = await session.scalar(
+        text(
+            "INSERT INTO catalogs (id, title, status, published_at) "
+            "VALUES (gen_random_uuid(), 'Flag probe', 'published', now()) RETURNING id"
+        )
+    )
+    assert value is not None
+    assert await flags(session, "Flag probe") == (False, False, False)
+    return value  # type: ignore[no-any-return]
+
+
+@pytest.mark.parametrize(
+    ("rel", "media_type", "expected"),
+    [
+        ("catalog", "application/opds+json", True),
+        # Case-insensitive, parameters after `;` ignored (RFC 9110 §8.3.1).
+        ("catalog", " Application/OPDS+JSON; charset=utf-8", True),
+        ("catalog", "application/atom+xml;profile=opds-catalog", False),
+        ("shelf", "application/opds+json", False),
+    ],
+)
+async def test_an_opds2_catalog_link_sets_the_flag_and_deleting_it_clears_it(
+    db_session: AsyncSession, rel: str, media_type: str, expected: bool
+) -> None:
+    probe = await plain_catalog(db_session)
+
+    await sql(
+        db_session,
+        "INSERT INTO links (catalog_id, href, rel, media_type) "
+        "VALUES (:c, 'https://probe.example/opds', CAST(:r AS link_rel), :m)",
+        c=probe,
+        r=rel,
+        m=media_type,
+    )
+    assert (await flags(db_session, "Flag probe"))[0] is expected
+
+    await sql(db_session, "DELETE FROM links WHERE catalog_id = :c", c=probe)
+    assert (await flags(db_session, "Flag probe"))[0] is False
+
+
+async def test_the_open_kind_sets_the_flag_and_deleting_it_clears_it(
+    db_session: AsyncSession,
+) -> None:
+    probe = await plain_catalog(db_session)
+
+    await sql(
+        db_session, "INSERT INTO catalog_kinds (catalog_id, kind) VALUES (:c, 'public')", c=probe
+    )
+    assert (await flags(db_session, "Flag probe"))[1] is False
+    await sql(
+        db_session, "INSERT INTO catalog_kinds (catalog_id, kind) VALUES (:c, 'open')", c=probe
+    )
+    assert (await flags(db_session, "Flag probe"))[1] is True
+
+    await sql(
+        db_session, "DELETE FROM catalog_kinds WHERE catalog_id = :c AND kind = 'open'", c=probe
+    )
+    assert (await flags(db_session, "Flag probe"))[1] is False
+
+
+async def test_audiobook_only_means_audiobook_and_nothing_else(db_session: AsyncSession) -> None:
+    """A catalog with no types, or with audiobooks next to anything else, is not audiobook-only."""
+    probe = await plain_catalog(db_session)
+    add = (
+        "INSERT INTO catalog_publication_types (catalog_id, publication_type) "
+        "VALUES (:c, CAST(:t AS publication_type))"
+    )
+
+    await sql(db_session, add, c=probe, t="audiobook")
+    assert (await flags(db_session, "Flag probe"))[2] is True
+    await sql(db_session, add, c=probe, t="ebook")
+    assert (await flags(db_session, "Flag probe"))[2] is False
+    await sql(
+        db_session,
+        "DELETE FROM catalog_publication_types "
+        "WHERE catalog_id = :c AND publication_type = 'ebook'",
+        c=probe,
+    )
+    assert (await flags(db_session, "Flag probe"))[2] is True
+
+
+async def test_the_seeded_flags_follow_the_python_restriction_rules(
+    db_session: AsyncSession, searchable_catalogs: None
+) -> None:
+    """The flags and `domain/restrictions.py` state the same rules twice; on the real data they
+    must agree for every catalog."""
+    rows = await db_session.execute(
+        text(
+            "SELECT c.title, "
+            "  ARRAY(SELECT k.media_type FROM links k "
+            "        WHERE k.catalog_id = c.id AND k.rel = 'catalog') AS catalog_types, "
+            "  ARRAY(SELECT x.kind::text FROM catalog_kinds x WHERE x.catalog_id = c.id) AS kinds, "
+            "  ARRAY(SELECT p.publication_type::text FROM catalog_publication_types p "
+            "        WHERE p.catalog_id = c.id) AS types, "
+            "  cs.has_opds_catalog, cs.is_open, cs.audiobook_only "
+            "FROM catalogs c JOIN catalog_search cs ON cs.catalog_id = c.id"
+        )
+    )
+
+    seen = 0
+    for row in rows:
+        seen += 1
+        expected = (
+            any(is_opds2_media_type(t) for t in row.catalog_types),
+            "open" in row.kinds,
+            set(row.types) == {"audiobook"},
+        )
+        assert (row.has_opds_catalog, row.is_open, row.audiobook_only) == expected, row.title
+    assert seen == len(ALL_TITLES)

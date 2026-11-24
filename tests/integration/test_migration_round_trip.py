@@ -66,7 +66,7 @@ SCHEMA_QUERIES = {
 }
 
 DATA_QUERIES = {
-    "catalog_search": "SELECT catalog_id, document::text, names FROM catalog_search ORDER BY 1",
+    "catalog_search": "SELECT * FROM catalog_search ORDER BY 1",
     "catalogs": "SELECT id, title FROM catalogs ORDER BY 1",
     "country_languages": "SELECT * FROM country_languages ORDER BY 1, 2",
     "country_names": "SELECT * FROM country_names ORDER BY 1, 2, 3",
@@ -140,7 +140,7 @@ async def test_upgrade_downgrade_upgrade_leaves_the_schema_and_the_search_rows_i
         schema_down = await snapshot(engine, SCHEMA_QUERIES)
         assert "catalog_search" not in {row[0] for row in schema_down["tables"]}
         assert {row[0] for row in schema_down["functions"]}.isdisjoint(
-            {"fold", "refresh_catalog_search", "registry_query"}
+            {"fold", "refresh_catalog_search", "registry_query", "registry_tinql"}
         )
         async with engine.connect() as connection:
             # The downgrade never touches v0 rows.

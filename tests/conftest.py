@@ -26,7 +26,6 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncSession,
@@ -37,9 +36,12 @@ from sqlalchemy.ext.asyncio import (
 from registry.cli.seed import seed_catalogs
 from registry.core.config import Settings
 from registry.main import create_app
-from registry.repositories.search_repository import WORD_SIMILARITY_THRESHOLD
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+#: Same image as compose.yaml and CI: Postgres 18 with Lead, the open-source stand-in for TIN.
+LEAD_IMAGE = (
+    "planetscale/lead:pg18@sha256:ebb795acccd7f7bdabc009ca9490b73c4dbb216f61bc4ebcc4d95e284cc96b76"
+)
 SEED_FILE = REPO_ROOT / "data" / "recommended.json"
 LIBRARIES_FILE = REPO_ROOT / "data" / "libraries.json"
 
@@ -107,7 +109,7 @@ def database_url() -> Iterator[str]:
     # Deferred: CI supplies TEST_DATABASE_URL and must not need testcontainers importable.
     from testcontainers.community.postgres import PostgresContainer  # noqa: PLC0415
 
-    with PostgresContainer("postgres:18-alpine", driver="asyncpg") as container:
+    with PostgresContainer(LEAD_IMAGE, driver="asyncpg") as container:
         yield container.get_connection_url()
 
 
@@ -189,7 +191,7 @@ async def app(
     """The real app, with the feed/catalog and search session factories rebound to the test's
     transaction.
 
-    The read pools' own settings (timeouts, read-only mode, the typo threshold) are NOT exercised
+    The read pools' own settings (timeouts, read-only mode) are NOT exercised
     here; the tests that prove them build a real app and engine instead (`test_read_pool*`,
     `test_search_timeout*`, `test_search_engine`).
     """
@@ -197,12 +199,6 @@ async def app(
     async with built.router.lifespan_context(built):
         built.state.session_factory = session_factory
         built.state.search_session_factory = session_factory
-        # The production search pool carries the typo threshold as a connection setting
-        # (`build_read_engine`). The test connection is not that pool, so it gets the same
-        # value for the length of the test's transaction (`SET LOCAL` ends with it).
-        await db_connection.execute(
-            text(f"SET LOCAL pg_trgm.word_similarity_threshold = {WORD_SIMILARITY_THRESHOLD}")
-        )
         yield built
 
 

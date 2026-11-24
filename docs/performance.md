@@ -55,7 +55,7 @@ path: `tests/integration/test_search_query_count.py` and `test_read_one_statemen
 
 | Pool | Used by | Settings on the connection |
 |---|---|---|
-| search | `/search` | read-only, stops a statement after 1 s, typo threshold 0.5 |
+| search | `/search` | read-only, stops a statement after 1 s |
 | read | `/`, `/catalogs/{id}` | read-only, stops a statement after 10 s |
 | main | the importers and `/health/ready` | none (can write) |
 

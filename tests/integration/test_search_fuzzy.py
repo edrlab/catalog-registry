@@ -1,4 +1,4 @@
-"""What the trigram half can and cannot find, measured instead of assumed.
+"""What the typo allowance can and cannot find, measured instead of assumed.
 
 The hand-picked typo rows in the search table prove a handful of cases work. They say nothing
 about *how far* the fuzziness reaches, so these tests derive it from first principles: take every
@@ -7,36 +7,30 @@ add one, replace one, swap two neighbours), and count how often the right catalo
 The result is an envelope with floors under it, plus the converse: words unrelated to anything in
 the data must return nothing.
 
-Why the numbers are what they are: a word of n letters has about n + 2 trigrams (the word is padded
-with spaces). Dropping or replacing one letter breaks about three of them, swapping two neighbours
-breaks about four, and `<%` needs `word_similarity` of at least 0.6. A long word survives one edit;
-a short one does not. The floors pin the measured behaviour so loosening or tightening the
-threshold (`pg_trgm.word_similarity_threshold`) is a visible, deliberate change.
+Why the numbers are what they are: `registry_tinql` lets a word of 6 letters or more be 2 edits
+away (`word~2`), a word of 4 or 5 letters 1 edit (`~1`), a shorter one none. Drop, add and replace
+are one edit each, a swap of neighbours two. TIN keeps the first letter fixed, so damage to the
+first letter is never forgiven. The last word of a query also matches as a prefix, so a dropped
+or replaced last letter is found that way too.
 
-The application runs at 0.5 (`WORD_SIMILARITY_THRESHOLD`, chosen 6 October 2026 against these
-numbers); PostgreSQL's own default is 0.6. Measured on the 12-catalog seed:
+Measured on the 12-catalog seed, on Lead (TIN's open-source stand-in):
 
-    edit          at 0.6      at 0.5 (now)   at 0.4
-    drop          79%         96%            99%
-    add           75%         96%            100%
-    replace       61%         90%            97%
-    swap          24%         66%            83%
-    unrelated words returned (of 40):   0    1 (library)     3
+    edit       trigrams at 0.5 (before)   TIN
+    drop       96%                        87%
+    add        96%                        89%
+    replace    90%                        87%
+    swap       66%                        81%
+    unrelated words returned (of 40):  1 (library)  0
+
+Every miss is damage to the first letter, or a swap in a word of 4 or 5 letters (`pairs`).
 """
 
 import collections
 import unicodedata
 
 import pytest
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from registry.core.config import Settings
-from registry.db.session import build_read_engine, create_database_engine
-from registry.repositories.search_repository import (
-    SEARCH_CONNECTION_SETTINGS,
-    WORD_SIMILARITY_THRESHOLD,
-)
 from tests.search_helpers import search_rows
 
 pytestmark = pytest.mark.integration
@@ -69,8 +63,8 @@ TARGETS = [
     ("vallese", "Valais"),
 ]
 
-#: Ordinary words with no connection to any catalog. None may bring anything back at the default
-#: threshold; a word that does is noise a reader would see.
+#: Ordinary words with no connection to any catalog. None may bring anything back; a word that
+#: does is noise a reader would see.
 UNRELATED = [
     "bristol", "kitchen", "qwerty", "telephone", "zzzzqqq", "computer", "amsterdam", "london",
     "tokyo", "guitar", "orange", "bridge", "castle", "mountain", "river", "music", "history",
@@ -79,10 +73,9 @@ UNRELATED = [
     "holland", "station", "hospital", "pasta", "zwitserland", "kestrel",
 ]  # fmt: skip
 
-#: Under the measured recall at 0.5 (see the module docstring), so a real regression fails and
-#: ordinary variation in the data does not. Swapped neighbours are the weak spot; the floor
-#: says so.
-RECALL_FLOORS = {"drop": 0.90, "add": 0.90, "replace": 0.80, "swap": 0.55}
+#: Under the measured recall (see the module docstring), so a real regression fails and ordinary
+#: variation in the data does not.
+RECALL_FLOORS = {"drop": 0.85, "add": 0.85, "replace": 0.85, "swap": 0.75}
 
 
 def damage(word: str) -> dict[str, set[str]]:
@@ -98,13 +91,8 @@ def damage(word: str) -> dict[str, set[str]]:
     return {kind: {v for v in variants if len(v) >= 2} for kind, variants in out.items()}
 
 
-async def finds(
-    session: AsyncSession,
-    query: str,
-    title_fragment: str,
-    threshold: float = WORD_SIMILARITY_THRESHOLD,
-) -> bool:
-    rows = await search_rows(session, query, threshold=threshold)
+async def finds(session: AsyncSession, query: str, title_fragment: str) -> bool:
+    rows = await search_rows(session, query)
     return any(title_fragment in title for title, _tier, _score in rows)
 
 
@@ -114,7 +102,7 @@ async def recall(
     *,
     min_length: int = 0,
     max_length: int = 99,
-    threshold: float = WORD_SIMILARITY_THRESHOLD,
+    first_letter: bool = True,
 ) -> tuple[float, list[str]]:
     """Share of damaged variants that still find their catalog, and the ones that did not."""
     hits, total, missed = 0, 0, []
@@ -122,8 +110,10 @@ async def recall(
         if not min_length <= len(word) <= max_length:
             continue
         for variant in sorted(damage(word)[kind]):
+            if not first_letter and variant[0] != word[0]:
+                continue
             total += 1
-            if await finds(session, variant, fragment, threshold):
+            if await finds(session, variant, fragment):
                 hits += 1
             else:
                 missed.append(f"{word}>{variant}")
@@ -155,36 +145,26 @@ async def test_a_single_typo_still_finds_the_catalog_at_least_this_often(
     assert rate >= floor, f"{kind}: {rate:.0%} < {floor:.0%}; missed e.g. {missed[:12]}"
 
 
-async def test_adding_a_letter_to_a_long_word_never_loses_it(
+async def test_one_edit_after_the_first_letter_of_a_long_word_is_always_found(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
-    """A guarantee, not a rate: inserting a letter leaves every original trigram except the one it
-    splits, so for a word of nine letters or more the similarity stays above 0.6 whatever the
-    letter and wherever it lands."""
-    rate, missed = await recall(db_session, "add", min_length=9)
+    """A guarantee, not a rate: a word of 6 letters or more is allowed 2 edits, so dropping,
+    adding or replacing any letter but the first, or swapping two neighbours after it, still
+    finds it."""
+    for kind in ("drop", "add", "replace", "swap"):
+        rate, missed = await recall(db_session, kind, min_length=6, first_letter=False)
 
-    assert missed == [], missed
-    assert rate == 1.0
+        assert missed == [], (kind, missed)
+        assert rate == 1.0
 
 
-async def test_dropping_a_letter_from_a_long_word_is_found_in_most_cases(
+async def test_damage_to_the_first_letter_is_not_forgiven(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
-    rate, missed = await recall(db_session, "drop", min_length=9)
-
-    assert rate >= 0.80, f"{rate:.0%}; missed {missed[:10]}"
-
-
-async def test_short_words_are_forgiven_less_than_long_ones(
-    db_session: AsyncSession, searchable_catalogs: None
-) -> None:
-    """The principle behind the numbers: a damaged short word shares too few trigrams with the
-    real one. If this stops holding the threshold has stopped doing its job as a length-aware
-    filter, and the unrelated-word test below should be the first thing to look at."""
-    short, _ = await recall(db_session, "replace", max_length=6)
-    long_, _ = await recall(db_session, "replace", min_length=9)
-
-    assert short < long_, f"short {short:.0%} vs long {long_:.0%}"
+    """TIN keeps the first letter fixed (`~N` means `~1:N`). Pinned so a change to `~0:N` is a
+    decision, made with its cost measured, not a surprise."""
+    assert not await finds(db_session, "xutenberg", "Gutenberg")
+    assert await finds(db_session, "gxtenberg", "Gutenberg")
 
 
 # --- precision: what the fuzziness must not drag in --------------------------------------------
@@ -195,72 +175,6 @@ async def test_a_word_unrelated_to_anything_in_the_data_returns_nothing(
     db_session: AsyncSession, searchable_catalogs: None, word: str
 ) -> None:
     assert await search_rows(db_session, word) == []
-
-
-async def test_the_unrelated_word_check_can_fail(
-    db_session: AsyncSession, searchable_catalogs: None
-) -> None:
-    """The test of the test: loosen the threshold and the same list must start returning things,
-    otherwise a green precision check would prove nothing about this threshold."""
-    noisy = [w for w in UNRELATED if await search_rows(db_session, w, threshold=0.3)]
-
-    assert len(noisy) >= 2, noisy
-
-
-async def test_the_recall_check_can_fail(
-    db_session: AsyncSession, searchable_catalogs: None
-) -> None:
-    """The mirror: tighten the threshold and recall must drop under its floor."""
-    rate, _ = await recall(db_session, "drop", threshold=0.9)
-
-    assert rate < RECALL_FLOORS["drop"], f"{rate:.0%}"
-
-
-async def test_the_one_unrelated_word_that_gets_through_is_a_known_and_accepted_trade(
-    db_session: AsyncSession, searchable_catalogs: None
-) -> None:
-    """At 0.5 `library` brings back the catalogs named after the French and Italian words for it
-    (Liber Liber, libres, Librivox, Bibliothèque). Accepted on 6 October: they follow every exact
-    match and a reader looking for a library would welcome them. Pinned so that a second word
-    joining it, or this one changing, is noticed and decided."""
-    rows = await search_rows(db_session, "library")
-
-    assert rows, "library no longer matches anything: the threshold moved, update the docstring"
-    assert {tier for _title, tier, _score in rows} == {2}
-
-
-async def test_the_search_pool_carries_its_threshold_and_nothing_else_does(
-    settings: Settings,
-) -> None:
-    """The server keeps pg_trgm's default of 0.6; only the search pool's connections run at 0.5,
-    from the start and for their whole life (a startup setting, not a per-transaction one). The
-    main engine is unaffected. A role or database level override would change every result
-    silently, so the server default is pinned as well."""
-    search_engine = build_read_engine(settings, SEARCH_CONNECTION_SETTINGS)
-    main_engine = create_database_engine(settings)
-    show = text("SHOW pg_trgm.word_similarity_threshold")
-    # The setting only exists once the extension's library is loaded in the session, which its
-    # first function call does.
-    load = text("SELECT public.word_similarity('a', 'a')")
-    try:
-        async with search_engine.connect() as connection:
-            await connection.execute(load)
-            on_search = (await connection.execute(show)).scalar_one()
-            await connection.execute(text("SELECT 1"))  # still there after more statements
-            still = (await connection.execute(show)).scalar_one()
-        async with main_engine.connect() as connection:
-            await connection.execute(load)
-            on_main = (await connection.execute(show)).scalar_one()
-        async with search_engine.connect() as connection:  # a recycled checkout: same value
-            await connection.execute(load)
-            again = (await connection.execute(show)).scalar_one()
-    finally:
-        await search_engine.dispose()
-        await main_engine.dispose()
-
-    assert WORD_SIMILARITY_THRESHOLD == 0.5
-    assert (on_search, still, again) == ("0.5", "0.5", "0.5")
-    assert on_main == "0.6"  # the server default, which nothing here overrides
 
 
 # --- invariants of the result ------------------------------------------------------------------
@@ -319,25 +233,10 @@ async def test_capitals_and_accents_do_not_change_a_fuzzy_result(
     assert await search_rows(db_session, typed) == await search_rows(db_session, same_as)
 
 
-async def test_a_fuzzy_match_is_always_a_word_the_catalog_actually_holds_nearly(
+async def test_a_typo_only_match_scores_zero_and_an_exact_one_more(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
-    """Every tier-2 result must really contain something similar to what was typed. This is the
-    definition of the half, checked against the stored text with the same function: no result may
-    sit below the threshold. It also relies on each of these typos matching only by trigrams."""
-    for typed in ("bruxels", "belgum", "gutenbrg", "bibliotheqe", "walis"):
-        results = await search_rows(db_session, typed)
-        assert results, typed
-        for title, tier, _score in results:
-            if tier != 2:
-                continue
-            similarity = (
-                await db_session.execute(
-                    text(
-                        "SELECT word_similarity(public.fold(:q), cs.names) FROM catalog_search cs "
-                        "JOIN catalogs c ON c.id = cs.catalog_id WHERE c.title = :t"
-                    ),
-                    {"q": typed, "t": title},
-                )
-            ).scalar_one()
-            assert similarity >= WORD_SIMILARITY_THRESHOLD, (typed, title, similarity)
+    """TIN scores a fuzzy or prefix term by the word as typed, so a catalog found only through
+    the typo allowance scores 0: that is what puts every exact match first."""
+    assert {score for _t, _tier, score in await search_rows(db_session, "gutenbrg")} == {0.0}
+    assert all(score > 0 for _t, _tier, score in await search_rows(db_session, "gutenberg"))

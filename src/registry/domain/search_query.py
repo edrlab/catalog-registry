@@ -26,10 +26,8 @@ _TOKEN = re.compile(r'(-?)"([^"]*)"|(-?)(\S+)')
 class ParsedQuery:
     #: Chunks that are OR-ed together. A quoted phrase stays one chunk, quotes included.
     positives: tuple[str, ...]
-    #: Chunks that remove catalogs from both halves of the search.
+    #: Chunks that remove catalogs from the results.
     negatives: tuple[str, ...]
-    #: Positives joined with quotes removed. Folded by the database, not here.
-    trigram_text: str
 
     @property
     def is_empty(self) -> bool:
@@ -41,7 +39,7 @@ def parse_search_query(text: str | None) -> ParsedQuery:
     """Split *text* into positive and negated chunks, websearch style.
 
     Input is cut at `MAX_QUERY_CHARS` and parsing stops at `MAX_QUERY_CHUNKS` chunks. A bare
-    `OR` is dropped, as `websearch_to_tsquery` does, because every search is any-word already.
+    `OR` is dropped because every search is any-word already.
     """
     # U+0000 cannot be stored in PostgreSQL text, and asyncpg refuses it as a parameter, which
     # would be a 500. It is not a word character, so removing it changes no search; this is
@@ -61,5 +59,4 @@ def parse_search_query(text: str | None) -> ParsedQuery:
         (negatives if negated else positives).append(chunk)
         if len(positives) + len(negatives) >= MAX_QUERY_CHUNKS:
             break
-    trigram_text = " ".join(" ".join(c.replace('"', " ") for c in positives).split())
-    return ParsedQuery(tuple(positives), tuple(negatives), trigram_text)
+    return ParsedQuery(tuple(positives), tuple(negatives))

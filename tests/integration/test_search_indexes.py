@@ -1,8 +1,7 @@
-"""Index use and the NOTICE trap.
+"""The TIN indexes, the query `registry_tinql` builds, and the NOTICE trap.
 
-The data set is far too small for the query planner to pick a GIN index on cost, so sequential
-scans are disabled for the transaction: the question is whether each half *can* use its index, which
-is what keeps it sublinear at tens of thousands of catalogs.
+Locally and in CI the indexes are Lead's, which return every page as a candidate, so the plan says
+only that an index *can* be used; whether it is fast is measured on PlanetScale, not here.
 """
 
 from collections.abc import Callable
@@ -17,45 +16,89 @@ from tests.search_helpers import search_rows
 pytestmark = pytest.mark.integration
 
 
-async def explain(session: AsyncSession, statement: str) -> str:
-    await session.execute(text("SET LOCAL enable_seqscan = off"))
-    rows = await session.execute(text(f"EXPLAIN {statement}"))
-    return "\n".join(row[0] for row in rows)
-
-
-async def test_the_word_half_uses_the_gin_index_on_the_document(
-    db_session: AsyncSession, searchable_catalogs: None
-) -> None:
-    plan = await explain(
-        db_session,
-        "SELECT catalog_id FROM catalog_search "
-        "WHERE document @@ public.registry_query(ARRAY['paris'], ARRAY[]::text[])",
+async def test_each_searched_field_has_its_own_tin_index(db_session: AsyncSession) -> None:
+    """One index per field: TIN indexes one column, and one column per weight is what lets a
+    title match outrank a city match."""
+    rows = await db_session.execute(
+        text(
+            "SELECT i.relname, a.amname FROM pg_index x "
+            "JOIN pg_class i ON i.oid = x.indexrelid JOIN pg_am a ON a.oid = i.relam "
+            "WHERE x.indrelid = 'catalog_search'::regclass AND NOT x.indisprimary ORDER BY 1"
+        )
     )
 
-    assert "ix_catalog_search_document" in plan, plan
+    assert [tuple(r) for r in rows] == [
+        ("ix_catalog_search_city_tin", "tin"),
+        ("ix_catalog_search_places_tin", "tin"),
+        ("ix_catalog_search_title_tin", "tin"),
+    ]
 
 
-async def test_the_trigram_half_uses_the_gin_index_on_the_names(
+async def test_a_title_search_can_use_the_title_index(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
-    plan = await explain(
-        db_session,
-        "SELECT catalog_id FROM catalog_search WHERE public.fold('bruxels') <% names",
+    await db_session.execute(text("SET LOCAL enable_seqscan = off"))
+    plan = "\n".join(
+        row[0]
+        for row in await db_session.execute(
+            text("EXPLAIN SELECT catalog_id FROM catalog_search WHERE title ==> 'paris'")
+        )
     )
 
-    assert "ix_catalog_search_names_trgm" in plan, plan
+    assert "ix_catalog_search_title_tin" in plan, plan
 
 
-async def test_similarity_alone_would_not_use_the_trigram_index(
-    db_session: AsyncSession, searchable_catalogs: None
+@pytest.mark.parametrize(
+    ("chunks", "typo_tolerant", "expected"),
+    [
+        # Under 4 letters exact, 4-5 letters one edit, 6+ two; the last word also as a prefix.
+        (["paris"], True, "paris~1 OR paris*"),
+        (["Bibliothèque", "lib"], True, "bibliotheque~2 OR lib OR lib*"),
+        (["de", "paris"], True, "de OR paris~1 OR paris*"),
+        # The prefix goes on the last chunk that has a word: trailing punctuation keeps it.
+        (["guten", "!!!"], True, "guten~1 OR guten*"),
+        # A trailing phrase is never a prefix, and the word before it is not one either.
+        (["guten", '"de paris"'], True, 'guten~1 OR "de paris"'),
+        # Folded by `fold()` first: TIN's own tokenizer would keep ß.
+        (["Straße"], True, "strasse~2 OR strasse*"),
+        # A quoted chunk is a phrase, exact, and never a prefix, even of one word.
+        (['"numérique de paris"'], True, '"numerique de paris"'),
+        (['"paris"'], True, '"paris"'),
+        # A bare chunk the tokenizer splits is a phrase too; an apostrophe does not split.
+        (["ile-de-france"], True, '"ile de france"'),
+        (["l'école"], True, "l'ecole~2 OR l'ecole*"),
+        # Inside a phrase `_` is a gap unless escaped.
+        (['"a_b c"'], True, '"a\\_b c"'),
+        # Exclusions are exact.
+        (["paris", '"de bruxelles"'], False, 'paris OR "de bruxelles"'),
+        # Folding lowercases, so an UPPER CASE keyword becomes an ordinary word.
+        (["AND"], True, "and OR and*"),
+        # TINQL syntax characters never reach the query.
+        (["x~2^3*?"], True, '"x 2 3"'),
+        (["(a)", "[b]"], True, "a OR b OR b*"),
+    ],
+)
+async def test_the_query_built_from_chunks(
+    db_session: AsyncSession, chunks: list[str], typo_tolerant: bool, expected: str
 ) -> None:
-    """Why the statement filters with `<%`: `word_similarity(...) > x` cannot use the index."""
-    plan = await explain(
-        db_session,
-        "SELECT catalog_id FROM catalog_search WHERE word_similarity('bruxels', names) > 0.6",
+    built = await db_session.scalar(
+        text("SELECT public.registry_tinql(CAST(:c AS text[]), :t)"),
+        {"c": chunks, "t": typo_tolerant},
     )
 
-    assert "ix_catalog_search_names_trgm" not in plan, plan
+    assert built == expected
+
+
+@pytest.mark.parametrize("chunks", [[], ["!!!"], ["& | ! :"], ["'", "-"]])
+async def test_chunks_with_no_word_build_no_query(
+    db_session: AsyncSession, chunks: list[str]
+) -> None:
+    """NULL, so `==>` matches nothing instead of the whole table or a parse error."""
+    built = await db_session.scalar(
+        text("SELECT public.registry_tinql(CAST(:c AS text[]), true)"), {"c": chunks}
+    )
+
+    assert built is None
 
 
 class NoticeRecorder:
@@ -89,18 +132,3 @@ async def test_punctuation_only_chunks_raise_no_notice(
     messages = await record_notices(db_connection, lambda: search_rows(db_session, query))
 
     assert messages == []
-
-
-async def test_the_notice_trap_is_real_for_the_unguarded_function(
-    db_connection: AsyncConnection, db_session: AsyncSession
-) -> None:
-    """The guard is what `registry_query` adds: calling `websearch_to_tsquery` on punctuation
-    directly does notify, so a test that sees no notice above is not blind."""
-    messages = await record_notices(
-        db_connection,
-        lambda: db_session.execute(
-            text("SELECT websearch_to_tsquery('public.registry_simple', '& | ! :')")
-        ),
-    )
-
-    assert any("no lexemes" in m or "stop words" in m for m in messages), messages

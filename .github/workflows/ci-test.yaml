@@ -12,7 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18-alpine
+        # TIN's open-source stand-in, on the official Postgres 18 image. Pinned by digest.
+        image: planetscale/lead:pg18@sha256:ebb795acccd7f7bdabc009ca9490b73c4dbb216f61bc4ebcc4d95e284cc96b76
         env:
           POSTGRES_USER: registry
           POSTGRES_PASSWORD: registry

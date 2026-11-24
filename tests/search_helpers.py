@@ -12,13 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 from registry.core.config import Settings
 from registry.core.schema_validation import build_schema_validator
 from registry.db.session import build_read_engine
-from registry.domain.search_query import parse_search_query
-from registry.repositories.search_repository import (
-    _SEARCH,
-    RANK_WEIGHTS,
-    SEARCH_CONNECTION_SETTINGS,
-    WORD_SIMILARITY_THRESHOLD,
-)
+from registry.domain.search_query import MAX_RESULTS, parse_search_query
+from registry.repositories.search_repository import _SEARCH, SEARCH_CONNECTION_SETTINGS
 from tests.conftest import LIBRARIES_FILE, SEED_FILE
 
 PAGE = 50
@@ -57,37 +52,33 @@ async def search_rows(
     *,
     page: int = 1,
     limit: int = PAGE,
-    threshold: float = WORD_SIMILARITY_THRESHOLD,
 ) -> list[tuple[str, int, float]]:
     """(title, tier, score) in rank order, from the repository's own statement.
 
     The repository returns catalogs only; tier and score are what the table pins, so this runs
-    the same `_SEARCH` with the same parameters and joins the titles on afterwards.
+    the same `_SEARCH` with the same parameters and joins the titles on afterwards. Tier 1 is a
+    match on a word as typed (score above 0), tier 2 a match found only through a typo allowance
+    or the last word's prefix, which TIN scores 0, so it always follows tier 1.
     """
     parsed = parse_search_query(query)
     if parsed.is_empty:
         return []
-    # Production's search pool has this as a connection setting; the test transaction gets it
-    # with SET LOCAL, which ends with the test.
-    await session.execute(text(f"SET LOCAL pg_trgm.word_similarity_threshold = {threshold}"))
     result = await session.execute(
         _SEARCH,
         {
             "positives": list(parsed.positives),
             "negatives": list(parsed.negatives),
-            "trigram_text": parsed.trigram_text,
-            "weights": list(RANK_WEIGHTS),
             "limit": limit,
             "offset": (page - 1) * limit,
             "opds": False,
-            "opds_type": "application/opds+json",
+            "count_cap": MAX_RESULTS,
             "no_open": False,
             "no_audiobook": False,
         },
     )
     rows = [r for r in result.all() if r.catalog_id is not None]
     titles = await titles_by_id(session, [r.catalog_id for r in rows])
-    return [(titles[r.catalog_id], r.tier, float(r.score)) for r in rows]
+    return [(titles[r.catalog_id], 1 if r.score > 0 else 2, float(r.score)) for r in rows]
 
 
 async def titles_by_id(session: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
@@ -99,18 +90,19 @@ async def titles_by_id(session: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid
     return {row.id: row.title for row in rows}
 
 
-async def catalog_search_row(session: AsyncSession, title: str) -> dict[str, str] | None:
-    """The stored document and names of the catalog with this title, or None."""
+async def catalog_search_row(session: AsyncSession, title: str) -> dict[str, Any] | None:
+    """The stored search row of the catalog with this title, or None."""
     row = (
         await session.execute(
             text(
-                "SELECT cs.document::text AS document, cs.names AS names FROM catalog_search cs "
+                "SELECT cs.title, cs.city, cs.places, cs.has_opds_catalog, cs.is_open, "
+                "cs.audiobook_only FROM catalog_search cs "
                 "JOIN catalogs c ON c.id = cs.catalog_id WHERE c.title = :t"
             ),
             {"t": title},
         )
     ).first()
-    return None if row is None else {"document": row.document, "names": row.names}
+    return None if row is None else dict(row._mapping)
 
 
 async def add_synthetic_catalogs(session: AsyncSession, count: int, word: str) -> None:

@@ -31,10 +31,7 @@ from registry.repositories.catalog_repository import (
     CatalogRepository,
 )
 from registry.repositories.catalog_rows import fetch_rows
-from registry.repositories.search_repository import (
-    SEARCH_CONNECTION_SETTINGS,
-    WORD_SIMILARITY_THRESHOLD,
-)
+from registry.repositories.search_repository import SEARCH_CONNECTION_SETTINGS
 from tests.conftest import SEED_CATALOG_COUNT, SEED_FILE
 from tests.read_helpers import (
     StubSession,
@@ -56,7 +53,6 @@ INSERT = text("INSERT INTO subdivisions (code, country_alpha2) VALUES ('ZZ-99', 
 async def show(engine: AsyncEngine, *names: str) -> dict[str, str | None]:
     """Server settings as live connections of *engine* report them."""
     async with engine.connect() as connection:
-        await connection.execute(text("SELECT public.word_similarity('a', 'a')"))  # loads pg_trgm
         return {name: await connection.scalar(text(f"SHOW {name}")) for name in names}
 
 
@@ -71,7 +67,6 @@ def test_the_production_constants() -> None:
     }
     # Different pools, different limits: the feed's allowance is not search's.
     assert SEARCH_CONNECTION_SETTINGS["statement_timeout"] == "1000"
-    assert "pg_trgm.word_similarity_threshold" not in READ_CONNECTION_SETTINGS
 
 
 async def test_the_read_pool_carries_a_ten_second_timeout_and_read_only_mode(
@@ -92,23 +87,6 @@ async def test_the_read_pool_carries_a_ten_second_timeout_and_read_only_mode(
     }
 
 
-async def test_the_read_pool_does_not_carry_the_search_typo_threshold(settings: Settings) -> None:
-    read = build_read_engine(settings, READ_CONNECTION_SETTINGS)
-    search = build_read_engine(settings, SEARCH_CONNECTION_SETTINGS)
-    main = create_database_engine(settings)
-    try:
-        threshold = "pg_trgm.word_similarity_threshold"
-        seen_read = await show(read, threshold)
-        seen_search = await show(search, threshold)
-        seen_main = await show(main, threshold)
-    finally:
-        for engine in (read, search, main):
-            await engine.dispose()
-
-    assert seen_search[threshold] == str(WORD_SIMILARITY_THRESHOLD)
-    assert seen_read[threshold] == seen_main[threshold] != seen_search[threshold]
-
-
 async def test_the_search_pool_still_has_its_own_limits(settings: Settings) -> None:
     engine = build_read_engine(settings, SEARCH_CONNECTION_SETTINGS)
     try:
@@ -116,16 +94,11 @@ async def test_the_search_pool_still_has_its_own_limits(settings: Settings) -> N
             engine,
             "statement_timeout",
             "default_transaction_read_only",
-            "pg_trgm.word_similarity_threshold",
         )
     finally:
         await engine.dispose()
 
-    assert seen == {
-        "statement_timeout": "1s",
-        "default_transaction_read_only": "on",
-        "pg_trgm.word_similarity_threshold": str(WORD_SIMILARITY_THRESHOLD),
-    }
+    assert seen == {"statement_timeout": "1s", "default_transaction_read_only": "on"}
 
 
 async def test_the_main_engine_has_no_timeout_and_is_not_read_only(settings: Settings) -> None:

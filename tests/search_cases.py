@@ -2,7 +2,8 @@
 
 One `Case` per search: what it checks, the ideal answer ("Expected"), the measured answer
 ("Today"), and a note. `today` is `(title, tier)` in rank order, measured with the real migrations
-and the two data files. Tier 1 is a word match, tier 2 a trigram-only match, which always follows
+and the two data files. Tier 1 is a match on a word as typed, tier 2 a match found only through the
+typo allowance or the last word's prefix, which always follows
 every word match. Where a result is known and accepted, the case says so and
 `today` pins the CURRENT behaviour, so a change is noticed and has to be decided rather than
 slipping in.
@@ -33,7 +34,7 @@ def words(*titles: str) -> list[tuple[str, int]]:
     return [(title, 1) for title in titles]
 
 
-def trigrams(*titles: str) -> list[tuple[str, int]]:
+def fuzzy(*titles: str) -> list[tuple[str, int]]:
     return [(title, 2) for title in titles]
 
 
@@ -144,9 +145,7 @@ QUALITY_CASES: list[Case] = [
         "Wallis",
         "Canton, German",
         (VALAIS,),
-        words(VALAIS) + trigrams(LIRTUEL),
-        "Lirtuel follows as a trigram match (Wallonia is close to Wallis) since the typo "
-        "threshold moved to 0.5.",
+        words(VALAIS),
     ),
     c(PLACES, "Vallese", "Canton, Italian", (VALAIS,), words(VALAIS)),
     c(PLACES, "Suisse", "Country, French", (VALAIS,), words(VALAIS)),
@@ -158,7 +157,7 @@ QUALITY_CASES: list[Case] = [
         "Place with no catalog, close to Brussel",
         (),
         [],
-        "Trigrams don't pull in the Belgian libraries.",
+        "The typo allowance doesn't pull in the Belgian libraries.",
     ),
     c(
         PLACES,
@@ -173,16 +172,16 @@ QUALITY_CASES: list[Case] = [
         "Belgio",
         "Italian name of Belgium, Italian isn't official there",
         (),
-        trigrams(LIRTUEL, OPENBARE),
-        "Found through trigrams, close to Belgie and Belgien. Harmless, arguably helpful.",
+        fuzzy(LIRTUEL, OPENBARE),
+        "Found as a typo of Belgie and Belgien (one letter). Harmless, arguably helpful.",
     ),
     c(
         NOT_LOADED,
         "Vallonia",
         "Italian name of Wallonia",
         (),
-        trigrams(LIRTUEL),
-        "Found through trigrams, close to Wallonia. Same as above.",
+        [],
+        "Two letters from Wallonia, beyond the allowance for a word of this length.",
     ),
     c(NOT_LOADED, "Zwitserland", "Dutch name of Switzerland, Dutch isn't official there", (), []),
     c(TITLE, "Gutenberg", "Title word", (GUTENBERG,), words(GUTENBERG)),
@@ -191,8 +190,8 @@ QUALITY_CASES: list[Case] = [
         "bibliotheque",
         "Title word without accents",
         (PARIS, ROMANDE, RUSSE),
-        words(PARIS, ROMANDE, RUSSE) + trigrams(OPENBARE),
-        "De Openbare bibliotheek also comes back through trigrams, after the three exact matches.",
+        words(ROMANDE, PARIS, RUSSE),
+        "Ranked by BM25: the shorter title (Romande) counts the word more.",
     ),
     c(TITLE, "MÉDIATHÈQUE", "Upper case with accents", (VALAIS,), words(VALAIS)),
     c(TITLE, "ebooks", "Shared title word", (STANDARD, LIBRES), words(STANDARD, LIBRES)),
@@ -209,9 +208,7 @@ QUALITY_CASES: list[Case] = [
         "Liber",
         "Short title word, close to libres",
         (LIBER,),
-        words(LIBER) + trigrams(LIBRIVOX, LIBRES),
-        "Librivox and Ebooks libres follow as trigram matches since the typo threshold moved "
-        "to 0.5.",
+        words(LIBER),
     ),
     c(TITLE, "Librivox", "Title word", (LIBRIVOX,), words(LIBRIVOX)),
     c(
@@ -219,42 +216,42 @@ QUALITY_CASES: list[Case] = [
         "Bibliothèque Nationale",
         "Two words, only one of them in a title",
         (PARIS, ROMANDE, RUSSE),
-        words(PARIS, ROMANDE, RUSSE),
-        "There's no national library in the seed data, so these match on 'bibliothèque' alone "
-        "and have the same score.",
+        words(ROMANDE, PARIS, RUSSE),
+        "There's no national library in the seed data, so these match on 'bibliothèque' alone, "
+        "the shorter title first.",
     ),
     c(TITLE, "TV5", "Word with a digit", (TV5,), words(TV5)),
-    c(TYPO, "gutenbrg", "Missing letter in a title", (GUTENBERG,), trigrams(GUTENBERG)),
+    c(TYPO, "gutenbrg", "Missing letter in a title", (GUTENBERG,), fuzzy(GUTENBERG)),
     c(
         TYPO,
         "bruxels",
         "Missing letters in a place name",
         (LIRTUEL, OPENBARE),
-        trigrams(LIRTUEL, OPENBARE),
+        fuzzy(LIRTUEL, OPENBARE),
     ),
     c(
         TYPO,
         "belgiqe",
         "Missing letter in a country name",
         (LIRTUEL, OPENBARE),
-        trigrams(LIRTUEL, OPENBARE),
+        fuzzy(LIRTUEL, OPENBARE),
     ),
     c(
         TYPO,
         "bibliothèques",
         "Plural",
         (PARIS, ROMANDE, RUSSE),
-        trigrams(PARIS, ROMANDE, RUSSE, OPENBARE),
+        fuzzy(PARIS, ROMANDE, RUSSE),
+        "Found as a typo (two letters added); no stemming yet.",
     ),
-    c(TYPO, "guten", "Start of a word", (GUTENBERG,), trigrams(GUTENBERG)),
+    c(TYPO, "guten", "Start of a word", (GUTENBERG,), fuzzy(GUTENBERG)),
     c(
         TYPO,
         "parsi",
         "Two letters swapped in a short word",
         (PARIS,),
-        trigrams(PARIS),
-        "Found through trigrams since the typo threshold moved to 0.5 (nothing at 0.6). "
-        "Swapped letters stay the weakest typo: about two in three are found.",
+        [],
+        "Not found: a swap is two edits and a word of five letters is allowed one.",
     ),
     c(
         TYPO,
@@ -268,16 +265,15 @@ QUALITY_CASES: list[Case] = [
         '"numérique de paris"',
         "Quoted phrase",
         (PARIS,),
-        words(PARIS) + trigrams(ROMANDE),
-        "Romande follows as a trigram match: the fuzzy half ignores the quotes.",
+        words(PARIS),
     ),
     c(
         SYNTAX_SECTION,
         "bibliothèque -paris",
         "Excluding a word",
         (ROMANDE, RUSSE),
-        words(ROMANDE, RUSSE) + trigrams(OPENBARE),
-        "Negated words exclude catalogs from both halves, so BnParis never comes back.",
+        words(ROMANDE, RUSSE),
+        "A negated word excludes a catalog whichever field holds it, so BnParis never comes back.",
     ),
     c(
         SYNTAX_SECTION,
@@ -291,9 +287,9 @@ QUALITY_CASES: list[Case] = [
         "paris OR valais",
         "OR",
         (PARIS, VALAIS),
-        words(PARIS, VALAIS),
-        "Paris comes first since the city is label B (0.4) and Valais is only a subdivision "
-        "(label C, 0.2); before that Valais came first.",
+        words(VALAIS, PARIS),
+        "Valais first: it has the word in its title as well as its places; Paris only in its "
+        "title and city.",
     ),
     c(SYNTAX_SECTION, "PARIS or", "A bare OR is dropped", (PARIS,), words(PARIS)),
     c(
@@ -323,8 +319,8 @@ QUALITY_CASES: list[Case] = [
         "bibliothèque de Paris",
         "Three words, one of them 'de'",
         (PARIS,),
-        words(PARIS, OPENBARE, ROMANDE, RUSSE, LIRTUEL),
-        "De Openbare comes second because of 'de' in its title. The stop word problem.",
+        words(PARIS, ROMANDE, OPENBARE, RUSSE, LIRTUEL),
+        "De Openbare comes third because of 'de' in its title. The stop word problem.",
         first=PARIS,
     ),
 ]
@@ -345,7 +341,7 @@ QUALITY_CASES += [
 ]
 
 REALISTIC = "Realistic typos, one slip per word"
-NOT_FOUND = "Not found: swapped or replaced letters in a short word share too few trigrams."
+NOT_FOUND = "Not found: a swap is two edits and a word of five letters is allowed one."
 
 #: What readers actually mistype: a letter dropped, doubled, replaced by the neighbouring key, or
 #: two neighbours swapped. Measured at the 0.5 threshold; the 0.6 results are in docs/search.md.
@@ -355,27 +351,27 @@ REALISTIC_TYPOS: list[Case] = [
         "belgque",
         "One letter dropped in a country name",
         (LIRTUEL, OPENBARE),
-        trigrams(LIRTUEL, OPENBARE),
+        fuzzy(LIRTUEL, OPENBARE),
     ),
     c(
         REALISTIC,
         "bruxeles",
         "One letter dropped in a place name",
         (LIRTUEL, OPENBARE),
-        trigrams(LIRTUEL, OPENBARE),
+        fuzzy(LIRTUEL, OPENBARE),
     ),
     c(
         REALISTIC,
         "libriox",
         "One letter dropped in a title",
         (LIBRIVOX,),
-        trigrams(LIBRIVOX, LIBRES),
+        fuzzy(LIBRIVOX),
     ),
-    c(REALISTIC, "valas", "One letter dropped in a canton", (VALAIS,), trigrams(VALAIS)),
-    c(REALISTIC, "walonie", "One letter dropped in a region", (LIRTUEL,), trigrams(LIRTUEL)),
-    c(REALISTIC, "flandrs", "One letter dropped in a region", (OPENBARE,), trigrams(OPENBARE)),
-    c(REALISTIC, "suise", "One letter dropped in a country name", (VALAIS,), trigrams(VALAIS)),
-    c(REALISTIC, "standrd", "One letter dropped in a title word", (STANDARD,), trigrams(STANDARD)),
+    c(REALISTIC, "valas", "One letter dropped in a canton", (VALAIS,), fuzzy(VALAIS)),
+    c(REALISTIC, "walonie", "One letter dropped in a region", (LIRTUEL,), fuzzy(LIRTUEL)),
+    c(REALISTIC, "flandrs", "One letter dropped in a region", (OPENBARE,), fuzzy(OPENBARE)),
+    c(REALISTIC, "suise", "One letter dropped in a country name", (VALAIS,), fuzzy(VALAIS)),
+    c(REALISTIC, "standrd", "One letter dropped in a title word", (STANDARD,), fuzzy(STANDARD)),
     c(
         REALISTIC,
         "pairs",
@@ -389,129 +385,126 @@ REALISTIC_TYPOS: list[Case] = [
         "valias",
         "Two neighbouring letters swapped in a canton",
         (VALAIS,),
-        [],
-        note=NOT_FOUND,
+        fuzzy(VALAIS),
     ),
     c(
         REALISTIC,
         "brussles",
         "Two neighbouring letters swapped in a place name",
         (LIRTUEL, OPENBARE),
-        trigrams(LIRTUEL, OPENBARE),
+        fuzzy(LIRTUEL, OPENBARE),
     ),
     c(
         REALISTIC,
         "gutneberg",
         "Two neighbouring letters swapped in a title",
         (GUTENBERG,),
-        [],
-        note=NOT_FOUND,
+        fuzzy(GUTENBERG),
     ),
     c(
         REALISTIC,
         "belguim",
         "Two neighbouring letters swapped in a country name",
         (LIRTUEL, OPENBARE),
-        trigrams(LIRTUEL, OPENBARE),
+        fuzzy(LIRTUEL, OPENBARE),
     ),
     c(
         REALISTIC,
         "wallonei",
         "Two neighbouring letters swapped in a region",
         (LIRTUEL,),
-        trigrams(LIRTUEL),
+        fuzzy(LIRTUEL),
     ),
     c(
         REALISTIC,
         "schwiez",
         "Two neighbouring letters swapped in a country name",
         (VALAIS,),
-        trigrams(VALAIS),
+        fuzzy(VALAIS),
     ),
     c(
         REALISTIC,
         "bibliotehque",
         "Two neighbouring letters swapped in a title word",
         (PARIS, ROMANDE, RUSSE),
-        trigrams(PARIS, OPENBARE, ROMANDE, RUSSE),
+        fuzzy(PARIS, ROMANDE, RUSSE),
     ),
     c(
         REALISTIC,
         "parus",
         "One letter replaced by a neighbouring key in a title word",
         (PARIS,),
-        trigrams(PARIS),
+        fuzzy(PARIS),
     ),
     c(
         REALISTIC,
         "belgiqie",
         "One letter replaced by a neighbouring key in a country name",
         (LIRTUEL, OPENBARE),
-        trigrams(LIRTUEL, OPENBARE),
+        fuzzy(LIRTUEL, OPENBARE),
     ),
     c(
         REALISTIC,
         "vqlais",
         "One letter replaced by a neighbouring key in a canton",
         (VALAIS,),
-        [],
-        note=NOT_FOUND,
+        fuzzy(VALAIS),
     ),
     c(
         REALISTIC,
         "frabce",
         "One letter replaced by a neighbouring key in a country name",
         (PARIS,),
-        trigrams(PARIS),
+        fuzzy(PARIS),
     ),
     c(
         REALISTIC,
         "lirtuek",
         "One letter replaced by a neighbouring key in a title",
         (LIRTUEL,),
-        trigrams(LIRTUEL),
+        fuzzy(LIRTUEL),
     ),
     c(
         REALISTIC,
         "bibliotheuqe",
         "One letter replaced by a neighbouring key in a title word",
         (PARIS, ROMANDE, RUSSE),
-        trigrams(PARIS, OPENBARE, ROMANDE, RUSSE),
+        fuzzy(PARIS, ROMANDE, RUSSE),
     ),
     c(
         REALISTIC,
         "guttenberg",
         "One letter doubled or added in a title",
         (GUTENBERG,),
-        trigrams(GUTENBERG),
+        fuzzy(GUTENBERG),
     ),
     c(
         REALISTIC,
         "belgiumm",
         "One letter doubled or added in a country name",
         (LIRTUEL, OPENBARE),
-        trigrams(LIRTUEL, OPENBARE),
+        fuzzy(LIRTUEL, OPENBARE),
     ),
     c(
         REALISTIC,
         "bruxellles",
         "One letter doubled or added in a place name",
         (LIRTUEL, OPENBARE),
-        trigrams(LIRTUEL, OPENBARE),
+        fuzzy(LIRTUEL, OPENBARE),
     ),
     c(
         REALISTIC,
         "pariss",
         "One letter doubled or added in a title word",
         (PARIS,),
-        trigrams(PARIS),
+        fuzzy(PARIS),
     ),
     c(
         REALISTIC,
         "librivoxx",
         "One letter doubled or added in a title",
         (LIBRIVOX,),
-        trigrams(LIBRIVOX),
+        fuzzy(LIBRIVOX),
     ),
     c(
         REALISTIC,
@@ -526,7 +519,7 @@ REALISTIC_TYPOS: list[Case] = [
         "belgqiue",
         "Two slips in one word in a country name",
         (LIRTUEL, OPENBARE),
-        trigrams(LIRTUEL, OPENBARE),
+        fuzzy(LIRTUEL, OPENBARE),
     ),
 ]
 
@@ -552,7 +545,7 @@ PAGE_CASES: list[PageCase] = [
     PageCase(
         "bibliothèque de Paris",
         2,
-        ((PARIS, OPENBARE), (ROMANDE, RUSSE), (LIRTUEL,)),
+        ((PARIS, ROMANDE), (OPENBARE, RUSSE), (LIRTUEL,)),
         "Pages add up to the full list, nothing repeated or skipped",
     ),
     PageCase(

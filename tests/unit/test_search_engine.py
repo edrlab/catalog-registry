@@ -13,11 +13,9 @@ from registry.db.session import (
     build_read_engine,
     create_database_engine,
 )
-from registry.repositories import search_repository
 from registry.repositories.search_repository import (
     SEARCH_CONNECTION_SETTINGS,
     SEARCH_STATEMENT_TIMEOUT_MS,
-    WORD_SIMILARITY_THRESHOLD,
 )
 
 pytestmark = pytest.mark.unit
@@ -88,27 +86,16 @@ def test_the_settings_are_copied_not_shared(monkeypatch: pytest.MonkeyPatch) -> 
     assert captured["connect_args"]["server_settings"] == {"statement_timeout": "150"}
 
 
-def test_the_production_settings_are_exactly_these_three() -> None:
+def test_the_production_settings_are_exactly_these_two() -> None:
     assert dict(SEARCH_CONNECTION_SETTINGS) == {
         "statement_timeout": "1000",
         "default_transaction_read_only": "on",
-        "pg_trgm.word_similarity_threshold": "0.5",
     }
 
 
 def test_the_settings_are_built_from_the_repository_constants() -> None:
     assert SEARCH_STATEMENT_TIMEOUT_MS == 1000
-    assert WORD_SIMILARITY_THRESHOLD == 0.5
     assert SEARCH_CONNECTION_SETTINGS["statement_timeout"] == str(SEARCH_STATEMENT_TIMEOUT_MS)
-    assert SEARCH_CONNECTION_SETTINGS["pg_trgm.word_similarity_threshold"] == str(
-        WORD_SIMILARITY_THRESHOLD
-    )
-
-
-def test_the_threshold_the_search_sql_relies_on_is_the_one_sent_to_the_connection() -> None:
-    """The statement reads the connection's threshold, so the constant must be the one source."""
-    assert search_repository.WORD_SIMILARITY_THRESHOLD is WORD_SIMILARITY_THRESHOLD
-    assert "word_similarity_threshold" not in search_repository._SEARCH_SQL
 
 
 def test_every_pool_takes_its_size_from_settings_and_is_recycled() -> None:
