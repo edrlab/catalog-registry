@@ -4,6 +4,7 @@ import json
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from itertools import groupby
 from typing import Any
 
 from sqlalchemy import text
@@ -79,6 +80,24 @@ async def search_rows(
     rows = [r for r in result.all() if r.catalog_id is not None]
     titles = await titles_by_id(session, [r.catalog_id for r in rows])
     return [(titles[r.catalog_id], 1 if r.score > 0 else 2, float(r.score)) for r in rows]
+
+
+def in_lead_order(rows: list[tuple[str, int, float]], expected: list[tuple[str, int]]) -> bool:
+    """*rows* match *expected*, in order, except that catalogs Lead scores equally may come in any
+    order among themselves.
+
+    The pinned order is production's (TIN). Lead, the stand-in these tests run on, scores typo and
+    prefix matches 0 where TIN scores them, so where Lead has a tie TIN may have an order.
+    """
+    if len(rows) != len(expected):
+        return False
+    start = 0
+    for _, group in groupby(rows, key=lambda row: row[2]):
+        tied = {(title, tier) for title, tier, _ in group}
+        if tied != set(expected[start : start + len(tied)]):
+            return False
+        start += len(tied)
+    return True
 
 
 async def titles_by_id(session: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:

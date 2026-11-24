@@ -1,8 +1,9 @@
 """The agreed search test cases, one parametrized case per row.
 
-Expected results are (title, tier) in rank order, measured on 1 October with the real
-migrations and the two data files. Tier 1 is a match on a word as typed, tier 2 one found only
-through the typo allowance or the last word's prefix, which always follows every word match. Where a
+Expected results are (title, tier) in rank order, with the real migrations and the two data files.
+Tier 1 is a match on a word as typed, tier 2 one found only through the typo allowance or the last
+word's prefix. The order is production's (TIN); on Lead, which these tests run on, tier 2 scores 0,
+so catalogs Lead scores equally may come in any order among themselves. Where a
 result is known and accepted the
 case says so and pins the CURRENT behaviour, so a change is noticed and has to be decided
 rather than slipping in.
@@ -28,7 +29,7 @@ from tests.search_cases import (
     fuzzy,
     words,
 )
-from tests.search_helpers import ALL_TITLES, search_rows
+from tests.search_helpers import ALL_TITLES, in_lead_order, search_rows
 
 pytestmark = pytest.mark.integration
 
@@ -42,7 +43,15 @@ async def test_a_search_returns_the_planned_catalogs_in_the_planned_order(
 ) -> None:
     rows = await search_rows(db_session, query)
 
-    assert [(title, tier) for title, tier, _ in rows] == expected
+    assert in_lead_order(rows, expected)
+
+
+def test_lead_ties_may_come_in_any_order_but_nothing_else_moves() -> None:
+    rows = [("A", 1, 2.0), ("B", 2, 0.0), ("C", 2, 0.0)]
+
+    assert in_lead_order(rows, [("A", 1), ("C", 2), ("B", 2)])
+    assert not in_lead_order(rows, [("B", 2), ("A", 1), ("C", 2)])
+    assert not in_lead_order(rows, [("A", 1), ("B", 2)])
 
 
 def test_every_title_the_table_names_is_in_a_data_file() -> None:
