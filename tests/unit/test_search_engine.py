@@ -4,10 +4,15 @@ from typing import Any
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.pool import QueuePool
 
 from registry.core.config import Settings
 from registry.db import session as session_module
-from registry.db.session import READ_POOL_RECYCLE_SECONDS, build_read_engine
+from registry.db.session import (
+    POOL_RECYCLE_SECONDS,
+    build_read_engine,
+    create_database_engine,
+)
 from registry.repositories import search_repository
 from registry.repositories.search_repository import (
     SEARCH_CONNECTION_SETTINGS,
@@ -45,7 +50,7 @@ def test_the_engine_is_autocommit_with_no_pre_ping_and_a_five_minute_recycle() -
     assert engine.sync_engine.dialect._on_connect_isolation_level == "AUTOCOMMIT"
     assert pool._pre_ping is False
     assert pool._recycle == 300
-    assert READ_POOL_RECYCLE_SECONDS == 300
+    assert POOL_RECYCLE_SECONDS == 300
 
 
 def test_the_arguments_given_to_sqlalchemy_are_the_documented_ones(
@@ -104,3 +109,20 @@ def test_the_threshold_the_search_sql_relies_on_is_the_one_sent_to_the_connectio
     """The statement reads the connection's threshold, so the constant must be the one source."""
     assert search_repository.WORD_SIMILARITY_THRESHOLD is WORD_SIMILARITY_THRESHOLD
     assert "word_similarity_threshold" not in search_repository._SEARCH_SQL
+
+
+def test_every_pool_takes_its_size_from_settings_and_is_recycled() -> None:
+    sized = Settings(
+        database_url=URL,
+        environment="test",
+        base_url="http://testserver",
+        database_pool_size=2,
+        database_max_overflow=1,
+    )
+
+    for engine in (create_database_engine(sized), build_read_engine(sized, {})):
+        pool = engine.sync_engine.pool
+        assert isinstance(pool, QueuePool)
+        assert pool.size() == 2
+        assert pool._max_overflow == 1
+        assert pool._recycle == POOL_RECYCLE_SECONDS

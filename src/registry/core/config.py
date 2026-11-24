@@ -29,7 +29,26 @@ class Settings(BaseSettings):
     # host, which PostgresDsn's stricter URL parser rejects outright even
     # though asyncpg/SQLAlchemy accept it fine.
     database_url: str = Field(
-        description="Async Postgres DSN. Required, so no deployment falls back to a local default.",
+        description=(
+            "Async Postgres DSN. Required, so no deployment falls back to a local default. "
+            "Over TLS, add `?ssl=verify-full` and set PGSSLROOTCERT to the CA bundle "
+            "(/etc/ssl/certs/ca-certificates.crt in the image): asyncpg has no "
+            "`sslrootcert=system`, and `?ssl=require` does not check the certificate."
+        ),
+    )
+    database_pool_size: int = Field(
+        default=5,
+        ge=1,
+        description="Connections each pool keeps open. There are three pools per process.",
+    )
+    database_max_overflow: int = Field(
+        default=10,
+        ge=0,
+        description=(
+            "Extra connections each pool may open under load. Per process, at most "
+            "3 x (pool size + overflow) connections, which must fit the database's max_connections "
+            "across every instance."
+        ),
     )
     seed_file: Path = Field(
         default=Path("data/recommended.json"),
