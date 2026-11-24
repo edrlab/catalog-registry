@@ -142,7 +142,7 @@ _REGISTRY_TINQL = r"""
         -- split by TIN's own tokenizer, so a word here is a word in the index. A quoted chunk, or
         -- one the tokenizer splits (`ile-de-france`, `l'ecole` stays one), is an exact phrase. A
         -- single word matches exactly or within a typo allowance (`~1` from 4 letters, `~2` from 6;
-        -- shorter words exact), and the last chunk of the query also as a prefix, so `lib` finds
+        -- shorter words exact), and the last chunk with a word also as a prefix, so `lib` finds
         -- Library while it is still being typed. Without *typo_tolerant* (exclusions) words are
         -- exact. TIN scores a typo or prefix match only by the word as typed, so an exact match
         -- always ranks above one found only through a typo or a prefix.
@@ -153,6 +153,7 @@ _REGISTRY_TINQL = r"""
         DECLARE
           parts text[] := '{}';
           words text[]; word text; n int;
+          last_word text;  -- the last chunk with a word, when that chunk is a single word
         BEGIN
           FOR n IN 1 .. coalesce(cardinality(chunks), 0) LOOP
             SELECT coalesce(array_agg(w ORDER BY ord), '{}') INTO words
@@ -160,6 +161,7 @@ _REGISTRY_TINQL = r"""
                    LATERAL (SELECT regexp_replace(tok, '[][()"~^*?\\:]', '', 'g') AS w) cleaned
              WHERE w <> '';
             CONTINUE WHEN cardinality(words) = 0;
+            last_word := NULL;
             IF left(chunks[n], 1) = '"' OR cardinality(words) > 1 THEN
               parts := parts || ('"' || array_to_string(
                 ARRAY(SELECT regexp_replace(w, '([_\\])', '\\\1', 'g') FROM unnest(words) w), ' ') || '"');
@@ -171,11 +173,13 @@ _REGISTRY_TINQL = r"""
             ELSIF typo_tolerant AND char_length(word) >= 4 THEN
               word := word || '~1';
             END IF;
-            IF typo_tolerant AND n = cardinality(chunks) THEN
-              word := word || ' OR ' || words[1] || '*';
-            END IF;
             parts := parts || word;
+            last_word := words[1];
           END LOOP;
+          -- After the loop, so a trailing chunk with no word (`guten !!!`) does not take it away.
+          IF typo_tolerant AND last_word IS NOT NULL THEN
+            parts[cardinality(parts)] := parts[cardinality(parts)] || ' OR ' || last_word || '*';
+          END IF;
           RETURN nullif(array_to_string(parts, ' OR '), '');
         END $$;
 """

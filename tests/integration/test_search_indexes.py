@@ -55,6 +55,10 @@ async def test_a_title_search_can_use_the_title_index(
         (["paris"], True, "paris~1 OR paris*"),
         (["Bibliothèque", "lib"], True, "bibliotheque~2 OR lib OR lib*"),
         (["de", "paris"], True, "de OR paris~1 OR paris*"),
+        # The prefix goes on the last chunk that has a word: trailing punctuation keeps it.
+        (["guten", "!!!"], True, "guten~1 OR guten*"),
+        # A trailing phrase is never a prefix, and the word before it is not one either.
+        (["guten", '"de paris"'], True, 'guten~1 OR "de paris"'),
         # Folded by `fold()` first: TIN's own tokenizer would keep ß.
         (["Straße"], True, "strasse~2 OR strasse*"),
         # A quoted chunk is a phrase, exact, and never a prefix, even of one word.
