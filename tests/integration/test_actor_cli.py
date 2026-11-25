@@ -1,6 +1,7 @@
 """`python -m registry.cli actor set`: the way the first administrator exists."""
 
 import asyncio
+import sys
 
 import pytest
 from sqlalchemy import text
@@ -218,12 +219,12 @@ def test_demoting_the_last_admin_from_the_command_line_is_status_1_and_says_why(
     from registry.cli import __main__ as cli  # noqa: PLC0415
 
     monkeypatch.setattr(actor_module, "Settings", lambda: settings)
-    monkeypatch.setattr(cli.sys, "argv", ["registry.cli", "actor", "set", EMAIL, "--role", "admin"])
+    monkeypatch.setattr(sys, "argv", ["registry.cli", "actor", "set", EMAIL, "--role", "admin"])
     try:
         made = cli.main()
         capsys.readouterr()
         monkeypatch.setattr(
-            cli.sys, "argv", ["registry.cli", "actor", "set", EMAIL, "--role", "viewer"]
+            sys, "argv", ["registry.cli", "actor", "set", EMAIL, "--role", "viewer"]
         )
         refused = cli.main()
         output = capsys.readouterr()

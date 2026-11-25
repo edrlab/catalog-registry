@@ -794,7 +794,8 @@ async def test_running_out_of_time_in_the_address_stage_reports_the_fetch_as_fai
     """`fetch-timed-out` is a fetch error: that stage shows failed, never skipped next to it."""
     fetcher = FakeFetcher({FEED: answer(FEED, opds())})
 
-    report = await resolve_feed_check(fetcher, SlowReader(), EDITOR, FEED, budget=0.2)
+    reader: Any = SlowReader()  # implements only what the check reads of AdminReader
+    report = await resolve_feed_check(fetcher, reader, EDITOR, FEED, budget=0.2)
 
     assert report.verdict == "blocked"
     assert [(stage.key, stage.state) for stage in report.stages] == [
@@ -829,7 +830,8 @@ async def test_the_stage_that_runs_out_of_time_reports_its_own_duration(
 
     fetcher = HangingFetcher({FEED: answer(FEED, opds())})
 
-    report = await resolve_feed_check(fetcher, ClockedReader(), EDITOR, FEED, budget=0.2)
+    reader: Any = ClockedReader()  # implements only what the check reads of AdminReader
+    report = await resolve_feed_check(fetcher, reader, EDITOR, FEED, budget=0.2)
 
     assert [(stage.key, stage.state, stage.duration_ms) for stage in report.stages] == [
         ("address", "passed", 3000),
