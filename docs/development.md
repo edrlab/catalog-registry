@@ -365,6 +365,16 @@ migration, or an N+1.
 testcontainers starts a fresh Postgres. CI sets it, because GitHub Actions already provides
 the container and health-check wiring.
 
+**In parallel.** `make test` and CI run `pytest -n auto` (pytest-xdist): one worker per core, one
+Postgres server, and one database per worker (`registry_test_gw0`, …), created at the start and
+dropped at the end. Without `TEST_DATABASE_URL` a single container serves every worker and is
+removed with its volume when the run ends. `uv run pytest path/to/test.py` without `-n` still runs
+in one process, which is quicker for a handful of tests.
+
+**No test reaches the network.** Every test process refuses a name lookup or a connect to
+anything but a local host, so no test can call the live registry, PlanetScale or the internet,
+however it is configured. A test that tries fails with "a test tried to …".
+
 **The suite refuses to run against anything that is not a local throwaway database**, because
 it applies migrations and writes rows. A tunnel or proxy publishes a remote instance on
 `localhost`, so the guard also checks the database name looks like a test database.

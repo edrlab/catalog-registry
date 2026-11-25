@@ -67,7 +67,7 @@ added. Measured on the seed data, one mistake per word:
 | a mistake in the first letter (of 46) | | 0 | **40** |
 | unrelated words that return something (of 40) | 1 | 0 | **0** |
 
-The misses left are mostly two letters swapped in a word of 4 or 5 letters (`pairs`). Over the 90 scored searches the score went from 0.877 to **0.950**. Re-measure before
+The misses left are mostly two letters swapped in a word of 4 or 5 letters that the trigram rescue does not reach either (`pairs`; `parsi` it does). Over the 90 scored searches the score went from 0.877 to **0.961**. Re-measure before
 changing the allowance: `tests/integration/test_search_fuzzy.py` and `make search-score`.
 
 ## Test cases and score
@@ -162,7 +162,8 @@ hits will cost more; that is not measured yet.
 
 ## Known limits
 
-- Two letters swapped in a word of 4 or 5 letters is not forgiven (`pairs`).
+- Two letters swapped in a word of 4 or 5 letters is forgiven only when the trigram rescue finds it
+  (`parsi` finds Paris, `pairs` does not: word similarity about 0.33, under the 0.5 threshold).
 - "Belgio" (Italian, not loaded for Belgium) still finds the Belgian catalogs, as a typo of Belgie.
 - `French Guiana` also lists the other French catalogs: `french` is two letters from `france`.
 - `numberOfItems` counts at most 100 matches; beyond that the exact number is not computed.

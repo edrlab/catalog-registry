@@ -39,4 +39,5 @@ jobs:
         run: |
           PGPASSWORD=registry psql -h localhost -U registry -d registry_test \
             -f docker/postgres/init-extensions.sql
-      - run: uv run pytest
+      # One worker per core, each with its own database (tests/conftest.py).
+      - run: uv run pytest -n auto

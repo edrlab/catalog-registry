@@ -24,7 +24,7 @@ make test                                  # the same searches as exact-result t
 
 ## Score
 
-With today's results the score is **0.950** over 90 scored searches; 85 are exactly the ideal answer. Mean recall 0.97, mean precision 0.96 (searches whose ideal is nothing are not in those two).
+With today's results the score is **0.961** over 90 scored searches; 86 are exactly the ideal answer. Mean recall 0.99, mean precision 0.97 (searches whose ideal is nothing are not in those two).
 
 A search scores **1.0** when it returns the expected catalogs, in the expected order, and nothing else. It is `ndcg x precision`: *recall* is how many expected catalogs came back, *precision* is how many of the catalogs returned were expected (noise lowers it), and *ndcg* rewards the right order (expected catalogs counting more the earlier they appear). A search whose ideal is *nothing* scores 1.0 for nothing and 0.0 for anything. The headline number is the mean over all scored searches, so a tweak to ranking, weights or the typo threshold becomes one number to compare.
 
@@ -90,7 +90,7 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 | `belgiqe` | Missing letter in a country name | Lirtuel, De Openbare | Lirtuel (typo or prefix only), De Openbare (typo or prefix only) | 1.00 |  |
 | `bibliothèques` | Plural | BnParis, BN Romande, Bibliothèque russe et slave | BN Romande (typo or prefix only), BnParis (typo or prefix only), Bibliothèque russe et slave (typo or prefix only) | 1.00 | Found as a typo (two letters added); no stemming yet. |
 | `guten` | Start of a word | Project Gutenberg | Project Gutenberg (typo or prefix only) | 1.00 |  |
-| `parsi` | Two letters swapped in a short word | BnParis | nothing | 0.00 | Not found: a swap is two edits and a word of five letters is allowed one. |
+| `parsi` | Two letters swapped in a short word | BnParis | BnParis (typo or prefix only) | 1.00 | A swap is two edits and a word of five letters is allowed one, so no word matches; the trigram rescue finds it. |
 | `Suiße` | ß is folded by the database's unaccent, not by Python | Médiathèque Valais | Médiathèque Valais | 1.00 |  |
 
 ## Realistic typos, one slip per word
