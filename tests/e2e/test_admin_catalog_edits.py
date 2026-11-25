@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient, Response
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import event, text
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from registry.cli.seed import seed_catalogs
 from registry.core.schema_validation import build_schema_validator
@@ -739,3 +739,26 @@ async def test_an_edit_moves_the_catalog_out_of_a_restricted_search(
     assert edited.status_code == 200, edited.text
     assert not await found(restrict)
     assert await found(None)
+
+
+async def test_an_edit_reads_the_catalog_once(
+    admin_client: AsyncClient, editor: str, db_connection: AsyncConnection
+) -> None:
+    """The lock, one load of the catalog and its collections, then the writes: the document is
+    built from that load and the save reuses it, instead of loading everything again."""
+    catalog = (await create(admin_client, new_catalog())).json()
+    seen: list[str] = []
+
+    def record(_conn: Any, _cursor: Any, statement: str, *_rest: Any) -> None:
+        seen.append(statement)
+
+    event.listen(db_connection.sync_connection, "before_cursor_execute", record)
+    try:
+        response = await edit(admin_client, catalog["id"], {"version": 1, "name": "Renamed"})
+    finally:
+        event.remove(db_connection.sync_connection, "before_cursor_execute", record)
+
+    loads = [statement for statement in seen if statement.startswith("SELECT catalogs.id ")]
+    links = [statement for statement in seen if statement.startswith("SELECT links.")]
+    assert response.status_code == 200, response.text
+    assert (len(loads), len(links)) == (1, 1)

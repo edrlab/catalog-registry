@@ -525,6 +525,9 @@ class AdminCatalogWriter:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        #: The identity map holds objects weakly: without this reference the catalog that
+        #: `fetch_catalog_document` built the document from is collected before the save.
+        self._loaded: Catalog | None = None
 
     async def lock_admin_catalog(self, catalog_id: str) -> AdminCatalogState | None:
         row = (await self._session.execute(_LOCK_CATALOG, {"id": catalog_id})).first()
@@ -616,6 +619,7 @@ class AdminCatalogWriter:
         )
         if catalog is None:
             raise LookupError(catalog_id)  # unreachable: the row is locked and exists
+        self._loaded = catalog
         return catalog
 
     async def _flush_catalog(self) -> None:
