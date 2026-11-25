@@ -19,7 +19,14 @@ pytestmark = pytest.mark.e2e
 
 def token_for(email: str, **extra: Any) -> dict[str, str]:
     now = int(time.time())
-    claims = {"iss": ISSUER, "aud": [AUDIENCE], "exp": now + 300, "email": email, **extra}
+    claims = {
+        "iss": ISSUER,
+        "aud": [AUDIENCE],
+        "exp": now + 300,
+        "email": email,
+        "sub": f"sub-{email}",
+        **extra,
+    }
     return {
         "X-Registry-Service-Key": ADMIN_SERVICE_KEY,
         "Cf-Access-Jwt-Assertion": jwt.encode(claims, SIGNING_KEY, algorithm="RS256"),
