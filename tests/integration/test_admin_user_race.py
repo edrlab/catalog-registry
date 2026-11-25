@@ -18,7 +18,7 @@ from registry.domain.admin_models import AdminActor, AdminUser
 from registry.domain.enums import ActorRole
 from registry.repositories.actor_repository import ActorRepository
 from registry.services.user_service import apply_user_role_change
-from tests.integration.test_search_concurrency import OBSERVE_FOR_SECONDS, wait_until_blocked
+from tests.lock_helpers import OBSERVE_FOR_SECONDS, wait_until_blocked
 
 pytestmark = pytest.mark.integration
 
