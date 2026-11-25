@@ -226,8 +226,8 @@ LOCAL_DATABASE_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db", "postgr
 def assert_database_is_local(database_url: str) -> None:
     """Refuse a remote database: the run writes up to a thousand published, recommended rows.
 
-    The Cloud SQL Auth Proxy publishes a remote instance on localhost, which this cannot tell
-    apart; the operator who started the proxy has to know not to run this through it."""
+    A tunnel or proxy publishes a remote instance on localhost, which this cannot tell
+    apart; the operator who started it has to know not to run this through it."""
     host = urllib.parse.urlsplit(database_url).hostname or ""
     if host not in LOCAL_DATABASE_HOSTS:
         raise SystemExit(

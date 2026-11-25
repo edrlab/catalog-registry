@@ -57,18 +57,20 @@ path: `tests/integration/test_search_query_count.py` and `test_read_one_statemen
 |---|---|---|
 | search | `/search` | read-only, stops a statement after 1 s |
 | read | `/`, `/catalogs/{id}` | read-only, stops a statement after 10 s |
-| main | the importers and `/health/ready` | none (can write) |
+| main | the importers, the back office and `/health/ready` | can write; waits 5 s for a lock, stops a statement after 30 s, ends a transaction idle for 60 s |
 
 The limits are sent once when a connection opens, not on every request, so a read costs one round trip.
 A read that runs past its limit answers `503` as a problem document. A connection the database dropped
-while it sat idle is retried once. With up to 5 instances, that is at most about 225 connections.
+while it sat idle is retried once. Deployed with 2 connections per pool plus 1 overflow, 3 pools and up
+to 5 instances, that is at most 45 connections; the PlanetScale node accepts 25 direct ones, so the
+worst case is accepted for now, not ruled out.
 
 ## Where it runs, and what it costs
 
-Cloud Run `thorium-catalog-registry` is in **europe-west1** (Belgium); Cloud SQL
-`development-sandbox-db` is in **europe-west9** (Paris). Measured on the live service, the app to
-database trip is about **2 to 4 ms per round trip**, so one is cheap and fourteen were not.
-Moving Cloud Run to europe-west9 would cut it further; it is not needed for the reads any more.
+Cloud Run `thorium-catalog-registry` and the PlanetScale Postgres cluster are both in
+**europe-west1** (Belgium). Against the earlier database in Paris the app to database trip measured
+**2 to 4 ms per round trip**, so one is cheap and fourteen were not; it has not been re-measured
+since the move to the same region.
 
 **Min instances.** The service keeps 1 instance warm (service-level scaling, min 1, max 5; request-based
 billing, so the CPU is limited between requests). Without it the first request after a quiet period waits

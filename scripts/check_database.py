@@ -1,12 +1,10 @@
 """Confirm a database is usable by this service before anything depends on it.
 
-Written to check connectivity before v0.2 work began: point `REGISTRY_DATABASE_URL` at Cloud SQL
-(through the Auth Proxy) and run it. Enabling an extension on Cloud SQL is an administrative
-action someone else performs, so discovering a missing one at the start of v0.2 costs a
-round trip, this makes that discovery cheap and early.
+Point `REGISTRY_DATABASE_URL` at the database and run it. Enabling an extension is an
+administrative action (the PlanetScale dashboard), so discovering a missing one late costs a
+round trip; this makes that discovery cheap and early. It only reads.
 
-    cloud-sql-proxy --port 5433 PROJECT:REGION:INSTANCE
-    REGISTRY_DATABASE_URL=postgresql+asyncpg://USER:PASS@localhost:5433/DB \
+    REGISTRY_DATABASE_URL='postgresql+asyncpg://USER:PASS@HOST:5432/postgres?ssl=verify-full' \
         uv run python scripts/check_database.py
 """
 

@@ -144,5 +144,4 @@ Directly to Postgres, using `REGISTRY_DATABASE_URL`. It is a database client, li
 never calls the API, which is why `make logs` stays silent during an import, and why it needs
 `make up` running only for the database, not the service.
 
-It is also as privileged as the DSN it holds. With the Cloud SQL Auth Proxy up, that DSN can be
-production.
+It is also as privileged as the DSN it holds. Given the PlanetScale DSN, it writes to production.
