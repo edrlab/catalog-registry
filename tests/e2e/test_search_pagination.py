@@ -209,3 +209,69 @@ async def test_a_page_outside_the_range_is_a_422(
 
 async def test_a_page_that_is_not_a_number_is_a_422(client: AsyncClient) -> None:
     assert (await client.get("/search", params={"query": "x", "page": "two"})).status_code == 422
+
+
+# --- the cap counts what the restriction leaves -------------------------------------------------
+
+
+async def add_quokkas(session: AsyncSession, matches: int, open_kind: int) -> dict[str, bool]:
+    """*matches* catalogs matching `quokka`, the first *open_kind* of them `open`. Title -> open."""
+    made: dict[str, bool] = {}
+    for n in range(matches):
+        title, is_open = f"Quokka shelf {n:03d}", n < open_kind
+        made[title] = is_open
+        await import_catalog_document(
+            session,
+            {
+                "metadata": {"title": title, "kind": ["open" if is_open else "public"]},
+                "links": [{"href": f"https://quokka.example/{n}", "rel": "catalog"}],
+            },
+            recommended=False,
+        )
+    await session.flush()
+    return made
+
+
+async def quokka_pages(client: AsyncClient, restrict: str | None) -> list[dict[str, Any]]:
+    """Pages 1 and 2, validated; page 3 must not exist."""
+    params = {"query": "quokka"} | ({"restrict": restrict} if restrict else {})
+    pages = []
+    for page in (1, 2):
+        response = await client.get("/search", params=params | {"page": str(page)})
+        assert response.status_code == 200, response.text
+        assert_valid_feed(response.json())
+        pages.append(response.json())
+    assert (await client.get("/search", params=params | {"page": "3"})).status_code == 422
+    return pages
+
+
+async def test_a_restriction_removes_catalogs_before_the_cap_counts_them(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """120 match, 30 are open: `no-open` leaves 90, all reachable, and says 90."""
+    made = await add_quokkas(db_session, 120, 30)
+
+    first, second = await quokka_pages(client, "no-open")
+
+    assert [first["metadata"]["numberOfItems"], second["metadata"]["numberOfItems"]] == [90, 90]
+    titles = [c["metadata"]["title"] for page in (first, second) for c in page["catalogs"]]
+    assert sorted(titles) == sorted(title for title, is_open in made.items() if not is_open)
+    assert "next" not in {link["rel"] for link in second["links"]}
+    unrestricted, _ = await quokka_pages(client, None)
+    assert unrestricted["metadata"]["numberOfItems"] == CAP
+
+
+@pytest.mark.parametrize(
+    ("matches", "open_kind", "total"),
+    [(100, 0, 100), (101, 0, 100), (129, 30, 99), (130, 30, 100), (131, 30, 100)],
+)
+async def test_the_total_at_the_cap(
+    client: AsyncClient, db_session: AsyncSession, matches: int, open_kind: int, total: int
+) -> None:
+    """Without open catalogs, unrestricted; with them, `no-open` takes the total to the cap."""
+    await add_quokkas(db_session, matches, open_kind)
+
+    first, second = await quokka_pages(client, "no-open" if open_kind else None)
+
+    assert first["metadata"]["numberOfItems"] == second["metadata"]["numberOfItems"] == total
+    assert [len(first["catalogs"]), len(second["catalogs"])] == [50, total - 50]
