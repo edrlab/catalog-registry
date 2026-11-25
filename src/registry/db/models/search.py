@@ -19,6 +19,25 @@ from registry.db.base import Base
 class CatalogSearch(Base):
     __tablename__ = "catalog_search"
     __table_args__ = (
+        # Trigrams: the typos TIN cannot forgive (first letter, swaps in short words).
+        Index(
+            "ix_catalog_search_title_trgm",
+            "title",
+            postgresql_using="gin",
+            postgresql_ops={"title": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_catalog_search_city_trgm",
+            "city",
+            postgresql_using="gin",
+            postgresql_ops={"city": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_catalog_search_places_trgm",
+            "places",
+            postgresql_using="gin",
+            postgresql_ops={"places": "gin_trgm_ops"},
+        ),
         Index("ix_catalog_search_title_tin", "title", postgresql_using="tin"),
         Index("ix_catalog_search_city_tin", "city", postgresql_using="tin"),
         # No length normalisation: a long `places` means a country with many languages.

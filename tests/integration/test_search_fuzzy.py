@@ -9,20 +9,20 @@ the data must return nothing.
 
 Why the numbers are what they are: `registry_tinql` lets a word of 6 letters or more be 2 edits
 away (`word~2`), a word of 4 or 5 letters 1 edit (`~1`), a shorter one none. Drop, add and replace
-are one edit each, a swap of neighbours two. TIN keeps the first letter fixed, so damage to the
-first letter is never forgiven. The last word of a query also matches as a prefix, so a dropped
-or replaced last letter is found that way too.
+are one edit each, a swap of neighbours two. TIN keeps the first letter fixed. The last word of a
+query also matches as a prefix. When TIN finds nothing at all, a trigram match on words of 4
+letters or more rescues the search (`pg_trgm` word similarity at 0.5): a typo in the first letter,
+a swap in a short word.
 
 Measured on the 12-catalog seed, on Lead (TIN's open-source stand-in):
 
-    edit       trigrams at 0.5 (before)   TIN
-    drop       96%                        87%
-    add        96%                        89%
-    replace    90%                        87%
-    swap       66%                        81%
-    unrelated words returned (of 40):  1 (library)  0
-
-Every miss is damage to the first letter, or a swap in a word of 4 or 5 letters (`pairs`).
+    edit       trigrams at 0.5 (2026-10)   TIN alone   TIN + trigram rescue
+    drop       96%                         87%         100%
+    add        96%                         89%          99%
+    replace    90%                         87%          97%
+    swap       66%                         81%          86%
+    first letter (drop/replace, of 46)     -            0          40
+    unrelated words returned (of 40):  1 (library)  0           0
 """
 
 import collections
@@ -75,7 +75,7 @@ UNRELATED = [
 
 #: Under the measured recall (see the module docstring), so a real regression fails and ordinary
 #: variation in the data does not.
-RECALL_FLOORS = {"drop": 0.85, "add": 0.85, "replace": 0.85, "swap": 0.75}
+RECALL_FLOORS = {"drop": 0.97, "add": 0.96, "replace": 0.94, "swap": 0.83}
 
 
 def damage(word: str) -> dict[str, set[str]]:
@@ -158,13 +158,67 @@ async def test_one_edit_after_the_first_letter_of_a_long_word_is_always_found(
         assert rate == 1.0
 
 
-async def test_damage_to_the_first_letter_is_not_forgiven(
+async def test_damage_to_the_first_letter_is_forgiven_by_the_trigram_rescue(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
-    """TIN keeps the first letter fixed (`~N` means `~1:N`). Pinned so a change to `~0:N` is a
-    decision, made with its cost measured, not a surprise."""
-    assert not await finds(db_session, "xutenberg", "Gutenberg")
-    assert await finds(db_session, "gxtenberg", "Gutenberg")
+    """TIN keeps the first letter fixed (`~N` means `~1:N`), so on its own `xutenberg` finds
+    nothing; the trigram rescue does, ranked below any TIN hit (a score under 0)."""
+    rows = await search_rows(db_session, "xutenberg")
+
+    assert [title for title, _tier, _score in rows] == ["Project Gutenberg"]
+    assert all(score <= 0 for _t, _tier, score in rows)
+    first_total = first_found = 0
+    for word, fragment in TARGETS:
+        for kind in ("drop", "replace"):
+            for variant in damage(word)[kind]:
+                if variant[0] != word[0]:
+                    first_total += 1
+                    first_found += await finds(db_session, variant, fragment)
+    assert first_found / first_total >= 0.85, f"{first_found}/{first_total}"
+
+
+async def test_two_letters_swapped_in_a_five_letter_word_stay_a_known_limit(
+    db_session: AsyncSession, searchable_catalogs: None
+) -> None:
+    """`pairs` is two TIN edits from `paris` (a 5-letter word is allowed one), and the swap breaks
+    four of its six three-letter pieces (word similarity about 0.33, under 0.5). Pinned so a change
+    that finds it is noticed and measured; longer words swapped are found."""
+    assert not await finds(db_session, "pairs", "Paris")
+    assert await finds(db_session, "bilbiotheque", "Paris")
+
+
+async def test_the_rescue_never_adds_to_a_search_tin_answered(
+    db_session: AsyncSession, searchable_catalogs: None
+) -> None:
+    """A rescue, not a second opinion: when TIN finds anything, no trigram match is added, so a
+    correct search keeps exactly its answer (no score at or under 0 unless TIN scored it so)."""
+    for query in ("gutenberg", "paris", "bibliotheque", "belgique", "standard ebooks"):
+        rows = await search_rows(db_session, query)
+        assert rows, query
+        assert all(score > 0 for _t, _tier, score in rows), (query, rows)
+
+
+async def test_a_quoted_phrase_is_never_loosened_into_words(
+    db_session: AsyncSession, searchable_catalogs: None
+) -> None:
+    """A phrase TIN cannot find returns nothing, not the catalogs one of its words resembles."""
+    assert await search_rows(db_session, '"xutenberg project"') == []
+    assert await finds(db_session, "xutenberg project", "Gutenberg")
+
+
+async def test_words_under_four_letters_are_never_rescued(
+    db_session: AsyncSession, searchable_catalogs: None
+) -> None:
+    """Three letters share too few three-letter pieces to tell a typo from another word."""
+    assert await search_rows(db_session, "prs") == []
+    assert await search_rows(db_session, "xib") == []
+
+
+async def test_an_exclusion_also_removes_rescued_catalogs(
+    db_session: AsyncSession, searchable_catalogs: None
+) -> None:
+    assert await finds(db_session, "xutenberg", "Gutenberg")
+    assert not await finds(db_session, "xutenberg -gutenberg", "Gutenberg")
 
 
 # --- precision: what the fuzziness must not drag in --------------------------------------------
@@ -236,7 +290,7 @@ async def test_capitals_and_accents_do_not_change_a_fuzzy_result(
 async def test_a_typo_only_match_scores_zero_and_an_exact_one_more(
     db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
-    """TIN scores a fuzzy or prefix term by the word as typed, so a catalog found only through
-    the typo allowance scores 0: that is what puts every exact match first."""
+    """On Lead, TIN scores a fuzzy or prefix term by the word as typed, so a catalog found only
+    through the typo allowance scores 0 (production TIN scores it)."""
     assert {score for _t, _tier, score in await search_rows(db_session, "gutenbrg")} == {0.0}
     assert all(score > 0 for _t, _tier, score in await search_rows(db_session, "gutenberg"))

@@ -1,6 +1,6 @@
 """A connection the database dropped is retried once; nothing else is.
 
-The search pool has no pre-ping, so a pooled connection that Cloud SQL closed while it sat idle
+The search pool has no pre-ping, so a pooled connection that the database closed while it sat idle
 fails the first statement sent on it. SQLAlchemy reports that as `connection_invalidated`, and the
 repository repeats the (read-only) statement once on a fresh connection.
 

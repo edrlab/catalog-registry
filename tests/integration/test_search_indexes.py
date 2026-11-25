@@ -16,9 +16,11 @@ from tests.search_helpers import search_rows
 pytestmark = pytest.mark.integration
 
 
-async def test_each_searched_field_has_its_own_tin_index(db_session: AsyncSession) -> None:
-    """One index per field: TIN indexes one column, and one column per weight is what lets a
-    title match outrank a city match."""
+async def test_each_searched_field_has_its_own_tin_and_trigram_index(
+    db_session: AsyncSession,
+) -> None:
+    """One TIN index per field: TIN indexes one column, and one column per weight is what lets a
+    title match outrank a city match. One trigram index per field for the rescue."""
     rows = await db_session.execute(
         text(
             "SELECT i.relname, a.amname FROM pg_index x "
@@ -29,8 +31,11 @@ async def test_each_searched_field_has_its_own_tin_index(db_session: AsyncSessio
 
     assert [tuple(r) for r in rows] == [
         ("ix_catalog_search_city_tin", "tin"),
+        ("ix_catalog_search_city_trgm", "gin"),
         ("ix_catalog_search_places_tin", "tin"),
+        ("ix_catalog_search_places_trgm", "gin"),
         ("ix_catalog_search_title_tin", "tin"),
+        ("ix_catalog_search_title_trgm", "gin"),
     ]
 
 

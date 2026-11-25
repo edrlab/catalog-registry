@@ -51,19 +51,23 @@ reindex.
 ## Typos
 
 A word of 6 letters or more may be 2 edits away (a letter dropped, added or replaced each count
-one, two neighbours swapped count two), a word of 4 or 5 letters 1 edit, a shorter word none. The
-first letter must be right. Measured on the seed data, one mistake per word:
+one, two neighbours swapped count two), a word of 4 or 5 letters 1 edit, a shorter word none, and
+TIN keeps the first letter fixed. When that finds nothing at all, a **trigram rescue** (`pg_trgm`
+word similarity at 0.5, words of 4 letters or more, never inside a quoted phrase) looks for a stored
+word that shares most of the typed one's three-letter pieces: that forgives a wrong first letter.
+Rescued catalogs come after anything TIN would have found, and a search TIN answers gets nothing
+added. Measured on the seed data, one mistake per word:
 
-| One mistake | trigrams at 0.5 (before) | **TIN** |
-|---|---|---|
-| a letter dropped | 96% | **87%** |
-| a letter added | 96% | **89%** |
-| a letter replaced | 90% | **87%** |
-| two neighbours swapped | 66% | **81%** |
-| unrelated words that return something (of 40) | 1 | **0** |
+| One mistake | trigrams at 0.5 (2026-10) | TIN alone | **TIN + trigram rescue** |
+|---|---|---|---|
+| a letter dropped | 96% | 87% | **100%** |
+| a letter added | 96% | 89% | **99%** |
+| a letter replaced | 90% | 87% | **97%** |
+| two neighbours swapped | 66% | 81% | **86%** |
+| a mistake in the first letter (of 46) | | 0 | **40** |
+| unrelated words that return something (of 40) | 1 | 0 | **0** |
 
-Every miss is a mistake in the first letter, or two letters swapped in a word of 4 or 5 letters
-(`pairs`). Over the 90 scored searches the score went from 0.877 to **0.950**. Re-measure before
+The misses left are mostly two letters swapped in a word of 4 or 5 letters (`pairs`). Over the 90 scored searches the score went from 0.877 to **0.950**. Re-measure before
 changing the allowance: `tests/integration/test_search_fuzzy.py` and `make search-score`.
 
 ## Test cases and score
@@ -128,8 +132,8 @@ those.
 
 ## Operating it
 
-- **Extensions.** The migrations create `unaccent`, `tin` and `pg_trgm` (installed, not used by
-  search today; kept for trigram matching). `tin` exists on PlanetScale; locally
+- **Extensions.** The migrations create `unaccent`, `tin` and `pg_trgm` (the trigram rescue, three
+  `gin_trgm_ops` indexes on `catalog_search`). `tin` exists on PlanetScale; locally
   and in CI the database image is `planetscale/lead`, TIN's open-source stand-in. It finds the same
   catalogs, but scores typo and prefix matches 0 where TIN scores them, and it scans every row, so
   it says nothing about speed. The tests pin production's order and accept any order among the
@@ -158,7 +162,7 @@ hits will cost more; that is not measured yet.
 
 ## Known limits
 
-- A mistake in the first letter of a word is not forgiven (`xutenberg`).
+- Two letters swapped in a word of 4 or 5 letters is not forgiven (`pairs`).
 - "Belgio" (Italian, not loaded for Belgium) still finds the Belgian catalogs, as a typo of Belgie.
 - `French Guiana` also lists the other French catalogs: `french` is two letters from `france`.
 - `numberOfItems` counts at most 100 matches; beyond that the exact number is not computed.
