@@ -117,3 +117,33 @@ async def test_the_last_active_admin_cannot_be_demoted_or_deactivated_but_the_fi
 
     assert first == (EMAIL, "admin", True)  # with no admin at all, the CLI makes the first one
     assert tuple(kept) == ("admin", True)  # both refusals rolled back
+
+
+async def test_forget_identity_lets_the_next_login_record_a_new_account(
+    settings: Settings,
+    migrated_database: str,
+) -> None:
+    engine = create_async_engine(settings.database_url)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO actors (email, identity_issuer, identity_subject) "
+                    "VALUES (:e, 'https://idp', 'sub-1')"
+                ),
+                {"e": EMAIL},
+            )
+        await persist_actor(settings, email=EMAIL, role=None, name=None, active=None, forget=True)
+        async with engine.connect() as connection:
+            identity = (
+                await connection.execute(
+                    text("SELECT identity_issuer, identity_subject FROM actors WHERE email = :e"),
+                    {"e": EMAIL},
+                )
+            ).one()
+    finally:
+        async with engine.begin() as connection:
+            await connection.execute(text("DELETE FROM actors WHERE email = :e"), {"e": EMAIL})
+        await engine.dispose()
+
+    assert tuple(identity) == (None, None)

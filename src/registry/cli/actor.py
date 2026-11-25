@@ -3,6 +3,7 @@
     python -m registry.cli actor set someone@edrlab.org --role admin --name "Ada Lovelace"
     python -m registry.cli actor set former@edrlab.org --deactivate
     python -m registry.cli actor set former@edrlab.org --activate
+    python -m registry.cli actor set someone@edrlab.org --forget-identity
 
 The first administrator has to come from somewhere, and the CLI is trusted by holding the database
 credential, as `seed` and `add` are. Everyone after that is a viewer on first login until an
@@ -30,7 +31,9 @@ VALUES (:email, :name, CAST(coalesce(:role, 'viewer') AS actor_role),
 ON CONFLICT (email) DO UPDATE
    SET role = CAST(coalesce(:role, actors.role::text) AS actor_role),
        name = coalesce(:name, actors.name),
-       is_active = coalesce(CAST(:is_active AS boolean), actors.is_active)
+       is_active = coalesce(CAST(:is_active AS boolean), actors.is_active),
+       identity_issuer = CASE WHEN CAST(:forget AS boolean) THEN NULL ELSE actors.identity_issuer END,
+       identity_subject = CASE WHEN CAST(:forget AS boolean) THEN NULL ELSE actors.identity_subject END
 RETURNING email, role::text AS role, is_active
 """
 )
@@ -56,11 +59,23 @@ def build_actor_parser() -> argparse.ArgumentParser:
     access.add_argument(
         "--deactivate", dest="active", action="store_const", const=False, help="remove their access"
     )
+    parser.add_argument(
+        "--forget-identity",
+        dest="forget",
+        action="store_true",
+        help="let the next login record a new account for this email",
+    )
     return parser
 
 
 async def persist_actor(
-    settings: Settings, *, email: str, role: str | None, name: str | None, active: bool | None
+    settings: Settings,
+    *,
+    email: str,
+    role: str | None,
+    name: str | None,
+    active: bool | None,
+    forget: bool = False,
 ) -> tuple[str, str, bool]:
     engine = create_database_engine(settings)
     try:
@@ -70,7 +85,13 @@ async def persist_actor(
                 (
                     await session.execute(
                         _SET_ACTOR,
-                        {"email": email, "role": role, "name": name, "is_active": active},
+                        {
+                            "email": email,
+                            "role": role,
+                            "name": name,
+                            "is_active": active,
+                            "forget": forget,
+                        },
                     )
                 )
                 .mappings()
@@ -101,6 +122,7 @@ def main(argv: Sequence[str] = ()) -> int:
             role=arguments.role,
             name=arguments.name,
             active=arguments.active,
+            forget=arguments.forget,
         )
     )
     print(f"{stored_email}: {role}, {'active' if active else 'deactivated'}")

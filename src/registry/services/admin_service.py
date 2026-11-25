@@ -98,6 +98,16 @@ async def resolve_admin_actor(store: ActorStore, identity: AdminIdentity) -> Adm
     )
     if not actor.is_active:
         raise PermissionDeniedError("Your access has been removed.")
+    if (
+        identity.subject is not None
+        and actor.identity_subject is not None
+        and (actor.identity_issuer, actor.identity_subject) != (identity.issuer, identity.subject)
+    ):
+        # Same email, another account: a reissued mailbox, or a provider that maps someone else to
+        # it. `actor set --forget-identity` lets the next login record the new account.
+        raise PermissionDeniedError(
+            "This sign-in is not the account registered for this email; ask an administrator."
+        )
     return actor
 
 

@@ -9,8 +9,10 @@ from registry.domain.admin_models import AdminActor, AdminUser
 from registry.domain.enums import ActorRole
 
 #: One statement for "find or create, and note the login". `role` is never in the update list, so a
-#: login can never change a role, and an existing `name` is kept over the token's. A write per
-#: request is fine at this volume; if it ever is not, update `last_seen_at` only when it is stale.
+#: login can never change a role, and an existing `name` is kept over the token's. The first
+#: identity (issuer and subject) is kept too: the service refuses a later login that brings another
+#: one, so a reissued mailbox does not inherit the account. A write per request is fine at this
+#: volume; if it ever is not, update `last_seen_at` only when it is stale.
 _PERSIST_LOGIN: Final = text(
     """
 WITH previous AS (SELECT last_seen_at FROM actors WHERE email = :email)
@@ -18,8 +20,8 @@ INSERT INTO actors (email, name, identity_issuer, identity_subject, last_seen_at
 VALUES (:email, :name, :issuer, :subject, now())
 ON CONFLICT (email) DO UPDATE
    SET last_seen_at = now(),
-       identity_issuer = EXCLUDED.identity_issuer,
-       identity_subject = EXCLUDED.identity_subject,
+       identity_issuer = coalesce(actors.identity_issuer, EXCLUDED.identity_issuer),
+       identity_subject = coalesce(actors.identity_subject, EXCLUDED.identity_subject),
        name = coalesce(actors.name, EXCLUDED.name)
 RETURNING id::text AS id, email, name, role::text AS role, is_active, created_at,
           identity_issuer, identity_subject, (SELECT last_seen_at FROM previous) AS previous_seen_at
