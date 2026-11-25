@@ -53,15 +53,6 @@ WITH q AS (
   SELECT public.registry_tinql(CAST(:positives AS text[]), true)  AS match_q,
          public.registry_tinql(CAST(:negatives AS text[]), false) AS exclude_q
 ),
--- Its own index scan: tested per hit instead, an exclusion took 0.5 s at 100k catalogs.
--- MATERIALIZED so the planner cannot fold it back into the per-hit test.
-excluded AS MATERIALIZED (
-  SELECT x.catalog_id
-    FROM catalog_search x
-    CROSS JOIN q
-   WHERE q.exclude_q IS NOT NULL  -- no `-word`: never scanned
-     AND (x.title ==> q.exclude_q OR x.city ==> q.exclude_q OR x.places ==> q.exclude_q)
-),
 hits AS (
   SELECT cs.catalog_id, tin.full_score(cs.ctid) AS score, c.created_at
     FROM catalog_search cs
@@ -70,7 +61,8 @@ hits AS (
    WHERE (cs.title ==> ('(' || q.match_q || ')^{TITLE_BOOST}')
           OR cs.city ==> ('(' || q.match_q || ')^{CITY_BOOST}')
           OR cs.places ==> q.match_q)
-     AND NOT EXISTS (SELECT 1 FROM excluded e WHERE e.catalog_id = cs.catalog_id)
+     AND (q.exclude_q IS NULL
+          OR NOT (cs.title ==> q.exclude_q OR cs.city ==> q.exclude_q OR cs.places ==> q.exclude_q))
      AND (NOT CAST(:opds AS boolean) OR cs.has_opds_catalog)
      AND (NOT CAST(:no_open AS boolean) OR NOT cs.is_open)
      AND (NOT CAST(:no_audiobook AS boolean) OR NOT cs.audiobook_only)
