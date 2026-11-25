@@ -125,12 +125,15 @@ class Catalog(Base):
     links: Mapped[list[Link]] = relationship(cascade="all, delete-orphan", lazy="raise_on_sql")
 
 
+#: The child tables have no separate `catalog_id` index: their primary key starts with it, and
+#: serves every "children of this catalog" lookup.
+
+
 class CatalogKindRow(Base):
     """At least one kind per catalog. Enforced in the service, a table-level constraint
     cannot express "the collection is non-empty" without a deferred trigger."""
 
     __tablename__ = "catalog_kinds"
-    __table_args__ = (Index("ix_catalog_kinds_catalog_id", "catalog_id"),)
 
     catalog_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("catalogs.id", ondelete="CASCADE"), primary_key=True
@@ -142,7 +145,6 @@ class CatalogKindRow(Base):
 
 class CatalogPublicationTypeRow(Base):
     __tablename__ = "catalog_publication_types"
-    __table_args__ = (Index("ix_catalog_publication_types_catalog_id", "catalog_id"),)
 
     catalog_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("catalogs.id", ondelete="CASCADE"), primary_key=True
@@ -158,7 +160,6 @@ class CatalogLanguageRow(Base):
         # Lowercasing made structural: an uppercase tag cannot be stored, so a comparison
         # against a lowercase Accept-Language cannot silently return an empty feed.
         CheckConstraint("language_tag = lower(language_tag)", name="language_tag_lowercase"),
-        Index("ix_catalog_languages_catalog_id", "catalog_id"),
     )
 
     catalog_id: Mapped[uuid.UUID] = mapped_column(
@@ -174,7 +175,6 @@ class CatalogSubdivisionRow(Base):
         CheckConstraint(
             "subdivision_code = upper(subdivision_code)", name="subdivision_code_uppercase"
         ),
-        Index("ix_catalog_subdivisions_catalog_id", "catalog_id"),
         #: Reverse lookup, "which catalogs use this subdivision": name reloads, future filters.
         Index("ix_catalog_subdivisions_subdivision_code", "subdivision_code"),
     )
