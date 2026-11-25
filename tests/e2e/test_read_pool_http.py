@@ -54,6 +54,16 @@ async def wired_client(wired_app: FastAPI) -> AsyncIterator[AsyncClient]:
         yield client
 
 
+def holds_all(feed: dict[str, Any], ids: list[uuid.UUID]) -> bool:
+    """Does *feed* list every one of *ids*, and count what it lists? By the test's own ids: rows
+    another test committed may be listed too."""
+    listed = {c["metadata"]["identifier"] for c in feed["catalogs"]}
+    return (
+        feed["metadata"]["numberOfItems"] == len(listed)
+        and {f"urn:uuid:{i}" for i in ids} <= listed
+    )
+
+
 def documents() -> list[dict[str, Any]]:
     return [
         link_document(
@@ -179,7 +189,7 @@ async def test_thirty_concurrent_feeds_return_the_same_body_and_leak_no_connecti
     wired_app: FastAPI, migrated_database: str
 ) -> None:
     async with (
-        committed_catalogs(migrated_database, documents(), recommended=True),
+        committed_catalogs(migrated_database, documents(), recommended=True) as ids,
         AsyncClient(transport=ASGITransport(app=wired_app), base_url="http://testserver") as client,
     ):
         alone = (await client.get("/", headers={"Accept-Language": "*"})).json()
@@ -188,7 +198,7 @@ async def test_thirty_concurrent_feeds_return_the_same_body_and_leak_no_connecti
                 *(client.get("/", headers={"Accept-Language": "*"}) for _ in range(CONCURRENT))
             )
 
-    assert alone["metadata"]["numberOfItems"] == CATALOGS
+    assert holds_all(alone, ids)
     assert_valid_feed(alone)
     for response in responses:
         assert response.status_code == 200
@@ -254,9 +264,9 @@ async def test_feeds_catalogs_and_searches_at_once_do_not_disturb_each_other(
 async def test_the_body_is_the_same_text_every_time(
     wired_client: AsyncClient, migrated_database: str
 ) -> None:
-    async with committed_catalogs(migrated_database, documents(), recommended=True):
+    async with committed_catalogs(migrated_database, documents(), recommended=True) as ids:
         first = await wired_client.get("/", headers={"Accept-Language": "*"})
         second = await wired_client.get("/", headers={"Accept-Language": "*"})
 
     assert first.content == second.content
-    assert json.loads(first.content)["metadata"]["numberOfItems"] == CATALOGS
+    assert holds_all(json.loads(first.content), ids)
