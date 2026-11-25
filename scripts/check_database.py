@@ -20,6 +20,7 @@ from registry.db.session import create_database_engine
 EXTENSIONS = {
     "unaccent": "accent folding for search (public.fold)",
     "tin": "BM25 search index (PlanetScale; Lead locally and in CI)",
+    "pg_trgm": "typo rescue when no word matches (gin trigram indexes on catalog_search)",
     "postgis": "geo ranking. V1.2 (not needed yet; worth knowing now)",
 }
 
