@@ -28,12 +28,22 @@ async def titles_for(client: AsyncClient, query: str) -> list[str]:
 
 
 async def test_the_app_scores_exactly_what_the_page_says(
-    client: AsyncClient, searchable_catalogs: None
+    client: AsyncClient, db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
-    live = {case.query: await titles_for(client, case.query) for case in QUALITY_CASES}
+    """A Lead tie broken differently from the page's TIN order scores as the page's order, the
+    same tie rule the test below accepts; any other difference changes the score."""
+    expected = today_titles()
+    live = {}
+    for case in QUALITY_CASES:
+        titles = await titles_for(client, case.query)
+        if titles != expected[case.query]:
+            rows = await search_rows(db_session, case.query)
+            if [title for title, _, _ in rows] == titles and in_lead_order(rows, case.today):
+                titles = expected[case.query]
+        live[case.query] = titles
 
     measured = summarise(score_all(live))
-    documented = summarise(score_all(today_titles()))
+    documented = summarise(score_all(expected))
 
     assert measured == documented, (
         f"search scores {measured.mean_score:.3f}, the page says {documented.mean_score:.3f}: "
