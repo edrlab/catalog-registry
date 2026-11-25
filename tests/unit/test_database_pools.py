@@ -6,7 +6,7 @@ it at `asyncpg.connect`, where the arguments the driver would get are read.
 
 from typing import Any
 
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.pool import QueuePool
@@ -23,7 +23,7 @@ ENGINES = ("engine", "read_engine", "search_engine")
 def settings(**changes: Any) -> Settings:
     """Settings from the arguments and the environment only: a developer's `.env` is not read."""
     return Settings(
-        _env_file=None,  # type: ignore[call-arg]
+        _env_file=None,
         **{"database_url": URL, "environment": "test", "base_url": "http://testserver", **changes},
     )
 
