@@ -17,6 +17,7 @@ from registry.core.schema_validation import build_schema_validator
 from tests.conftest import REPO_ROOT, admin_headers
 from tests.e2e.test_admin_api import become
 from tests.e2e.test_admin_catalog_writes import problem_type, status_and_version, transition
+from tests.search_helpers import assert_valid_feed
 
 pytestmark = pytest.mark.e2e
 
@@ -695,3 +696,46 @@ async def test_a_multi_line_description_is_accepted(admin_client: AsyncClient, e
     response = await create(admin_client, new_catalog(description="First line.\n\tSecond line."))
 
     assert response.status_code == 201, response.text
+
+
+# --- an edit reaches search's restrictions -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("restrict", "changes"),
+    [
+        (
+            "opds",
+            {"links": [{"rel": "catalog", "href": HREF, "type": "application/atom+xml"}]},
+        ),
+        ("no-open", {"kinds": ["public", "open"]}),
+        ("no-audiobook", {"publication_types": ["audiobook"]}),
+    ],
+)
+async def test_an_edit_moves_the_catalog_out_of_a_restricted_search(
+    admin_client: AsyncClient,
+    client: AsyncClient,
+    editor: str,
+    restrict: str,
+    changes: dict[str, Any],
+) -> None:
+    """Search reads the restriction flags stored on its own row; an edit must refresh them."""
+    catalog = (
+        await create(admin_client, new_catalog(name="Wombat reading room", publish=True))
+    ).json()
+
+    async def found(restriction: str | None) -> bool:
+        params = {"query": "wombat"} | ({"restrict": restriction} if restriction else {})
+        response = await client.get("/search", params=params)
+        assert response.status_code == 200, response.text
+        assert_valid_feed(response.json())
+        identifiers = [c["metadata"]["identifier"] for c in response.json().get("catalogs", [])]
+        return f"urn:uuid:{catalog['id']}" in identifiers
+
+    assert await found(restrict)
+
+    edited = await edit(admin_client, catalog["id"], {"version": catalog["version"]} | changes)
+
+    assert edited.status_code == 200, edited.text
+    assert not await found(restrict)
+    assert await found(None)

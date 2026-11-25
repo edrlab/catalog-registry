@@ -7,9 +7,15 @@ number on the page is a measurement and not a promise: if search changes, this c
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.search_cases import QUALITY_CASES
-from tests.search_helpers import assert_valid_catalog, assert_valid_feed
+from tests.search_helpers import (
+    assert_valid_catalog,
+    assert_valid_feed,
+    in_lead_order,
+    search_rows,
+)
 from tests.search_quality import score_all, summarise, today_titles
 
 pytestmark = pytest.mark.e2e
@@ -36,10 +42,13 @@ async def test_the_app_scores_exactly_what_the_page_says(
 
 
 async def test_every_search_returns_what_the_page_says_for_it_and_a_valid_feed(
-    client: AsyncClient, searchable_catalogs: None
+    client: AsyncClient, db_session: AsyncSession, searchable_catalogs: None
 ) -> None:
     """One pass over every search: what a client sees (titles in order, the total), and every
-    response a valid feed of valid catalogs. A regression names the queries."""
+    response a valid feed of valid catalogs. A regression names the queries.
+
+    The page pins production's order (TIN). Where it differs here, the statement's own scores on
+    Lead must show a tie, which Lead breaks differently."""
     expected = today_titles()
     wrong: dict[str, tuple[list[str], list[str]]] = {}
     for case in QUALITY_CASES:
@@ -50,7 +59,11 @@ async def test_every_search_returns_what_the_page_says_for_it_and_a_valid_feed(
         for catalog in body["catalogs"]:
             assert_valid_catalog(catalog)
         titles = [c["metadata"]["title"] for c in body["catalogs"]]
-        if titles != expected[case.query] or body["metadata"]["numberOfItems"] != len(titles):
+        same = titles == expected[case.query]
+        if not same:
+            rows = await search_rows(db_session, case.query)
+            same = [title for title, _, _ in rows] == titles and in_lead_order(rows, case.today)
+        if not same or body["metadata"]["numberOfItems"] != len(titles):
             wrong[case.query] = (titles, expected[case.query])
 
     assert wrong == {}

@@ -22,7 +22,7 @@ The top-level feed advertises it with a templated `search` link, `/search{?query
 | `bibliotheque -paris` | `-` leaves out catalogs containing that word (or `-"a phrase"`) |
 | `Suisse`, `Schweiz`, `Svizzera` | Place names work in English and the official languages of the country |
 | `PARIS`, `parís`, `Suiße` | Capitals and accents never matter. Folding is done in the database |
-| `bruxels` | A typo is forgiven, listed after the exact matches (see Typos) |
+| `bruxels` | A typo is forgiven (see Typos) |
 | `lib` | The last word also matches as the start of a word: Library, Librivox |
 | `paris OR valais` | `OR` is accepted and ignored: every search is already any-word |
 
@@ -34,11 +34,12 @@ only splits, and the database discards chunks with no word in them. A word the i
 
 ## Order and paging
 
-1. Matches on a word as typed, by BM25 score (TIN, PlanetScale's search index): rarer words and
-   shorter titles count more, and a field's boost multiplies it: title ×5, city ×2, country and
-   subdivision names ×1. Every typed word is scored, even one found in most catalogs.
-2. Then catalogs found only through a typo or the last word's prefix: TIN scores those 0.
-3. Ties: newest first, then id. The order is fixed, so pages never overlap or skip.
+1. By BM25 score (TIN, PlanetScale's search index): rarer words and shorter titles count more, and
+   a field's boost multiplies it: title ×5, city ×2, country and subdivision names ×1. Every typed
+   word is scored, even one found in most catalogs. A word found through a typo or the last word's
+   prefix scores too, so a typo matched in a title can rank above an exact match in a place name:
+   `Brussels` lists "De Openbare bibliotheek Vlaanderen en Brussel" before Lirtuel.
+2. Ties: newest first, then id. The order is fixed, so pages never overlap or skip.
 
 50 results per page, and at most 100 results in all: `page` is 1 or 2 (422 outside that), so there is
 no paging through hundreds or thousands of catalogs. `numberOfItems` is the number of matches
@@ -127,10 +128,12 @@ those.
 
 ## Operating it
 
-- **Extensions.** The migrations create `unaccent`, `pg_trgm` (unused since TIN, dropped later) and
-  `tin`. `tin` exists on PlanetScale; locally and in CI the database image is `planetscale/lead`,
-  TIN's open-source stand-in, which gives the same results but scans every row, so it says nothing
-  about speed.
+- **Extensions.** The migrations create `unaccent`, `tin` and `pg_trgm` (installed, not used by
+  search today; kept for trigram matching). `tin` exists on PlanetScale; locally
+  and in CI the database image is `planetscale/lead`, TIN's open-source stand-in. It finds the same
+  catalogs, but scores typo and prefix matches 0 where TIN scores them, and it scans every row, so
+  it says nothing about speed. The tests pin production's order and accept any order among the
+  catalogs Lead scores equally; the live check runs against TIN.
 - **Grants.** If the app connects as a different user from the one that migrates, grant it
   `INSERT, UPDATE, DELETE` on `catalog_search` and `SELECT` on `country_languages`, `country_names`,
   `subdivision_names` and `country_subdivision_types`, or catalog saves fail.
@@ -156,7 +159,6 @@ hits will cost more; that is not measured yet.
 ## Known limits
 
 - A mistake in the first letter of a word is not forgiven (`xutenberg`).
-- A typo or prefix match scores 0, so among those the newest catalog comes first, not the closest.
 - "Belgio" (Italian, not loaded for Belgium) still finds the Belgian catalogs, as a typo of Belgie.
 - `French Guiana` also lists the other French catalogs: `french` is two letters from `france`.
 - `numberOfItems` counts at most 100 matches; beyond that the exact number is not computed.

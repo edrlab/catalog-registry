@@ -428,16 +428,17 @@ async def flags(session: AsyncSession, title: str) -> tuple[bool, bool, bool]:
     return row["has_opds_catalog"], row["is_open"], row["audiobook_only"]
 
 
-async def plain_catalog(session: AsyncSession) -> uuid.UUID:
+async def plain_catalog(session: AsyncSession, title: str = "Flag probe") -> uuid.UUID:
     """A published catalog with no links, kinds or types: every flag starts false."""
     value = await session.scalar(
         text(
             "INSERT INTO catalogs (id, title, status, published_at) "
-            "VALUES (gen_random_uuid(), 'Flag probe', 'published', now()) RETURNING id"
-        )
+            "VALUES (gen_random_uuid(), :t, 'published', now()) RETURNING id"
+        ),
+        {"t": title},
     )
     assert value is not None
-    assert await flags(session, "Flag probe") == (False, False, False)
+    assert await flags(session, title) == (False, False, False)
     return value  # type: ignore[no-any-return]
 
 
@@ -468,6 +469,37 @@ async def test_an_opds2_catalog_link_sets_the_flag_and_deleting_it_clears_it(
 
     await sql(db_session, "DELETE FROM links WHERE catalog_id = :c", c=probe)
     assert (await flags(db_session, "Flag probe"))[0] is False
+
+
+@pytest.mark.parametrize(
+    ("media_type", "expected"),
+    [
+        ("\tapplication/opds+json", True),
+        ("application/opds+json\t; charset=utf-8", True),
+        ("application/opds+json ; a=b", True),
+        ("APPLICATION/OPDS+JSON", True),
+        # Only spaces and tabs are optional whitespace (RFC 9110 §5.6.3); a line break is not.
+        ("application/opds+json\n", False),
+        ("\r\napplication/opds+json", False),
+        ("application/opds+json\u00a0", False),
+    ],
+    ids=repr,
+)
+async def test_the_stored_flag_and_the_feed_s_python_rule_agree_on_whitespace_and_case(
+    db_session: AsyncSession, media_type: str, expected: bool
+) -> None:
+    """The feed applies `restrict=opds` with `is_opds2_media_type`, search with the stored flag.
+    Any value the two read differently would make one catalog pass one filter and fail the
+    other. Imported through the seed, which stores the type as written."""
+    document = {
+        "metadata": {"title": "Flag probe", "kind": ["public"]},
+        "links": [{"href": "https://probe.example/opds", "rel": "catalog", "type": media_type}],
+    }
+    await import_catalog_document(db_session, document, recommended=False)
+    await db_session.flush()
+
+    assert is_opds2_media_type(media_type) is expected
+    assert (await flags(db_session, "Flag probe"))[0] is expected
 
 
 async def test_the_open_kind_sets_the_flag_and_deleting_it_clears_it(
@@ -509,6 +541,95 @@ async def test_audiobook_only_means_audiobook_and_nothing_else(db_session: Async
         c=probe,
     )
     assert (await flags(db_session, "Flag probe"))[2] is True
+
+
+async def test_updating_a_link_in_place_refreshes_the_opds_flag(db_session: AsyncSession) -> None:
+    """The admin form and a reseed may rewrite a link's type or rel without deleting it."""
+    probe = await plain_catalog(db_session)
+    await sql(
+        db_session,
+        "INSERT INTO links (catalog_id, href, rel, media_type) "
+        "VALUES (:c, 'https://probe.example/opds', 'catalog', 'application/atom+xml')",
+        c=probe,
+    )
+    assert (await flags(db_session, "Flag probe"))[0] is False
+
+    for change, expected in [
+        ("media_type = 'application/opds+json'", True),
+        ("rel = 'shelf'", False),
+        ("rel = 'catalog'", True),
+        ("media_type = 'text/html'", False),
+    ]:
+        await sql(db_session, f"UPDATE links SET {change} WHERE catalog_id = :c", c=probe)
+        assert (await flags(db_session, "Flag probe"))[0] is expected, change
+
+
+async def test_updating_a_kind_in_place_refreshes_the_open_flag(db_session: AsyncSession) -> None:
+    probe = await plain_catalog(db_session)
+    await sql(
+        db_session, "INSERT INTO catalog_kinds (catalog_id, kind) VALUES (:c, 'public')", c=probe
+    )
+
+    await sql(db_session, "UPDATE catalog_kinds SET kind = 'open' WHERE catalog_id = :c", c=probe)
+    assert (await flags(db_session, "Flag probe"))[1] is True
+    await sql(db_session, "UPDATE catalog_kinds SET kind = 'school' WHERE catalog_id = :c", c=probe)
+    assert (await flags(db_session, "Flag probe"))[1] is False
+
+
+async def test_updating_a_publication_type_in_place_refreshes_the_audiobook_flag(
+    db_session: AsyncSession,
+) -> None:
+    probe = await plain_catalog(db_session)
+    await sql(
+        db_session,
+        "INSERT INTO catalog_publication_types (catalog_id, publication_type) VALUES (:c, 'ebook')",
+        c=probe,
+    )
+    change = (
+        "UPDATE catalog_publication_types SET publication_type = CAST(:t AS publication_type) "
+        "WHERE catalog_id = :c"
+    )
+
+    await sql(db_session, change, c=probe, t="audiobook")
+    assert (await flags(db_session, "Flag probe"))[2] is True
+    await sql(db_session, change, c=probe, t="comic")
+    assert (await flags(db_session, "Flag probe"))[2] is False
+
+
+@pytest.mark.parametrize(
+    ("table", "insert", "flag"),
+    [
+        (
+            "links",
+            "INSERT INTO links (catalog_id, href, rel, media_type) "
+            "VALUES (:c, 'https://probe.example/opds', 'catalog', 'application/opds+json')",
+            0,
+        ),
+        ("catalog_kinds", "INSERT INTO catalog_kinds (catalog_id, kind) VALUES (:c, 'open')", 1),
+        (
+            "catalog_publication_types",
+            "INSERT INTO catalog_publication_types (catalog_id, publication_type) "
+            "VALUES (:c, 'audiobook')",
+            2,
+        ),
+    ],
+    ids=["links", "kinds", "publication_types"],
+)
+async def test_moving_a_flag_row_to_another_catalog_refreshes_both(
+    db_session: AsyncSession, table: str, insert: str, flag: int
+) -> None:
+    """An UPDATE of `catalog_id` must refresh the catalog the row left and the one it joined."""
+    source = await plain_catalog(db_session, "Flag source")
+    target = await plain_catalog(db_session, "Flag target")
+    await sql(db_session, insert, c=source)
+    assert (await flags(db_session, "Flag source"))[flag] is True
+
+    await sql(
+        db_session, f"UPDATE {table} SET catalog_id = :t WHERE catalog_id = :s", t=target, s=source
+    )
+
+    assert (await flags(db_session, "Flag source"))[flag] is False
+    assert (await flags(db_session, "Flag target"))[flag] is True
 
 
 async def test_the_seeded_flags_follow_the_python_restriction_rules(

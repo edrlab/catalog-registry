@@ -41,7 +41,7 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 | `België` | Country, Dutch, accent folded | Lirtuel, De Openbare | Lirtuel, De Openbare | 1.00 |  |
 | `Belgien` | Country, German | Lirtuel, De Openbare | Lirtuel, De Openbare | 1.00 |  |
 | `Bruxelles` | Region, French | Lirtuel, De Openbare | Lirtuel, De Openbare | 1.00 |  |
-| `Brussels` | Region, English | Lirtuel, De Openbare | Lirtuel, De Openbare | 1.00 |  |
+| `Brussels` | Region, English | Lirtuel, De Openbare | De Openbare, Lirtuel | 1.00 |  |
 | `Brussel` | Region, Dutch, also in a title | De Openbare, Lirtuel (De Openbare first) | De Openbare, Lirtuel | 1.00 |  |
 | `Brüssel` | Region, German | De Openbare, Lirtuel (De Openbare first) | De Openbare, Lirtuel | 1.00 |  |
 | `Wallonie` | Region, French | Lirtuel | Lirtuel | 1.00 |  |
@@ -88,7 +88,7 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 | `gutenbrg` | Missing letter in a title | Project Gutenberg | Project Gutenberg (typo or prefix only) | 1.00 |  |
 | `bruxels` | Missing letters in a place name | Lirtuel, De Openbare | Lirtuel (typo or prefix only), De Openbare (typo or prefix only) | 1.00 |  |
 | `belgiqe` | Missing letter in a country name | Lirtuel, De Openbare | Lirtuel (typo or prefix only), De Openbare (typo or prefix only) | 1.00 |  |
-| `bibliothèques` | Plural | BnParis, BN Romande, Bibliothèque russe et slave | BnParis (typo or prefix only), BN Romande (typo or prefix only), Bibliothèque russe et slave (typo or prefix only) | 1.00 | Found as a typo (two letters added); no stemming yet. |
+| `bibliothèques` | Plural | BnParis, BN Romande, Bibliothèque russe et slave | BN Romande (typo or prefix only), BnParis (typo or prefix only), Bibliothèque russe et slave (typo or prefix only) | 1.00 | Found as a typo (two letters added); no stemming yet. |
 | `guten` | Start of a word | Project Gutenberg | Project Gutenberg (typo or prefix only) | 1.00 |  |
 | `parsi` | Two letters swapped in a short word | BnParis | nothing | 0.00 | Not found: a swap is two edits and a word of five letters is allowed one. |
 | `Suiße` | ß is folded by the database's unaccent, not by Python | Médiathèque Valais | Médiathèque Valais | 1.00 |  |
@@ -107,18 +107,18 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 | `standrd` | One letter dropped in a title word | Standard Ebooks | Standard Ebooks (typo or prefix only) | 1.00 |  |
 | `pairs` | Two neighbouring letters swapped in a title word | BnParis | nothing | 0.00 | Not found: a swap is two edits and a word of five letters is allowed one. |
 | `valias` | Two neighbouring letters swapped in a canton | Médiathèque Valais | Médiathèque Valais (typo or prefix only) | 1.00 |  |
-| `brussles` | Two neighbouring letters swapped in a place name | Lirtuel, De Openbare | Lirtuel (typo or prefix only), De Openbare (typo or prefix only) | 1.00 |  |
+| `brussles` | Two neighbouring letters swapped in a place name | Lirtuel, De Openbare | De Openbare (typo or prefix only), Lirtuel (typo or prefix only) | 1.00 |  |
 | `gutneberg` | Two neighbouring letters swapped in a title | Project Gutenberg | Project Gutenberg (typo or prefix only) | 1.00 |  |
 | `belguim` | Two neighbouring letters swapped in a country name | Lirtuel, De Openbare | Lirtuel (typo or prefix only), De Openbare (typo or prefix only) | 1.00 |  |
 | `wallonei` | Two neighbouring letters swapped in a region | Lirtuel | Lirtuel (typo or prefix only) | 1.00 |  |
 | `schwiez` | Two neighbouring letters swapped in a country name | Médiathèque Valais | Médiathèque Valais (typo or prefix only) | 1.00 |  |
-| `bibliotehque` | Two neighbouring letters swapped in a title word | BnParis, BN Romande, Bibliothèque russe et slave | BnParis (typo or prefix only), BN Romande (typo or prefix only), Bibliothèque russe et slave (typo or prefix only) | 1.00 |  |
+| `bibliotehque` | Two neighbouring letters swapped in a title word | BnParis, BN Romande, Bibliothèque russe et slave | BN Romande (typo or prefix only), BnParis (typo or prefix only), Bibliothèque russe et slave (typo or prefix only) | 1.00 |  |
 | `parus` | One letter replaced by a neighbouring key in a title word | BnParis | BnParis (typo or prefix only) | 1.00 |  |
 | `belgiqie` | One letter replaced by a neighbouring key in a country name | Lirtuel, De Openbare | Lirtuel (typo or prefix only), De Openbare (typo or prefix only) | 1.00 |  |
 | `vqlais` | One letter replaced by a neighbouring key in a canton | Médiathèque Valais | Médiathèque Valais (typo or prefix only) | 1.00 |  |
 | `frabce` | One letter replaced by a neighbouring key in a country name | BnParis | BnParis (typo or prefix only) | 1.00 |  |
 | `lirtuek` | One letter replaced by a neighbouring key in a title | Lirtuel | Lirtuel (typo or prefix only) | 1.00 |  |
-| `bibliotheuqe` | One letter replaced by a neighbouring key in a title word | BnParis, BN Romande, Bibliothèque russe et slave | BnParis (typo or prefix only), BN Romande (typo or prefix only), Bibliothèque russe et slave (typo or prefix only) | 1.00 |  |
+| `bibliotheuqe` | One letter replaced by a neighbouring key in a title word | BnParis, BN Romande, Bibliothèque russe et slave | BN Romande (typo or prefix only), BnParis (typo or prefix only), Bibliothèque russe et slave (typo or prefix only) | 1.00 |  |
 | `guttenberg` | One letter doubled or added in a title | Project Gutenberg | Project Gutenberg (typo or prefix only) | 1.00 |  |
 | `belgiumm` | One letter doubled or added in a country name | Lirtuel, De Openbare | Lirtuel (typo or prefix only), De Openbare (typo or prefix only) | 1.00 |  |
 | `bruxellles` | One letter doubled or added in a place name | Lirtuel, De Openbare | Lirtuel (typo or prefix only), De Openbare (typo or prefix only) | 1.00 |  |

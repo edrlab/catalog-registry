@@ -14,6 +14,8 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ProgrammingError
@@ -256,5 +258,93 @@ async def test_the_status_migration_keeps_every_reader_s_view_and_downgrades_saf
             ).scalar()
         assert downgraded == {"Was active": "suggested", "Was suggested": "suggested"}
         assert searchable == 0
+    finally:
+        await engine.dispose()
+
+
+TIN = "d4b8e2f61a90"
+
+
+def revisions_after(base: str) -> list[str]:
+    """Every revision after *base* up to the head, oldest first: a new migration joins the walk."""
+    script = ScriptDirectory.from_config(Config(str(REPO_ROOT / "alembic.ini")))
+    return [r.revision for r in script.iterate_revisions("heads", base)][::-1]
+
+
+async def test_each_step_after_tin_downgrades_to_exactly_what_it_upgraded_from(
+    scratch_url: str,
+) -> None:
+    """A step's downgrade must restore exactly what its upgrade found, so each is checked on its
+    own: one up, one down, compare."""
+    steps = revisions_after(TIN)
+    assert steps[:2] == ["06d8bef33737", "e16d69989d0d"]
+    alembic(scratch_url, "upgrade", TIN)
+    engine = create_async_engine(scratch_url)
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            await seed_catalogs(session, SEED_FILE)
+            await seed_catalogs(session, LIBRARIES_FILE, recommended=False)
+            # Read differently by the two versions of the OPDS flag, so its rebuilds show.
+            feed = {
+                "metadata": {"title": "Tabbed"},
+                "catalogs": [
+                    {
+                        "metadata": {"title": "Tabbed type", "kind": ["public"]},
+                        "links": [
+                            {
+                                "href": "https://tabbed.example/opds",
+                                "rel": "catalog",
+                                "type": "application/opds+json\t; charset=utf-8",
+                            }
+                        ],
+                    }
+                ],
+            }
+            await import_feed_document(session, feed, source="test")
+            await session.commit()
+
+        for after in steps:
+            schema_before = await snapshot(engine, SCHEMA_QUERIES)
+            data_before = await snapshot(engine, DATA_QUERIES)
+
+            alembic(scratch_url, "upgrade", after)
+            assert (
+                await snapshot(engine, SCHEMA_QUERIES),
+                await snapshot(engine, DATA_QUERIES),
+            ) != (
+                schema_before,
+                data_before,
+            ), f"{after} changed nothing this test can see"
+            alembic(scratch_url, "downgrade", "-1")
+
+            assert await snapshot(engine, SCHEMA_QUERIES) == schema_before, f"{after} down"
+            assert await snapshot(engine, DATA_QUERIES) == data_before, f"{after} down"
+            alembic(scratch_url, "upgrade", after)
+    finally:
+        await engine.dispose()
+
+
+async def test_the_drop_of_the_old_search_removes_exactly_its_two_objects(
+    scratch_url: str,
+) -> None:
+    """`06d8bef33737` drops `registry_query()` and `registry_simple`; `fold()`, `unaccent` and
+    `pg_trgm` stay. Its downgrade gives `registry_query()` back working, on the old analyzer."""
+    alembic(scratch_url, "upgrade", "06d8bef33737")
+    engine = create_async_engine(scratch_url)
+    try:
+        up = await snapshot(engine, SCHEMA_QUERIES)
+        functions = {row[0] for row in up["functions"]}
+        assert "registry_query" not in functions
+        assert {"fold", "refresh_catalog_search", "registry_tinql"} <= functions
+        assert up["search_configuration"] == []
+        assert {"pg_trgm", "unaccent", "tin"} <= {row[0] for row in up["extensions"]}
+
+        alembic(scratch_url, "downgrade", "-1")
+
+        async with engine.connect() as connection:
+            query = await connection.scalar(
+                text("SELECT public.registry_query(ARRAY['Bibliothèque'], ARRAY['Zürich'])::text")
+            )
+        assert query == "'bibliotheque' & !'zurich'"
     finally:
         await engine.dispose()

@@ -105,7 +105,7 @@ QUALITY_CASES: list[Case] = [
     ),
     c(PLACES, "Belgien", "Country, German", (LIRTUEL, OPENBARE), words(LIRTUEL, OPENBARE)),
     c(PLACES, "Bruxelles", "Region, French", (LIRTUEL, OPENBARE), words(LIRTUEL, OPENBARE)),
-    c(PLACES, "Brussels", "Region, English", (LIRTUEL, OPENBARE), words(LIRTUEL, OPENBARE)),
+    c(PLACES, "Brussels", "Region, English", (LIRTUEL, OPENBARE), words(OPENBARE, LIRTUEL)),
     c(
         PLACES,
         "Brussel",
@@ -241,7 +241,7 @@ QUALITY_CASES: list[Case] = [
         "bibliothèques",
         "Plural",
         (PARIS, ROMANDE, RUSSE),
-        fuzzy(PARIS, ROMANDE, RUSSE),
+        fuzzy(ROMANDE, PARIS, RUSSE),
         "Found as a typo (two letters added); no stemming yet.",
     ),
     c(TYPO, "guten", "Start of a word", (GUTENBERG,), fuzzy(GUTENBERG)),
@@ -392,7 +392,7 @@ REALISTIC_TYPOS: list[Case] = [
         "brussles",
         "Two neighbouring letters swapped in a place name",
         (LIRTUEL, OPENBARE),
-        fuzzy(LIRTUEL, OPENBARE),
+        fuzzy(OPENBARE, LIRTUEL),
     ),
     c(
         REALISTIC,
@@ -427,7 +427,7 @@ REALISTIC_TYPOS: list[Case] = [
         "bibliotehque",
         "Two neighbouring letters swapped in a title word",
         (PARIS, ROMANDE, RUSSE),
-        fuzzy(PARIS, ROMANDE, RUSSE),
+        fuzzy(ROMANDE, PARIS, RUSSE),
     ),
     c(
         REALISTIC,
@@ -469,7 +469,7 @@ REALISTIC_TYPOS: list[Case] = [
         "bibliotheuqe",
         "One letter replaced by a neighbouring key in a title word",
         (PARIS, ROMANDE, RUSSE),
-        fuzzy(PARIS, ROMANDE, RUSSE),
+        fuzzy(ROMANDE, PARIS, RUSSE),
     ),
     c(
         REALISTIC,

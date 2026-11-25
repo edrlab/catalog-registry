@@ -90,6 +90,10 @@ def test_query_value_is_canonical_and_none_when_unrestricted() -> None:
         (OPDS2, True),
         ("Application/OPDS+JSON", True),
         (f" {OPDS2} ; profile=x", True),
+        (f"\t{OPDS2}\t; profile=x", True),
+        # Not optional whitespace (RFC 9110 §5.6.3), as in the stored search flag.
+        (f"{OPDS2}\n", False),
+        (f"{OPDS2}\u00a0", False),
         ("application/opds-catalog+json", False),
         ("application/atom+xml;profile=opds-catalog", False),
         ("text/html", False),
