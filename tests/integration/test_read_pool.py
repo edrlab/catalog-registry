@@ -407,3 +407,58 @@ async def test_a_timeout_is_not_retried_and_is_a_plain_read_timeout() -> None:
     assert type(raised.value) is ReadTimeoutError
     assert raised.value.__cause__ is error
     assert (stub.executes, stub.rollbacks) == (1, 0)
+
+
+# --- the write pool ------------------------------------------------------------------------------
+
+
+async def test_an_abandoned_write_transaction_is_ended_and_the_pool_reconnects(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A transaction left open (a request that never finished) is ended by the server, so it does
+    not hold its locks; the next checkout gets a working connection."""
+    from registry.db import session as db_session_module  # noqa: PLC0415
+
+    monkeypatch.setitem(
+        db_session_module.WRITE_CONNECTION_SETTINGS, "idle_in_transaction_session_timeout", "200"
+    )
+    engine = create_database_engine(settings)
+    try:
+        async with engine.connect() as connection:
+            abandoned = await connection.scalar(text("SELECT pg_backend_pid()"))
+            await asyncio.sleep(0.6)
+            with pytest.raises(DBAPIError) as raised:
+                await connection.execute(text("SELECT 1"))
+        async with engine.connect() as connection:
+            fresh = await connection.scalar(text("SELECT pg_backend_pid()"))
+            still_there = await connection.scalar(
+                text("SELECT count(*) FROM pg_stat_activity WHERE pid = :p"), {"p": abandoned}
+            )
+        assert checked_out(engine) == 0
+    finally:
+        await engine.dispose()
+
+    assert raised.value.connection_invalidated
+    assert fresh != abandoned
+    assert still_there == 0
+
+
+@pytest.mark.parametrize("pool", ["write", "read"])
+async def test_a_database_error_never_carries_its_bound_values(
+    settings: Settings, pool: str
+) -> None:
+    secret = "someone.private@edrlab.org"
+    engine = (
+        create_database_engine(settings)
+        if pool == "write"
+        else build_read_engine(settings, READ_CONNECTION_SETTINGS)
+    )
+    try:
+        async with engine.connect() as connection:
+            with pytest.raises(DBAPIError) as raised:
+                await connection.execute(text("SELECT CAST(:e AS text), 1 / 0"), {"e": secret})
+    finally:
+        await engine.dispose()
+
+    assert getattr(raised.value.orig, "sqlstate", None) == "22012"
+    assert secret not in str(raised.value)
