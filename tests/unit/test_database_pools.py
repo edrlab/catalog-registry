@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from sqlalchemy.pool import QueuePool
 
 from registry.core.config import Settings
+from registry.db.session import WRITE_CONNECTION_SETTINGS
 from registry.main import create_app
 
 pytestmark = pytest.mark.unit
@@ -91,6 +92,7 @@ async def test_ssl_verify_full_in_the_url_reaches_asyncpg_on_every_pool(
 
     assert [kwargs["ssl"] for kwargs in seen] == ["verify-full"] * 3
     assert [kwargs["host"] for kwargs in seen] == ["db.example"] * 3
-    assert "server_settings" not in seen[0]
+    # Each pool keeps its own limits: the write pool's are longer and add lock and idle limits.
+    assert seen[0]["server_settings"] == WRITE_CONNECTION_SETTINGS
     assert seen[1]["server_settings"]["statement_timeout"] == "10000"
     assert seen[2]["server_settings"]["statement_timeout"] == "1000"
