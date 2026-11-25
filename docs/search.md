@@ -128,7 +128,8 @@ those.
 
 ## Operating it
 
-- **Extensions.** The migrations create `unaccent` and `tin`. `tin` exists on PlanetScale; locally
+- **Extensions.** The migrations create `unaccent`, `tin` and `pg_trgm` (installed, not used by
+  search today; kept for trigram matching). `tin` exists on PlanetScale; locally
   and in CI the database image is `planetscale/lead`, TIN's open-source stand-in. It finds the same
   catalogs, but scores typo and prefix matches 0 where TIN scores them, and it scans every row, so
   it says nothing about speed. The tests pin production's order and accept any order among the

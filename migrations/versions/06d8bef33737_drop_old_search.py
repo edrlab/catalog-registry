@@ -1,11 +1,12 @@
-"""Drop what the search before TIN needed: `registry_query()`, `registry_simple` and `pg_trgm`.
+"""Drop what only the search before TIN used: `registry_query()` and `registry_simple`.
 
-Nothing has used them since search moved to TIN (`d4b8e2f61a90`): the tsvector and trigram columns
-are gone, and the query is built by `registry_tinql()`. `fold()` and `unaccent` stay; the stored
-and the typed text both go through them.
+Nothing has used them since search moved to TIN (`d4b8e2f61a90`): the tsvector column is gone, and
+the query is built by `registry_tinql()`. `fold()` and `unaccent` stay; the stored and the typed
+text both go through them. `pg_trgm` stays installed: trigram matching is being measured as a
+complement to TIN (typos in the first letter, letters swapped in short words, parts of words).
 
-The downgrade puts all three back exactly as `847ef861dbdb` made them, because the TIN migration's
-own downgrade rebuilds the tsvector and trigram columns with them.
+The downgrade puts both back exactly as `847ef861dbdb` made them, because the TIN migration's own
+downgrade rebuilds the tsvector column with them.
 
 Revision ID: 06d8bef33737
 Revises: d4b8e2f61a90
@@ -25,11 +26,9 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.execute("DROP FUNCTION public.registry_query(text[], text[])")
     op.execute("DROP TEXT SEARCH CONFIGURATION public.registry_simple")
-    op.execute("DROP EXTENSION pg_trgm")
 
 
 def downgrade() -> None:
-    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public")
     op.execute("CREATE TEXT SEARCH CONFIGURATION public.registry_simple (COPY = pg_catalog.simple)")
     op.execute(
         """
