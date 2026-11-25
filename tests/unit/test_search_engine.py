@@ -86,11 +86,10 @@ def test_the_settings_are_copied_not_shared(monkeypatch: pytest.MonkeyPatch) -> 
     assert captured["connect_args"]["server_settings"] == {"statement_timeout": "150"}
 
 
-def test_the_production_settings_are_exactly_these() -> None:
+def test_the_production_settings_are_exactly_these_two() -> None:
     assert dict(SEARCH_CONNECTION_SETTINGS) == {
         "statement_timeout": "1000",
         "default_transaction_read_only": "on",
-        "jit": "off",
     }
 
 

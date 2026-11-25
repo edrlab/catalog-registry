@@ -11,20 +11,36 @@ from registry.domain.enums import ActorRole
 #: One statement for "find or create, and note the login". `role` is never in the update list, so a
 #: login can never change a role, and an existing `name` is kept over the token's. The first
 #: identity (issuer and subject) is kept too: the service refuses a later login that brings another
-#: one, so a reissued mailbox does not inherit the account. A write per request is fine at this
-#: volume; if it ever is not, update `last_seen_at` only when it is stale.
+#: one, so a reissued mailbox does not inherit the account.
+#:
+#: `last_seen_at` is written at most once a minute: every admin request comes through here, and most
+#: are page views that need no write. Within the minute the row is read back unchanged (the second
+#: half of the UNION), so "previous visit" means the last one more than a minute ago.
 _PERSIST_LOGIN: Final = text(
     """
-WITH previous AS (SELECT last_seen_at FROM actors WHERE email = :email)
-INSERT INTO actors (email, name, identity_issuer, identity_subject, last_seen_at)
-VALUES (:email, :name, :issuer, :subject, now())
-ON CONFLICT (email) DO UPDATE
-   SET last_seen_at = now(),
-       identity_issuer = coalesce(actors.identity_issuer, EXCLUDED.identity_issuer),
-       identity_subject = coalesce(actors.identity_subject, EXCLUDED.identity_subject),
-       name = coalesce(actors.name, EXCLUDED.name)
-RETURNING id::text AS id, email, name, role::text AS role, is_active, created_at,
-          identity_issuer, identity_subject, (SELECT last_seen_at FROM previous) AS previous_seen_at
+WITH previous AS (SELECT last_seen_at FROM actors WHERE email = :email),
+noted AS (
+  INSERT INTO actors (email, name, identity_issuer, identity_subject, last_seen_at)
+  VALUES (:email, :name, :issuer, :subject, now())
+  ON CONFLICT (email) DO UPDATE
+     SET last_seen_at = now(),
+         identity_issuer = coalesce(actors.identity_issuer, EXCLUDED.identity_issuer),
+         identity_subject = coalesce(actors.identity_subject, EXCLUDED.identity_subject),
+         name = coalesce(actors.name, EXCLUDED.name)
+   WHERE actors.last_seen_at IS NULL
+      OR actors.last_seen_at < now() - interval '1 minute'
+      OR (actors.identity_subject IS NULL AND EXCLUDED.identity_subject IS NOT NULL)
+      OR (actors.name IS NULL AND EXCLUDED.name IS NOT NULL)
+  RETURNING id::text AS id, email, name, role::text AS role, is_active, created_at,
+            identity_issuer, identity_subject,
+            (SELECT last_seen_at FROM previous) AS previous_seen_at
+)
+SELECT * FROM noted
+UNION ALL
+SELECT id::text, email, name, role::text, is_active, created_at,
+       identity_issuer, identity_subject, last_seen_at
+  FROM actors
+ WHERE email = :email AND NOT EXISTS (SELECT 1 FROM noted)
 """
 )
 

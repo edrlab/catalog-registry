@@ -32,8 +32,10 @@ ON CONFLICT (email) DO UPDATE
    SET role = CAST(coalesce(:role, actors.role::text) AS actor_role),
        name = coalesce(:name, actors.name),
        is_active = coalesce(CAST(:is_active AS boolean), actors.is_active),
-       identity_issuer = CASE WHEN CAST(:forget AS boolean) THEN NULL ELSE actors.identity_issuer END,
-       identity_subject = CASE WHEN CAST(:forget AS boolean) THEN NULL ELSE actors.identity_subject END
+       identity_issuer = CASE WHEN CAST(:forget AS boolean) THEN NULL
+                              ELSE actors.identity_issuer END,
+       identity_subject = CASE WHEN CAST(:forget AS boolean) THEN NULL
+                               ELSE actors.identity_subject END
 RETURNING email, role::text AS role, is_active
 """
 )

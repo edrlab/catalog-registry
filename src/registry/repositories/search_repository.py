@@ -41,7 +41,6 @@ SEARCH_STATEMENT_TIMEOUT_MS: Final = 1000
 SEARCH_CONNECTION_SETTINGS: Final = {
     "statement_timeout": str(SEARCH_STATEMENT_TIMEOUT_MS),
     "default_transaction_read_only": "on",
-    "jit": "off",
 }
 
 #: `registry_tinql` builds the query from the folded words (any word matches; typos and the last

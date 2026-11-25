@@ -64,7 +64,6 @@ def test_the_production_constants() -> None:
     assert READ_CONNECTION_SETTINGS == {
         "statement_timeout": "10000",
         "default_transaction_read_only": "on",
-        "jit": "off",
     }
     # Different pools, different limits: the feed's allowance is not search's.
     assert SEARCH_CONNECTION_SETTINGS["statement_timeout"] == "1000"
