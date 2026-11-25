@@ -16,6 +16,7 @@ from sqlalchemy import event
 
 from registry.core.config import Settings
 from registry.main import create_app
+from registry.repositories.search_repository import SEARCH_CONNECTION_SETTINGS
 from tests.search_helpers import HANG_GUARD_SECONDS, assert_valid_feed, committed_catalogs
 
 pytestmark = pytest.mark.e2e
@@ -42,7 +43,13 @@ def documents() -> list[dict[str, Any]]:
 
 
 @pytest.fixture
-async def wired_app(settings: Settings, migrated_database: str) -> AsyncIterator[FastAPI]:
+async def wired_app(
+    settings: Settings, migrated_database: str, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[FastAPI]:
+    # The point here is the pages and the pool, not the 1 s limit (`test_search_timeout*` prove
+    # that with a held lock). Thirty searches on a CPU shared with other test workers can pass
+    # 1 s, which would answer 503 for a reason this test is not about.
+    monkeypatch.setitem(SEARCH_CONNECTION_SETTINGS, "statement_timeout", "10000")
     built = create_app(settings)
     async with built.router.lifespan_context(built):
         yield built
