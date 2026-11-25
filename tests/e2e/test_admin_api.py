@@ -17,7 +17,12 @@ from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from registry.api import admin_log
+from registry.api.routes.admin import MAX_FILTER_VALUES
+from registry.cli.actor import persist_actor
+from registry.core.config import Settings
 from registry.core.constants import PROBLEM_JSON_MEDIA_TYPE
+from registry.db.session import build_session_factory
+from registry.domain.lifecycle import ACTIONS
 from tests.conftest import ADMIN_SERVICE_KEY, SEED_CATALOG_COUNT, admin_headers
 from tests.search_helpers import ALL_TITLES, add_synthetic_catalogs
 
@@ -271,13 +276,12 @@ def deployed(admin_app: Any) -> None:
     admin_app.state.resolve_admin_key = resolve
 
 
-def access_headers(email: str) -> dict[str, str]:
+def access_headers(email: str, subject: str | None = None) -> dict[str, str]:
     now = int(time.time())
-    token = jwt.encode(
-        {"iss": ISSUER, "aud": [AUDIENCE], "exp": now + 300, "email": email},
-        SIGNING_KEY,
-        algorithm="RS256",
-    )
+    claims = {"iss": ISSUER, "aud": [AUDIENCE], "exp": now + 300, "email": email}
+    if subject is not None:
+        claims["sub"] = subject
+    token = jwt.encode(claims, SIGNING_KEY, algorithm="RS256")
     return {"X-Registry-Service-Key": ADMIN_SERVICE_KEY, "Cf-Access-Jwt-Assertion": token}
 
 
@@ -342,6 +346,38 @@ async def test_a_valid_token_from_an_allowed_domain_creates_a_viewer(
     assert response.status_code == 200
     assert response.json()["role"] == "viewer"
     assert await count_actors(db_session) == 1
+
+
+async def test_another_account_for_the_same_email_is_a_403_until_forgotten(
+    admin_app: Any, admin_client: AsyncClient, settings: Settings
+) -> None:
+    """Logins really commit here: forgetting goes through the CLI's own connection."""
+    deployed(admin_app)
+    admin_app.state.write_session_factory = build_session_factory(admin_app.state.engine)
+    email = "reissued@edrlab.org"
+
+    async def me(subject: str) -> Any:
+        return await admin_client.get("/admin/me", headers=access_headers(email, subject))
+
+    try:
+        first = await me("sub-1")
+        stranger = await me("sub-2")
+        await persist_actor(settings, email=email, role=None, name=None, active=None, forget=True)
+        recorded = await me("sub-2")
+        former = await me("sub-1")
+    finally:
+        async with admin_app.state.engine.begin() as connection:
+            await connection.execute(text("DELETE FROM actors WHERE email = :e"), {"e": email})
+
+    assert first.status_code == 200
+    assert stranger.status_code == 403
+    assert stranger.headers["content-type"].startswith(PROBLEM_JSON_MEDIA_TYPE)
+    assert stranger.json()["type"] == f"{PROBLEMS}forbidden"
+    assert stranger.json()["detail"] == (
+        "This sign-in is not the account registered for this email; ask an administrator."
+    )
+    assert recorded.status_code == 200
+    assert former.status_code == 403
 
 
 async def test_a_problem_body_never_contains_a_service_key(admin_client: AsyncClient) -> None:
@@ -676,6 +712,62 @@ async def test_sorting_and_pages(admin_client: AsyncClient, searchable_catalogs:
     assert by_status["total"] == ascending["total"]
 
 
+#: The same orders as the list's, computed by the database (same collation), on every catalog.
+ORACLE_ORDERS = {
+    "name": "lower(c.title), c.id",
+    "-name": "lower(c.title) DESC, c.id",
+    "kind": "(SELECT min(k.kind::text) FROM catalog_kinds k WHERE k.catalog_id = c.id) NULLS LAST, "
+    "lower(c.title), c.id",
+    "status": "c.status, lower(c.title), c.id",
+}
+
+
+@pytest.mark.parametrize("sort", list(ORACLE_ORDERS))
+async def test_every_sort_matches_a_full_sort_and_pages_concatenate(
+    admin_client: AsyncClient, db_session: AsyncSession, searchable_catalogs: None, sort: str
+) -> None:
+    from registry.cli.seed import import_catalog_document  # noqa: PLC0415
+    from tests.read_helpers import link_document  # noqa: PLC0415
+
+    # Titles that differ only in case tie on the name, so the id decides; one has no kind.
+    for title in ("Zebra Shelf", "zebra shelf", "ZEBRA SHELF"):
+        await import_catalog_document(db_session, link_document(title), recommended=False)
+    await db_session.execute(
+        text(
+            "DELETE FROM catalog_kinds WHERE catalog_id = "
+            "(SELECT id FROM catalogs WHERE title = 'zebra shelf')"
+        )
+    )
+    await db_session.commit()
+    await set_status(db_session, "%valais%", "draft")
+    statuses = ["published", "draft"] if sort == "status" else ["published"]
+    oracle = list(
+        (
+            await db_session.execute(
+                text(
+                    "SELECT c.id::text FROM catalogs c "
+                    "WHERE c.status::text = ANY (CAST(:s AS text[])) "
+                    f"ORDER BY {ORACLE_ORDERS[sort]}"
+                ),
+                {"s": statuses},
+            )
+        ).scalars()
+    )
+
+    whole = await list_catalogs(admin_client, sort=sort, status=statuses, per_page=100)
+    paged: list[str] = []
+    for page in range(1, len(oracle) // 3 + 2):
+        body = await list_catalogs(admin_client, sort=sort, status=statuses, per_page=3, page=page)
+        assert body["total"] == len(oracle)
+        paged += [item["id"] for item in body["items"]]
+    beyond = await list_catalogs(admin_client, sort=sort, status=statuses, per_page=3, page=99)
+
+    assert 10 < len(oracle) <= 100
+    assert [item["id"] for item in whole["items"]] == oracle
+    assert paged == oracle  # no duplicate and no gap between pages
+    assert (beyond["items"], beyond["total"]) == ([], len(oracle))
+
+
 @pytest.mark.parametrize(
     "bad", [{"page": 0}, {"per_page": 0}, {"sort": "title"}, {"country": "FRA"}, {"coverage": "x"}]
 )
@@ -763,3 +855,20 @@ async def test_the_openapi_document_describes_the_admin_routes(admin_client: Asy
     )
     status_enum = document["components"]["schemas"]["CatalogListItem"]["properties"]["status"]
     assert "CatalogStatus" in str(status_enum)
+
+
+async def test_the_openapi_document_states_the_actions_and_the_filter_caps(
+    admin_client: AsyncClient,
+) -> None:
+    document = (await admin_client.get("/openapi.json")).json()
+    schemas = document["components"]["schemas"]
+    actions = schemas["CatalogListItem"]["properties"]["allowed_actions"]["items"]
+    parameters = {
+        parameter["name"]: parameter["schema"]
+        for parameter in document["paths"]["/admin/catalogs"]["get"]["parameters"]
+    }
+
+    assert actions["enum"] == list(ACTIONS)
+    for name in ("country", "language"):
+        [array] = [shape for shape in parameters[name]["anyOf"] if shape["type"] == "array"]
+        assert array["maxItems"] == MAX_FILTER_VALUES == 50, name
