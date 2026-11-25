@@ -250,8 +250,9 @@ QUALITY_CASES: list[Case] = [
         "parsi",
         "Two letters swapped in a short word",
         (PARIS,),
-        [],
-        "Not found: a swap is two edits and a word of five letters is allowed one.",
+        fuzzy(PARIS),
+        "A swap is two edits and a word of five letters is allowed one, so no word matches; the "
+        "trigram rescue finds it.",
     ),
     c(
         TYPO,

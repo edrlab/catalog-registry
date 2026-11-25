@@ -42,6 +42,7 @@ from sqlalchemy.ext.asyncio import (
 from registry.cli.seed import seed_catalogs
 from registry.core.config import Settings
 from registry.main import create_app
+from registry.repositories.search_repository import SEARCH_CONNECTION_SETTINGS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 #: Same image as compose.yaml and CI: Postgres 18 with Lead, the open-source stand-in for TIN.
@@ -272,7 +273,13 @@ def migrated_database(settings: Settings) -> str:
 
 @pytest.fixture
 async def db_connection(migrated_database: str) -> AsyncIterator[AsyncConnection]:
-    engine = create_async_engine(migrated_database)
+    # Searches in the tests run on this connection, so it takes the search pool's trigram
+    # threshold: without it Postgres's default (0.6) answers, not production's.
+    trigram = "pg_trgm.word_similarity_threshold"
+    engine = create_async_engine(
+        migrated_database,
+        connect_args={"server_settings": {trigram: SEARCH_CONNECTION_SETTINGS[trigram]}},
+    )
     async with engine.connect() as connection:
         transaction = await connection.begin()
         yield connection

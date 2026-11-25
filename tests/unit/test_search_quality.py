@@ -185,8 +185,8 @@ def test_the_score_of_todays_results_is_pinned() -> None:
     update it deliberately, together with the page (`make search-cases`)."""
     summary = summarise(score_all(today_titles()))
 
-    assert round(summary.mean_score, 3) == 0.950
-    assert (summary.cases, summary.perfect) == (90, 85)
+    assert round(summary.mean_score, 3) == 0.961
+    assert (summary.cases, summary.perfect) == (90, 86)
 
 
 # --- the page --------------------------------------------------------------------------------
@@ -225,8 +225,8 @@ def test_the_command_scores_a_server_and_exits_zero(
 
     out = capsys.readouterr().out
     assert status == 0
-    assert "score 0.950" in out
-    assert "perfect 85/90" in out
+    assert "score 0.961" in out
+    assert "perfect 86/90" in out
     assert "Île de France" in out, "an imperfect search is listed with what it wanted and got"
 
 
@@ -237,7 +237,7 @@ def test_a_baseline_shows_a_tweak_as_better_worse_or_unchanged(
     monkeypatch.setattr(score_search, "fetch_search_titles", fake_fetch(today_titles()))
     assert score_search.main(["--save", str(baseline)]) == 0
     assert json.loads(baseline.read_text(encoding="utf-8"))["mean"] == pytest.approx(
-        0.950, abs=1e-3
+        0.961, abs=1e-3
     )
 
     capsys.readouterr()
