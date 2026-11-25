@@ -471,6 +471,37 @@ async def test_an_opds2_catalog_link_sets_the_flag_and_deleting_it_clears_it(
     assert (await flags(db_session, "Flag probe"))[0] is False
 
 
+@pytest.mark.parametrize(
+    ("media_type", "expected"),
+    [
+        ("\tapplication/opds+json", True),
+        ("application/opds+json\t; charset=utf-8", True),
+        ("application/opds+json ; a=b", True),
+        ("APPLICATION/OPDS+JSON", True),
+        # Only spaces and tabs are optional whitespace (RFC 9110 §5.6.3); a line break is not.
+        ("application/opds+json\n", False),
+        ("\r\napplication/opds+json", False),
+        ("application/opds+json\u00a0", False),
+    ],
+    ids=repr,
+)
+async def test_the_stored_flag_and_the_feed_s_python_rule_agree_on_whitespace_and_case(
+    db_session: AsyncSession, media_type: str, expected: bool
+) -> None:
+    """The feed applies `restrict=opds` with `is_opds2_media_type`, search with the stored flag.
+    Any value the two read differently would make one catalog pass one filter and fail the
+    other. Imported through the seed, which stores the type as written."""
+    document = {
+        "metadata": {"title": "Flag probe", "kind": ["public"]},
+        "links": [{"href": "https://probe.example/opds", "rel": "catalog", "type": media_type}],
+    }
+    await import_catalog_document(db_session, document, recommended=False)
+    await db_session.flush()
+
+    assert is_opds2_media_type(media_type) is expected
+    assert (await flags(db_session, "Flag probe"))[0] is expected
+
+
 async def test_the_open_kind_sets_the_flag_and_deleting_it_clears_it(
     db_session: AsyncSession,
 ) -> None:

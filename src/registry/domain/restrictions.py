@@ -53,8 +53,10 @@ def parse_restrictions(value: str | None) -> Restrictions:
 
 
 def is_opds2_media_type(media_type: str | None) -> bool:
-    """RFC 9110 §8.3.1: the type is case-insensitive and parameters follow a semicolon."""
-    return (media_type or "").split(";")[0].strip().lower() == OPDS_JSON_MEDIA_TYPE
+    """RFC 9110 §8.3.1: the type is case-insensitive and parameters follow a semicolon. Only
+    spaces and tabs are optional whitespace around it (§5.6.3); the stored search flag trims the
+    same two, so the feed and search agree on every value."""
+    return (media_type or "").split(";")[0].strip(" \t").lower() == OPDS_JSON_MEDIA_TYPE
 
 
 def allows(catalog: CatalogLike, restrictions: Restrictions) -> bool:
