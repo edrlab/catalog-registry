@@ -7,7 +7,7 @@ primary key. The extra indexes were never used and cost a write on every save (a
 catalog's child rows). `ix_catalog_subdivisions_subdivision_code` stays: it is not redundant.
 
 Revision ID: 8805df0e33ba
-Revises: 06d8bef33737
+Revises: e16d69989d0d
 Create Date: 2026-11-25
 """
 
@@ -16,7 +16,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "8805df0e33ba"
-down_revision: str | None = "06d8bef33737"
+down_revision: str | None = "e16d69989d0d"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
