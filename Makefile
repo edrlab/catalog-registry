@@ -165,8 +165,8 @@ search-cases:  ## Regenerate docs/search-test-cases.md from tests/search_cases.p
 bench:  ## Measure GET / and GET /search as the catalog set grows: make bench N="10 1000"
 	uv run python scripts/benchmark_feed.py $(N)
 
-# Confirm a database is usable before anything depends on it, point REGISTRY_DATABASE_URL
-# at Cloud SQL through the Auth Proxy and run this. See README, "The Cloud SQL sandbox".
+# Confirm a database is usable before anything depends on it: point REGISTRY_DATABASE_URL
+# at it and run this. It only reads.
 check-db:  ## Report a database's version and extension availability
 	uv run python scripts/check_database.py
 
@@ -194,7 +194,7 @@ docker-build:  ## Build the runtime image
 # the only way to catch "works locally, missing from the image" before a deploy does.
 # The compose network is only needed when the DSN names `db`, the host compose provides. Give
 # your own IMAGE_DSN and the container runs unattached, which is what makes it possible to
-# point the runtime image at Cloud SQL through the proxy.
+# point the runtime image at a database outside compose.
 docker-run: docker-build  ## Run the deployable image, not the dev one (needs make up)
 	@set -e; \
 	if echo "$(IMAGE_DSN)" | grep -q "@db:"; then \

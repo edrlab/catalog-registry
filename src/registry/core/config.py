@@ -24,10 +24,9 @@ class Settings(BaseSettings):
         extra="forbid",  # a typo'd variable fails at boot, not silently six weeks later
     )
 
-    # str, not PostgresDsn: Cloud Run's Cloud SQL unix-socket form
-    # (postgresql+asyncpg://user:pass@/db?host=/cloudsql/...) has an empty
-    # host, which PostgresDsn's stricter URL parser rejects outright even
-    # though asyncpg/SQLAlchemy accept it fine.
+    # str, not PostgresDsn: a unix-socket DSN (postgresql+asyncpg://user:pass@/db?host=/run/...)
+    # has an empty host, which PostgresDsn's stricter URL parser rejects outright even though
+    # asyncpg/SQLAlchemy accept it fine.
     database_url: str = Field(
         description=(
             "Async Postgres DSN. Required, so no deployment falls back to a local default. "

@@ -38,9 +38,18 @@ SEARCH_STATEMENT_TIMEOUT_MS: Final = 1000
 
 #: Sent once per connection, in the startup packet, to the search pool only (`build_read_engine`).
 #: Read-only because search must never write.
+#: How alike a typed word and a stored one must be for a trigram match (`<%`, pg_trgm's word
+#: similarity). Measured on the seed with `tests/integration/test_search_fuzzy.py`.
+WORD_SIMILARITY_THRESHOLD: Final = 0.5
+
+#: Trigrams only for words of this many letters or more: shorter ones share too few three-letter
+#: pieces to tell a typo from another word.
+TRIGRAM_MIN_LETTERS: Final = 4
+
 SEARCH_CONNECTION_SETTINGS: Final = {
     "statement_timeout": str(SEARCH_STATEMENT_TIMEOUT_MS),
     "default_transaction_read_only": "on",
+    "pg_trgm.word_similarity_threshold": str(WORD_SIMILARITY_THRESHOLD),
 }
 
 #: `registry_tinql` builds the query from the folded words (any word matches; typos and the last
@@ -53,8 +62,11 @@ WITH q AS (
   SELECT public.registry_tinql(CAST(:positives AS text[]), true)  AS match_q,
          public.registry_tinql(CAST(:negatives AS text[]), false) AS exclude_q
 ),
-hits AS (
-  SELECT cs.catalog_id, tin.full_score(cs.ctid) AS score, c.created_at
+-- Every match, before `restrict`: whether TIN found anything is decided here, so a restriction can
+-- only ever remove catalogs from what the unrestricted search shows, never bring in others.
+matched AS (
+  SELECT cs.catalog_id, tin.full_score(cs.ctid) AS score, c.created_at,
+         cs.has_opds_catalog, cs.is_open, cs.audiobook_only
     FROM catalog_search cs
     CROSS JOIN q
     JOIN catalogs c ON c.id = cs.catalog_id AND c.status = 'published'
@@ -63,9 +75,38 @@ hits AS (
           OR cs.places ==> q.match_q)
      AND (q.exclude_q IS NULL
           OR NOT (cs.title ==> q.exclude_q OR cs.city ==> q.exclude_q OR cs.places ==> q.exclude_q))
-     AND (NOT CAST(:opds AS boolean) OR cs.has_opds_catalog)
-     AND (NOT CAST(:no_open AS boolean) OR NOT cs.is_open)
-     AND (NOT CAST(:no_audiobook AS boolean) OR NOT cs.audiobook_only)
+),
+-- The typed words a trigram match may rescue: not in a quoted phrase, long enough to compare.
+words AS (
+  SELECT DISTINCT w.word
+    FROM unnest(CAST(:positives AS text[])) AS chunk,
+         LATERAL regexp_split_to_table(public.fold(chunk), '[^[:alnum:]]+') AS w(word)
+   WHERE char_length(w.word) >= {TRIGRAM_MIN_LETTERS}
+     AND left(chunk, 1) <> '"'  -- a quoted phrase is never loosened into words
+),
+-- Only when TIN found nothing: catalogs whose text has a word like a typed one (a typo in the
+-- first letter, two letters swapped in a short word). Scored below any TIN hit could be
+-- (similarity - 1 is at most 0), most alike first.
+near AS (
+  SELECT cs.catalog_id,
+         max(greatest(word_similarity(w.word, cs.title), word_similarity(w.word, cs.city),
+                      word_similarity(w.word, cs.places))) - 1 AS score,
+         c.created_at, cs.has_opds_catalog, cs.is_open, cs.audiobook_only
+    FROM words w
+    JOIN catalog_search cs ON w.word <% cs.title OR w.word <% cs.city OR w.word <% cs.places
+    CROSS JOIN q
+    JOIN catalogs c ON c.id = cs.catalog_id AND c.status = 'published'
+   WHERE NOT EXISTS (SELECT 1 FROM matched)
+     AND (q.exclude_q IS NULL
+          OR NOT (cs.title ==> q.exclude_q OR cs.city ==> q.exclude_q OR cs.places ==> q.exclude_q))
+   GROUP BY cs.catalog_id, c.created_at, cs.has_opds_catalog, cs.is_open, cs.audiobook_only
+),
+hits AS (
+  SELECT catalog_id, score, created_at
+    FROM (SELECT * FROM matched UNION ALL SELECT * FROM near) found
+   WHERE (NOT CAST(:opds AS boolean) OR found.has_opds_catalog)
+     AND (NOT CAST(:no_open AS boolean) OR NOT found.is_open)
+     AND (NOT CAST(:no_audiobook AS boolean) OR NOT found.audiobook_only)
 )
 SELECT t.total, p.score, """
     + CATALOG_COLUMNS

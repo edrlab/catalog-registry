@@ -152,9 +152,10 @@ stale `.env` gets caught.
 
 ## The database
 
-**Local Postgres is the development database. The Cloud SQL sandbox is not.**
+**Local Postgres is the development database. The PlanetScale database is not.**
 
-Local development and CI use containers; production uses Cloud SQL. A shared cloud
+Local development and CI use containers; production uses PlanetScale Postgres. Never run data
+scripts (seeds, imports, benchmarks) against it without the maintainer's go-ahead. A shared cloud
 development database means two
 developers running migrations against the same schema and clobbering each other, destructive
 migration testing becomes frightening, and test runs become slow and order-dependent. A
@@ -365,7 +366,7 @@ testcontainers starts a fresh Postgres. CI sets it, because GitHub Actions alrea
 the container and health-check wiring.
 
 **The suite refuses to run against anything that is not a local throwaway database**, because
-it applies migrations and writes rows. The Cloud SQL Auth Proxy publishes a remote instance on
+it applies migrations and writes rows. A tunnel or proxy publishes a remote instance on
 `localhost`, so the guard also checks the database name looks like a test database.
 `ALLOW_REMOTE_TEST_DATABASE=1` overrides it, deliberately.
 

@@ -24,7 +24,7 @@ make test                                  # the same searches as exact-result t
 
 ## Score
 
-With today's results the score is **0.950** over 90 scored searches; 85 are exactly the ideal answer. Mean recall 0.97, mean precision 0.95 (searches whose ideal is nothing are not in those two).
+With today's results the score is **0.950** over 90 scored searches; 85 are exactly the ideal answer. Mean recall 0.97, mean precision 0.96 (searches whose ideal is nothing are not in those two).
 
 A search scores **1.0** when it returns the expected catalogs, in the expected order, and nothing else. It is `ndcg x precision`: *recall* is how many expected catalogs came back, *precision* is how many of the catalogs returned were expected (noise lowers it), and *ndcg* rewards the right order (expected catalogs counting more the earlier they appear). A search whose ideal is *nothing* scores 1.0 for nothing and 0.0 for anything. The headline number is the mean over all scored searches, so a tweak to ranking, weights or the typo threshold becomes one number to compare.
 
@@ -64,7 +64,7 @@ A search scores **1.0** when it returns the expected catalogs, in the expected o
 | Search | What it checks | Expected | Today | Score | Note |
 | --- | --- | --- | --- | --- | --- |
 | `Belgio` | Italian name of Belgium, Italian isn't official there | nothing | Lirtuel (typo or prefix only), De Openbare (typo or prefix only) | 0.00 | Found as a typo of Belgie and Belgien (one letter). Harmless, arguably helpful. |
-| `Vallonia` | Italian name of Wallonia | nothing | nothing | 1.00 | Two letters from Wallonia, beyond the allowance for a word of this length. |
+| `Vallonia` | Italian name of Wallonia | Lirtuel | Lirtuel (typo or prefix only) | 1.00 | Two letters from Wallonia: no word matches, so the trigram rescue finds the region. |
 | `Zwitserland` | Dutch name of Switzerland, Dutch isn't official there | nothing | nothing | 1.00 |  |
 
 ## Titles

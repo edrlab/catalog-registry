@@ -68,7 +68,7 @@ ALLOW_REMOTE = "ALLOW_REMOTE_TEST_DATABASE"
 def assert_database_is_disposable(url: str) -> None:
     """Refuse to run the suite against a shared server.
 
-    The suite applies migrations and writes rows. Against the Cloud SQL sandbox that means
+    The suite applies migrations and writes rows. Against a shared database that means
     running DDL on a schema someone else is using, the exact "two developers clobbering
     each other" that the conventions keeps local databases for. Set
     ALLOW_REMOTE_TEST_DATABASE=1 to override, deliberately.
@@ -86,13 +86,13 @@ def assert_database_is_disposable(url: str) -> None:
             f"The suite runs migrations and writes rows. Set {ALLOW_REMOTE}=1 if you really "
             "mean it."
         )
-    # The Cloud SQL Auth Proxy publishes a remote instance on localhost, so the host check
-    # alone would wave the sandbox through. Every legitimate path names its database for
+    # A tunnel or proxy publishes a remote instance on localhost, so the host check
+    # alone would wave it through. Every legitimate path names its database for
     # what it is: `test` from testcontainers, `registry_test` in CI and compose.
     if "test" not in database:
         raise RuntimeError(
             f"TEST_DATABASE_URL names the database {database!r}, which does not look like a "
-            f"test database. If this is the Cloud SQL Auth Proxy, stop. Set {ALLOW_REMOTE}=1 "
+            f"test database. If this is a tunnel to a remote database, stop. Set {ALLOW_REMOTE}=1 "
             "to override."
         )
 
