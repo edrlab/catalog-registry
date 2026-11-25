@@ -21,6 +21,7 @@ from registry.core.errors import (
     FieldValidationError,
     PermissionDeniedError,
     RegistryError,
+    WriteTimeoutError,
 )
 
 
@@ -97,7 +98,7 @@ async def handle_registry_error(_request: Request, exc: Exception) -> JSONRespon
         errors=exc.errors if isinstance(exc, FieldValidationError) else None,
         instance=build_problem_instance(_request),
     )
-    if isinstance(exc, ChecksBusyError):
+    if isinstance(exc, ChecksBusyError | WriteTimeoutError):
         response.headers["retry-after"] = str(exc.retry_after)
     if isinstance(exc, AuthenticationError):
         # RFC 9110 §15.5.2: a 401 must say how to authenticate.

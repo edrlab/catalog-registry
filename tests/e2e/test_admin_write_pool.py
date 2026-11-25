@@ -93,6 +93,9 @@ async def test_a_write_blocked_by_a_lock_fails_fast_and_the_pool_recovers(
     assert blocked.status_code == 503, blocked.text
     assert blocked.headers["content-type"].startswith(PROBLEM_JSON_MEDIA_TYPE)
     assert blocked.json()["detail"] == "The change waited too long for another one; try again."
+    # Its own type and a retry hint, so a client never takes it for `unavailable` (not set up).
+    assert blocked.json()["type"] == "https://registry.thoriumreader.com/problems/write-timeout"
+    assert blocked.headers["retry-after"] == "2"
     assert LOCK_TIMEOUT_MS / 1000 <= waited < 2
     assert released.status_code == 200, released.text
     assert released.json()["name"] == "Renamed"
