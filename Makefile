@@ -123,8 +123,8 @@ psql:  ## Open a psql shell on the development database
 
 ##@ Checks
 
-test:  ## Run the test suite against a throwaway Postgres container
-	uv run pytest
+test:  ## Run the test suite in parallel, one throwaway Postgres container per worker
+	uv run pytest -n auto
 
 lint:  ## ruff check, ruff format --check, mypy --strict on src, tests and scripts
 	uv run ruff check .

@@ -14,18 +14,24 @@ The container-versus-CI-services switch is `TEST_DATABASE_URL`. It is deliberate
 would fail the application at boot.
 """
 
+import asyncio
+import ipaddress
 import json
 import os
+import socket
 import subprocess
 import sys
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
+import asyncpg  # type: ignore[import-untyped]
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncSession,
@@ -65,6 +71,91 @@ LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "postgres", "db"})
 ALLOW_REMOTE = "ALLOW_REMOTE_TEST_DATABASE"
 
 
+class RemoteNetworkError(RuntimeError):
+    """A test tried to reach a host that is not local. Not an `OSError`, so code that treats
+    network errors as "unreachable" cannot swallow it."""
+
+
+def refuse_remote_network() -> None:
+    """No test reaches the internet, the live registry or a hosted database.
+
+    Every name lookup and every TCP connect in the test process is checked: a local name (and
+    the addresses it resolved to) or a loopback address passes, anything else raises. With
+    parallel workers a stray call would otherwise go out once per worker. A deliberate remote
+    test database (`ALLOW_REMOTE_TEST_DATABASE=1`) is allowed by its host only.
+    """
+    allowed_names = set(LOCAL_HOSTS)
+    if os.environ.get(ALLOW_REMOTE) and (supplied := os.environ.get("TEST_DATABASE_URL")):
+        allowed_names.add(urlsplit(supplied).hostname or "")
+    resolved: set[str] = set()
+    lookup, connect, connect_ex = (
+        socket.getaddrinfo,
+        socket.socket.connect,
+        socket.socket.connect_ex,
+    )
+
+    def address(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+        try:
+            return ipaddress.ip_address(host.split("%", maxsplit=1)[0])
+        except ValueError:
+            return None
+
+    def is_local(host: object) -> bool:
+        if not isinstance(host, str):
+            return False
+        if host in allowed_names or host in resolved:
+            return True
+        parsed = address(host)
+        return parsed is not None and parsed.is_loopback
+
+    def guarded_lookup(host: Any, *args: Any, **kwargs: Any) -> Any:
+        host_name = host.decode() if isinstance(host, bytes) else host
+        # An address literal is parsed, not looked up: no traffic. Its connect is still checked.
+        if host_name is not None and not is_local(host_name) and address(host_name) is None:
+            raise RemoteNetworkError(f"a test tried to resolve {host_name!r}")
+        answers = lookup(host, *args, **kwargs)
+        resolved.update(str(answer[4][0]) for answer in answers)
+        return answers
+
+    def checked(address: Any) -> None:
+        # A unix socket (Docker's API for testcontainers) is a path, not a host.
+        if isinstance(address, tuple) and not is_local(address[0]):
+            raise RemoteNetworkError(f"a test tried to connect to {address[0]!r}")
+
+    def guarded_connect(self: socket.socket, address: Any) -> None:
+        checked(address)
+        connect(self, address)
+
+    def guarded_connect_ex(self: socket.socket, address: Any) -> int:
+        checked(address)
+        return connect_ex(self, address)
+
+    # Through `vars`, so the type checker does not compare these with the typeshed signatures.
+    vars(socket)["getaddrinfo"] = guarded_lookup
+    socket.socket.connect = guarded_connect  # type: ignore[method-assign,assignment]
+    socket.socket.connect_ex = guarded_connect_ex  # type: ignore[method-assign,assignment]
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Runs in every process, the xdist workers included, before any worker starts.
+
+    A parallel run without `TEST_DATABASE_URL` starts one container here, in the controller, and
+    hands it to the workers through that variable: one server with a database per worker, as in
+    CI. A container per worker would multiply the memory and the start-up for nothing.
+    """
+    refuse_remote_network()
+    controller = "PYTEST_XDIST_WORKER" not in os.environ
+    parallel = config.getoption("numprocesses", default=None)
+    if parallel and controller and not os.environ.get("TEST_DATABASE_URL"):
+        from testcontainers.community.postgres import PostgresContainer  # noqa: PLC0415
+
+        # `stop` removes the container and its volume; Ryuk removes them if the run is killed.
+        container = PostgresContainer(LEAD_IMAGE, driver="asyncpg").start()
+        config.add_cleanup(container.stop)
+        os.environ["TEST_DATABASE_URL"] = container.get_connection_url()
+        config.add_cleanup(lambda: os.environ.__delitem__("TEST_DATABASE_URL"))
+
+
 def assert_database_is_disposable(url: str) -> None:
     """Refuse to run the suite against a shared server.
 
@@ -97,13 +188,52 @@ def assert_database_is_disposable(url: str) -> None:
         )
 
 
+def reset_worker_database(url: str, worker: str, *, create: bool) -> str:
+    """Drop the database named for the pytest-xdist *worker* on the server *url* names, then
+    create it afresh when *create*; returns its URL.
+
+    Workers cannot share one: the lock and race tests commit real rows and hold real locks, and
+    each worker migrates its database at start. Dropped first, so a crashed run leaves nothing the
+    next one trips over, and again at the end, so a run leaves nothing on the server. The
+    migrations create the extensions.
+    """
+    server = make_url(url)
+    name = f"{server.database}_{worker}"
+
+    async def reset() -> None:
+        connection = await asyncpg.connect(
+            # The maintenance database: the one named in *url* need not exist yet.
+            server.set(drivername="postgresql", database="postgres").render_as_string(
+                hide_password=False
+            )
+        )
+        try:
+            await connection.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+            if create:
+                await connection.execute(f'CREATE DATABASE "{name}"')
+        finally:
+            await connection.close()
+
+    asyncio.run(reset())
+    return server.set(database=name).render_as_string(hide_password=False)
+
+
 @pytest.fixture(scope="session")
 def database_url() -> Iterator[str]:
-    """A running Postgres: supplied by CI, or a container started for this run."""
+    """A running Postgres: supplied by CI, or a container started for this run.
+
+    Under pytest-xdist each worker runs this once and gets its own database on the supplied
+    server (`pytest_configure` supplies one when nothing else does).
+    """
     supplied = os.environ.get("TEST_DATABASE_URL")
     if supplied:
         assert_database_is_disposable(supplied)
-        yield supplied
+        worker = os.environ.get("PYTEST_XDIST_WORKER")
+        if not worker:
+            yield supplied
+            return
+        yield reset_worker_database(supplied, worker, create=True)
+        reset_worker_database(supplied, worker, create=False)
         return
 
     # Deferred: CI supplies TEST_DATABASE_URL and must not need testcontainers importable.
