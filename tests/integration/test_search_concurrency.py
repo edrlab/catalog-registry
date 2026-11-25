@@ -19,7 +19,6 @@ final row would both fail.
 
 import asyncio
 import re
-import time
 import uuid
 from collections.abc import AsyncIterator
 
@@ -27,9 +26,9 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
-pytestmark = pytest.mark.integration
+from tests.lock_helpers import wait_until_blocked
 
-OBSERVE_FOR_SECONDS = 5.0
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
@@ -38,17 +37,6 @@ async def engines(migrated_database: str) -> AsyncIterator[list[AsyncEngine]]:
     yield created
     for engine in created:
         await engine.dispose()
-
-
-async def wait_until_blocked(observer: AsyncConnection, victim: int, blocker: int) -> bool:
-    """Poll `pg_blocking_pids` until *victim* is waiting on *blocker*, or give up."""
-    deadline = time.monotonic() + OBSERVE_FOR_SECONDS
-    while time.monotonic() < deadline:
-        blocked_by = await observer.scalar(text("SELECT pg_blocking_pids(:v)"), {"v": victim})
-        if blocker in (blocked_by or []):
-            return True
-        await asyncio.sleep(0.02)
-    return False
 
 
 async def test_two_transactions_adding_different_subdivisions_both_end_up_in_the_places(

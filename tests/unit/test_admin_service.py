@@ -43,6 +43,7 @@ class StoredIdentity:
     ("stored", "given", "allowed"),
     [
         ((None, None), ("https://idp", "sub-1"), True),  # first login records the account
+        (("dev", None), ("https://idp", "sub-1"), True),  # a dev login first: no subject yet
         (("https://idp", "sub-1"), ("https://idp", "sub-1"), True),  # the same account again
         (("https://idp", "sub-1"), ("https://idp", "sub-2"), False),  # a reissued mailbox
         (("https://idp", "sub-1"), ("https://other", "sub-1"), False),  # another provider
