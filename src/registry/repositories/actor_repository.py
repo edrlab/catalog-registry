@@ -44,11 +44,18 @@ noted AS (
             (SELECT last_seen_at FROM previous) AS previous_seen_at
 )
 SELECT * FROM noted
-UNION ALL
-SELECT id::text, email, name, role::text, is_active, created_at,
-       identity_issuer, identity_subject, last_seen_at
-  FROM actors
- WHERE email = :email AND NOT EXISTS (SELECT 1 FROM noted)
+"""
+)
+
+
+#: The person as stored now, when the login wrote nothing (within the minute, or another account).
+#: A statement of its own: the upsert's snapshot can predate a change it waited on (a deactivation,
+#: a first login committed meanwhile), and this one sees it.
+_READ_LOGIN: Final = text(
+    """
+SELECT id::text AS id, email, name, role::text AS role, is_active, created_at,
+       identity_issuer, identity_subject, last_seen_at AS previous_seen_at
+  FROM actors WHERE email = :email
 """
 )
 
@@ -94,9 +101,7 @@ class ActorRepository:
         params = {"email": email, "name": name, "issuer": issuer, "subject": subject}
         row = (await self._session.execute(_PERSIST_LOGIN, params)).mappings().first()
         if row is None:
-            # A first login for this email committed while this one waited on it: the update was
-            # skipped and the read-back's snapshot predates the row. A new statement sees it.
-            row = (await self._session.execute(_PERSIST_LOGIN, params)).mappings().one()
+            row = (await self._session.execute(_READ_LOGIN, {"email": email})).mappings().one()
         await self._session.commit()
         return AdminActor(
             id=row["id"],

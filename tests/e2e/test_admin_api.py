@@ -276,11 +276,13 @@ def deployed(admin_app: Any) -> None:
     admin_app.state.resolve_admin_key = resolve
 
 
-def access_headers(email: str, subject: str | None = None) -> dict[str, str]:
+def access_headers(email: str, subject: str | None = "") -> dict[str, str]:
+    """A signed token for *email*. Its `sub` defaults to one derived from the email; None leaves
+    the claim out."""
     now = int(time.time())
     claims = {"iss": ISSUER, "aud": [AUDIENCE], "exp": now + 300, "email": email}
     if subject is not None:
-        claims["sub"] = subject
+        claims["sub"] = subject or f"sub-{email}"
     token = jwt.encode(claims, SIGNING_KEY, algorithm="RS256")
     return {"X-Registry-Service-Key": ADMIN_SERVICE_KEY, "Cf-Access-Jwt-Assertion": token}
 
@@ -295,6 +297,30 @@ async def test_the_dev_identity_header_is_ignored_in_a_deployed_environment(
     deployed(admin_app)
 
     response = await admin_client.get("/admin/me", headers=admin_headers("x@evil.org"))
+
+    assert response.status_code == 401
+    assert await count_actors(db_session) == 0
+
+
+@pytest.mark.parametrize("subject", [None, ""])
+async def test_a_token_without_a_subject_is_refused(
+    admin_app: Any, admin_client: AsyncClient, db_session: AsyncSession, subject: str | None
+) -> None:
+    """`sub` is what binds a person to one account; without it the identity check could not run."""
+    deployed(admin_app)
+    now = int(time.time())
+    claims: dict[str, Any] = {
+        "iss": ISSUER,
+        "aud": [AUDIENCE],
+        "exp": now + 300,
+        "email": "nosub@edrlab.org",
+    }
+    if subject is not None:
+        claims["sub"] = subject
+    token = jwt.encode(claims, SIGNING_KEY, algorithm="RS256")
+    headers = {"X-Registry-Service-Key": ADMIN_SERVICE_KEY, "Cf-Access-Jwt-Assertion": token}
+
+    response = await admin_client.get("/admin/me", headers=headers)
 
     assert response.status_code == 401
     assert await count_actors(db_session) == 0
@@ -806,7 +832,10 @@ async def test_the_list_is_one_statement_whatever_its_size(
         event.remove(db_connection.sync_connection, "before_cursor_execute", record)
 
     assert len(big["items"]) > 60
-    assert small == large == 2  # actor login + the list
+    # The login is one statement, or two within the minute (nothing to note, then a fresh read);
+    # the list is one, whatever the number of rows.
+    assert small == 2 and large == 3
+    assert sum("actors" not in s for s in seen) == 1
 
 
 # --- filter options ----------------------------------------------------------------------------

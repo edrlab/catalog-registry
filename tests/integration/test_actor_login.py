@@ -113,6 +113,51 @@ async def test_two_first_logins_at_once_both_answer(engine: AsyncEngine, email: 
     assert actor.id == inserted
 
 
+async def test_another_account_arriving_with_the_first_login_is_refused(
+    engine: AsyncEngine, email: str
+) -> None:
+    """A second account with the same email, waiting on the first login's row: it must be refused
+    against the identity that row stores, and must not replace it."""
+    async with engine.connect() as first, engine.connect() as observer:
+        blocker = int(await first.scalar(text("SELECT pg_backend_pid()")) or 0)
+        await first.execute(
+            text(
+                "INSERT INTO actors (email, identity_issuer, identity_subject, last_seen_at) "
+                "VALUES (:e, :i, 'sub-1', now())"
+            ),
+            {"e": email, "i": IDP},
+        )
+        second = asyncio.create_task(log_in(engine, email, subject="sub-2"))
+        blocked = await wait_until_blocked(observer, None, blocker)
+        await first.commit()
+        with pytest.raises(PermissionDeniedError):
+            await asyncio.wait_for(second, timeout=10)
+    row = await stored(engine, email)
+
+    assert blocked, "the second login never waited on the first"
+    assert (row.identity_issuer, row.identity_subject) == (IDP, "sub-1")
+
+
+async def test_a_deactivation_committed_while_a_login_waits_is_seen(
+    engine: AsyncEngine, email: str
+) -> None:
+    """The login notes nothing (seen within the minute) and must answer from the row as it is now,
+    not from the snapshot it started with: a person deactivated meanwhile is refused."""
+    await log_in(engine, email)
+    async with engine.connect() as admin, engine.connect() as observer:
+        blocker = int(await admin.scalar(text("SELECT pg_backend_pid()")) or 0)
+        await admin.execute(
+            text("UPDATE actors SET is_active = false WHERE email = :e"), {"e": email}
+        )
+        login = asyncio.create_task(log_in(engine, email))
+        blocked = await wait_until_blocked(observer, None, blocker)
+        await admin.commit()
+        with pytest.raises(PermissionDeniedError):
+            await asyncio.wait_for(login, timeout=10)
+
+    assert blocked, "the login never waited on the deactivation"
+
+
 async def test_a_first_identity_is_recorded_even_within_the_minute(
     engine: AsyncEngine, email: str
 ) -> None:

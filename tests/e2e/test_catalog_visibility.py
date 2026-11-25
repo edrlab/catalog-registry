@@ -39,6 +39,6 @@ async def test_each_status_is_seen_exactly_where_the_contract_says(
     feed = await client.get("/")
     search = await client.get("/search", params={"query": f'"{title}"'})
 
-    assert (by_id.status_code == 200) == (status in DIRECT_LINK_STATUSES)
+    assert by_id.status_code == (200 if status in DIRECT_LINK_STATUSES else 404)
     assert (catalog_id in identifiers(feed.json())) == (status in LISTED_STATUSES)
     assert (catalog_id in identifiers(search.json())) == (status in LISTED_STATUSES)
