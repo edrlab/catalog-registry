@@ -14,7 +14,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any, Final
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -109,8 +109,7 @@ _ROW_COLUMNS: Final = """
 #: subdivision name; `public.fold` is the database's own folding.
 _LIST: Final = """
 WITH matched AS (
-  SELECT c.id, c.status, lower(c.title) AS sort_name,
-         (SELECT min(k.kind::text) FROM catalog_kinds k WHERE k.catalog_id = c.id) AS sort_kind
+  SELECT c.id, c.status, lower(c.title) AS sort_name, {sort_kind} AS sort_kind
     FROM catalogs c
    WHERE c.status = ANY (CAST(:statuses AS catalog_status[]))
      AND (CAST(:kinds AS text[]) IS NULL OR EXISTS (
@@ -138,10 +137,10 @@ WITH matched AS (
                       WHERE s.catalog_id = c.id))) AS hay) h
             WHERE strpos(h.hay, public.fold(w.word)) = 0))
 ), paged AS (
+  -- The page is cut first (a top-N sort that stays in memory), then numbered: numbering the whole
+  -- filtered set sorted every catalog to disk, 0.7 s at 100k catalogs.
   SELECT m.id, row_number() OVER (ORDER BY {order}) AS pos
-    FROM matched m
-   ORDER BY pos
-   LIMIT :limit OFFSET :offset
+    FROM (SELECT * FROM matched m ORDER BY {order} LIMIT :limit OFFSET :offset) m
 )
 SELECT (SELECT count(*) FROM matched) AS total,
 {columns}
@@ -150,8 +149,17 @@ SELECT (SELECT count(*) FROM matched) AS total,
   LEFT JOIN catalogs c ON c.id = paged.id
  ORDER BY paged.pos
 """
+#: Only the kind sort reads a catalog's kinds for every match; the other sorts never pay for it.
+_SORT_KIND: Final = "(SELECT min(k.kind::text) FROM catalog_kinds k WHERE k.catalog_id = c.id)"
 _LISTS: Final = {
-    sort: text(_LIST.format(order=order, columns=_ROW_COLUMNS)) for sort, order in _ORDER.items()
+    sort: text(
+        _LIST.format(
+            order=order,
+            columns=_ROW_COLUMNS,
+            sort_kind=_SORT_KIND if sort == "kind" else "CAST(NULL AS text)",
+        )
+    )
+    for sort, order in _ORDER.items()
 }
 
 #: One catalog with everything the detail page shows, in one statement. A malformed id never
@@ -517,6 +525,9 @@ class AdminCatalogWriter:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        #: The identity map holds objects weakly: without this reference the catalog that
+        #: `fetch_catalog_document` built the document from is collected before the save.
+        self._loaded: Catalog | None = None
 
     async def lock_admin_catalog(self, catalog_id: str) -> AdminCatalogState | None:
         row = (await self._session.execute(_LOCK_CATALOG, {"id": catalog_id})).first()
@@ -600,11 +611,16 @@ class AdminCatalogWriter:
         await self._session.execute(_DELETE_CATALOG, {"id": catalog_id})
 
     async def _load_catalog(self, catalog_id: str) -> Catalog:
-        # Already locked by `lock_admin_catalog` in this transaction.
-        statement = (
-            select(Catalog).where(Catalog.id == uuid.UUID(catalog_id)).options(*EAGER_COLLECTIONS)
+        # Already locked by `lock_admin_catalog` in this transaction. `get` answers from the
+        # session when `fetch_catalog_document` loaded it already: an edit read it twice before
+        # (six statements, one round trip each).
+        catalog = await self._session.get(
+            Catalog, uuid.UUID(catalog_id), options=list(EAGER_COLLECTIONS)
         )
-        return (await self._session.scalars(statement)).unique().one()
+        if catalog is None:
+            raise LookupError(catalog_id)  # unreachable: the row is locked and exists
+        self._loaded = catalog
+        return catalog
 
     async def _flush_catalog(self) -> None:
         try:

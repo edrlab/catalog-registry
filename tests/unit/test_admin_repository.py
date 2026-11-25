@@ -35,3 +35,9 @@ async def test_a_violated_constraint_that_is_not_a_duplicate_stays_an_integrity_
 
     with pytest.raises(IntegrityError):
         await AdminCatalogWriter(session).persist_new_catalog(DOCUMENT, uuid.uuid4(), publish=False)
+
+
+def test_only_the_kind_sort_reads_every_matched_catalogs_kinds() -> None:
+    from registry.repositories.admin_repository import _LISTS, _SORT_KIND  # noqa: PLC0415
+
+    assert [sort for sort, statement in _LISTS.items() if _SORT_KIND in statement.text] == ["kind"]

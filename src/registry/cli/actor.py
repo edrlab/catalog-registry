@@ -3,6 +3,7 @@
     python -m registry.cli actor set someone@edrlab.org --role admin --name "Ada Lovelace"
     python -m registry.cli actor set former@edrlab.org --deactivate
     python -m registry.cli actor set former@edrlab.org --activate
+    python -m registry.cli actor set someone@edrlab.org --forget-identity
 
 The first administrator has to come from somewhere, and the CLI is trusted by holding the database
 credential, as `seed` and `add` are. Everyone after that is a viewer on first login until an
@@ -16,7 +17,7 @@ from collections.abc import Sequence
 from sqlalchemy import text
 
 from registry.core.config import Settings
-from registry.core.errors import ValidationError
+from registry.core.errors import LastAdminError, ValidationError
 from registry.db.session import build_session_factory, create_database_engine
 from registry.domain.enums import ActorRole
 
@@ -30,10 +31,21 @@ VALUES (:email, :name, CAST(coalesce(:role, 'viewer') AS actor_role),
 ON CONFLICT (email) DO UPDATE
    SET role = CAST(coalesce(:role, actors.role::text) AS actor_role),
        name = coalesce(:name, actors.name),
-       is_active = coalesce(CAST(:is_active AS boolean), actors.is_active)
+       is_active = coalesce(CAST(:is_active AS boolean), actors.is_active),
+       identity_issuer = CASE WHEN CAST(:forget AS boolean) THEN NULL
+                              ELSE actors.identity_issuer END,
+       identity_subject = CASE WHEN CAST(:forget AS boolean) THEN NULL
+                               ELSE actors.identity_subject END
 RETURNING email, role::text AS role, is_active
 """
 )
+
+#: The active admins, locked in id order: the order the admin API locks them in, so a change here
+#: and one there serialise instead of each removing "the other" last admin.
+_LOCK_ACTIVE_ADMINS = text(
+    "SELECT id FROM actors WHERE role = 'admin' AND is_active ORDER BY id FOR UPDATE"
+)
+_COUNT_ACTIVE_ADMINS = text("SELECT count(*) FROM actors WHERE role = 'admin' AND is_active")
 
 
 def build_actor_parser() -> argparse.ArgumentParser:
@@ -49,25 +61,51 @@ def build_actor_parser() -> argparse.ArgumentParser:
     access.add_argument(
         "--deactivate", dest="active", action="store_const", const=False, help="remove their access"
     )
+    parser.add_argument(
+        "--forget-identity",
+        dest="forget",
+        action="store_true",
+        help="let the next login record a new account for this email",
+    )
     return parser
 
 
 async def persist_actor(
-    settings: Settings, *, email: str, role: str | None, name: str | None, active: bool | None
+    settings: Settings,
+    *,
+    email: str,
+    role: str | None,
+    name: str | None,
+    active: bool | None,
+    forget: bool = False,
 ) -> tuple[str, str, bool]:
     engine = create_database_engine(settings)
     try:
         async with build_session_factory(engine)() as session:
+            admins_before = len((await session.execute(_LOCK_ACTIVE_ADMINS)).all())
             row = (
                 (
                     await session.execute(
                         _SET_ACTOR,
-                        {"email": email, "role": role, "name": name, "is_active": active},
+                        {
+                            "email": email,
+                            "role": role,
+                            "name": name,
+                            "is_active": active,
+                            "forget": forget,
+                        },
                     )
                 )
                 .mappings()
                 .one()
             )
+            # Same rule as the admin API. With no active admin to begin with (a new database,
+            # or a recovery), the CLI is how the first one is made, so that case stays open.
+            if admins_before and not await session.scalar(_COUNT_ACTIVE_ADMINS):
+                await session.rollback()
+                raise LastAdminError(
+                    f"{email} is the last active admin; make someone else admin first."
+                )
             await session.commit()
             return row["email"], row["role"], row["is_active"]
     finally:
@@ -86,6 +124,7 @@ def main(argv: Sequence[str] = ()) -> int:
             role=arguments.role,
             name=arguments.name,
             active=arguments.active,
+            forget=arguments.forget,
         )
     )
     print(f"{stored_email}: {role}, {'active' if active else 'deactivated'}")

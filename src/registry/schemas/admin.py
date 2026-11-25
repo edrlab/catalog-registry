@@ -28,6 +28,7 @@ from registry.domain.enums import (
     CoverageScope,
     PublicationType,
 )
+from registry.domain.lifecycle import CatalogAction
 
 
 class AdminModel(BaseModel):
@@ -115,7 +116,7 @@ class CatalogListItem(AdminModel):
     status: CatalogStatus
     recommended: bool
     version: int
-    allowed_actions: list[str]
+    allowed_actions: list[CatalogAction]
     public_url: str | None
 
 

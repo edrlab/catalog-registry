@@ -9,20 +9,53 @@ from registry.domain.admin_models import AdminActor, AdminUser
 from registry.domain.enums import ActorRole
 
 #: One statement for "find or create, and note the login". `role` is never in the update list, so a
-#: login can never change a role, and an existing `name` is kept over the token's. A write per
-#: request is fine at this volume; if it ever is not, update `last_seen_at` only when it is stale.
+#: login can never change a role, and an existing `name` is kept over the token's. The first
+#: identity is kept too, as a pair: the first login that brings a subject records its issuer with
+#: it (a dev login before it has none). The service refuses a later login that brings another
+#: identity, so a reissued mailbox does not inherit the account, and such a login writes nothing.
+#:
+#: `last_seen_at` is written at most once a minute: every admin request comes through here, and most
+#: are page views that need no write. Within the minute the row is read back unchanged (the second
+#: half of the UNION), so "previous visit" means the last one more than a minute ago.
 _PERSIST_LOGIN: Final = text(
     """
-WITH previous AS (SELECT last_seen_at FROM actors WHERE email = :email)
-INSERT INTO actors (email, name, identity_issuer, identity_subject, last_seen_at)
-VALUES (:email, :name, :issuer, :subject, now())
-ON CONFLICT (email) DO UPDATE
-   SET last_seen_at = now(),
-       identity_issuer = EXCLUDED.identity_issuer,
-       identity_subject = EXCLUDED.identity_subject,
-       name = coalesce(actors.name, EXCLUDED.name)
-RETURNING id::text AS id, email, name, role::text AS role, is_active, created_at,
-          identity_issuer, identity_subject, (SELECT last_seen_at FROM previous) AS previous_seen_at
+WITH previous AS (SELECT last_seen_at FROM actors WHERE email = :email),
+noted AS (
+  INSERT INTO actors (email, name, identity_issuer, identity_subject, last_seen_at)
+  VALUES (:email, :name, :issuer, :subject, now())
+  ON CONFLICT (email) DO UPDATE
+     SET last_seen_at = now(),
+         identity_issuer = CASE WHEN actors.identity_subject IS NULL
+                                 AND EXCLUDED.identity_subject IS NOT NULL
+                                THEN EXCLUDED.identity_issuer
+                                ELSE coalesce(actors.identity_issuer, EXCLUDED.identity_issuer)
+                           END,
+         identity_subject = coalesce(actors.identity_subject, EXCLUDED.identity_subject),
+         name = coalesce(actors.name, EXCLUDED.name)
+   WHERE (actors.last_seen_at IS NULL
+          OR actors.last_seen_at < now() - interval '1 minute'
+          OR (actors.identity_subject IS NULL AND EXCLUDED.identity_subject IS NOT NULL)
+          OR (actors.name IS NULL AND EXCLUDED.name IS NOT NULL))
+     AND (actors.identity_subject IS NULL OR EXCLUDED.identity_subject IS NULL
+          OR (actors.identity_issuer, actors.identity_subject)
+             = (EXCLUDED.identity_issuer, EXCLUDED.identity_subject))
+  RETURNING id::text AS id, email, name, role::text AS role, is_active, created_at,
+            identity_issuer, identity_subject,
+            (SELECT last_seen_at FROM previous) AS previous_seen_at
+)
+SELECT * FROM noted
+"""
+)
+
+
+#: The person as stored now, when the login wrote nothing (within the minute, or another account).
+#: A statement of its own: the upsert's snapshot can predate a change it waited on (a deactivation,
+#: a first login committed meanwhile), and this one sees it.
+_READ_LOGIN: Final = text(
+    """
+SELECT id::text AS id, email, name, role::text AS role, is_active, created_at,
+       identity_issuer, identity_subject, last_seen_at AS previous_seen_at
+  FROM actors WHERE email = :email
 """
 )
 
@@ -65,16 +98,10 @@ class ActorRepository:
     async def persist_actor_login(
         self, *, email: str, name: str | None, issuer: str, subject: str | None
     ) -> AdminActor:
-        row = (
-            (
-                await self._session.execute(
-                    _PERSIST_LOGIN,
-                    {"email": email, "name": name, "issuer": issuer, "subject": subject},
-                )
-            )
-            .mappings()
-            .one()
-        )
+        params = {"email": email, "name": name, "issuer": issuer, "subject": subject}
+        row = (await self._session.execute(_PERSIST_LOGIN, params)).mappings().first()
+        if row is None:
+            row = (await self._session.execute(_READ_LOGIN, {"email": email})).mappings().one()
         await self._session.commit()
         return AdminActor(
             id=row["id"],

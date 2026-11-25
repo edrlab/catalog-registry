@@ -9,13 +9,15 @@ from joining five collections at once.
 """
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any, Final
 
 from sqlalchemy import TextClause
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from registry.core.errors import ReadTimeoutError
+from registry.core.errors import ReadTimeoutError, WriteTimeoutError
 from registry.domain.catalog_view import (
     CatalogView,
     KindRow,
@@ -50,6 +52,8 @@ CATALOG_COLUMNS: Final = """c.id AS catalog_id, c.created_at, c.title, c.descrip
 
 #: SQLSTATE `query_canceled`, what `statement_timeout` raises.
 _QUERY_CANCELED: Final = "57014"
+#: SQLSTATE `lock_not_available`, what `lock_timeout` raises.
+_LOCK_NOT_AVAILABLE: Final = "55P03"
 
 
 def build_catalog_from_row(row: Any) -> CatalogView:
@@ -115,3 +119,18 @@ async def fetch_rows(
             raise
         await session.rollback()
         return await _run(session, statement, params)
+
+
+@contextmanager
+def guard_write_timeouts() -> Iterator[None]:
+    """A write that hit the write pool's `lock_timeout` or `statement_timeout` becomes a
+    `WriteTimeoutError` (a 503 the caller can retry) instead of an unexpected error. Its
+    transaction is rolled back when the session closes."""
+    try:
+        yield
+    except DBAPIError as error:
+        if getattr(error.orig, "sqlstate", None) in (_LOCK_NOT_AVAILABLE, _QUERY_CANCELED):
+            raise WriteTimeoutError(
+                "The change waited too long for another one; try again."
+            ) from error
+        raise

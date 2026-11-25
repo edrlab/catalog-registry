@@ -41,7 +41,14 @@ from registry.domain.labels import (
     STATUS_LABELS,
 )
 from registry.domain.language import normalise_language_tag
-from registry.domain.lifecycle import TRANSITIONS, UNDO_ACTIONS, UndoAction, build_allowed_actions
+from registry.domain.lifecycle import (
+    DIRECT_LINK_STATUSES,
+    STATUS_ACTIONS,
+    TRANSITIONS,
+    UNDO_ACTIONS,
+    UndoAction,
+    build_allowed_actions,
+)
 from registry.domain.permissions import build_permissions
 from registry.repositories.protocols import ActorStore, AdminReader, AdminWriter, ProfileStore
 from registry.schemas.admin import (
@@ -79,9 +86,6 @@ SUBMITTER_PERMISSION = "catalog.publish"
 #: ISO 3166-1 alpha-2, either case.
 _COUNTRY_CODE = re.compile(r"[A-Za-z]{2}")
 
-#: A direct public link exists for the statuses the public API serves by id.
-_DIRECT_LINK_STATUSES = frozenset({CatalogStatus.PUBLISHED, CatalogStatus.UNPUBLISHED})
-
 
 async def resolve_admin_actor(store: ActorStore, identity: AdminIdentity) -> AdminActor:
     """The person behind a verified identity: found by lowercased email, or created as a viewer on
@@ -94,6 +98,16 @@ async def resolve_admin_actor(store: ActorStore, identity: AdminIdentity) -> Adm
     )
     if not actor.is_active:
         raise PermissionDeniedError("Your access has been removed.")
+    if (
+        identity.subject is not None
+        and actor.identity_subject is not None
+        and (actor.identity_issuer, actor.identity_subject) != (identity.issuer, identity.subject)
+    ):
+        # Same email, another account: a reissued mailbox, or a provider that maps someone else to
+        # it. `actor set --forget-identity` lets the next login record the new account.
+        raise PermissionDeniedError(
+            "This sign-in is not the account registered for this email; ask an administrator."
+        )
     return actor
 
 
@@ -171,7 +185,7 @@ def _list_item_fields(
         "allowed_actions": build_allowed_actions(row.status, permissions),
         "public_url": (
             f"{base_url.rstrip('/')}/catalogs/{row.id}"
-            if row.status in _DIRECT_LINK_STATUSES
+            if row.status in DIRECT_LINK_STATUSES
             else None
         ),
     }
@@ -188,6 +202,25 @@ def _require_catalog_permission(actor: AdminActor, action: str) -> None:
     permission = f"catalog.{action}"
     if permission not in build_permissions(actor.role):
         raise PermissionDeniedError(f"Your role cannot do this ({permission}).")
+
+
+def _require_lifecycle(status: CatalogStatus, action: str) -> None:
+    """Refuse *action* unless the lifecycle offers it from *status*. The same table
+    (`STATUS_ACTIONS`) computes `allowed_actions`, so an offered action is never refused here and a
+    refused one is never offered. Each refusal keeps its own problem type."""
+    if action in STATUS_ACTIONS[status]:
+        return
+    if action == "edit":
+        raise ArchivedReadOnlyError("An archived catalog cannot be edited; unarchive it first.")
+    if action == "delete":
+        raise NotDeletableError(
+            f"Only a draft can be deleted; this one is {status.value}. Archive it instead."
+        )
+    if action == "recommend":
+        raise NotPublishedError(
+            f"Only a published catalog can be recommended; this one is {status.value}."
+        )
+    raise InvalidTransitionError(f"A {status.value} catalog cannot take the action {action}.")
 
 
 async def _lock_seen_catalog(
@@ -215,12 +248,8 @@ async def apply_admin_transition(
     _require_catalog_permission(actor, action)
     normalised = _normalise_catalog_id(catalog_id)
     state = await _lock_seen_catalog(writer, normalised, version)
-    target = TRANSITIONS.get((state.status, action))
-    if target is None:
-        raise InvalidTransitionError(
-            f"A {state.status.value} catalog cannot take the action {action}."
-        )
-    await writer.persist_catalog_status(normalised, target)
+    _require_lifecycle(state.status, action)
+    await writer.persist_catalog_status(normalised, TRANSITIONS[(state.status, action)])
     await writer.commit_admin_write()
     return normalised, UNDO_ACTIONS.get((state.status, action))
 
@@ -233,10 +262,7 @@ async def apply_admin_recommendation(
     _require_catalog_permission(actor, "recommend")
     normalised = _normalise_catalog_id(catalog_id)
     state = await _lock_seen_catalog(writer, normalised, version)
-    if state.status is not CatalogStatus.PUBLISHED:
-        raise NotPublishedError(
-            f"Only a published catalog can be recommended; this one is {state.status.value}."
-        )
+    _require_lifecycle(state.status, "recommend")
     await writer.persist_catalog_recommended(normalised, recommended)
     await writer.commit_admin_write()
     return normalised
@@ -393,8 +419,7 @@ async def apply_admin_catalog_edit(
     _require_catalog_permission(actor, "edit")
     normalised = _normalise_catalog_id(catalog_id)
     state = await _lock_seen_catalog(writer, normalised, version)
-    if state.status is CatalogStatus.ARCHIVED:
-        raise ArchivedReadOnlyError("An archived catalog cannot be edited; unarchive it first.")
+    _require_lifecycle(state.status, "edit")
     current = await writer.fetch_catalog_document(normalised)
     document = _apply_fields(current, changes)
     if _comparable(document) == _comparable(current):
@@ -414,10 +439,7 @@ async def apply_admin_catalog_deletion(
     _require_catalog_permission(actor, "delete")
     normalised = _normalise_catalog_id(catalog_id)
     state = await _lock_seen_catalog(writer, normalised, version)
-    if state.status is not CatalogStatus.DRAFT:
-        raise NotDeletableError(
-            f"Only a draft can be deleted; this one is {state.status.value}. Archive it instead."
-        )
+    _require_lifecycle(state.status, "delete")
     await writer.persist_catalog_deletion(normalised)
     await writer.commit_admin_write()
 

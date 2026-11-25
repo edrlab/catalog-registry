@@ -778,3 +778,65 @@ async def test_a_check_that_runs_out_of_time_before_the_feed_is_read_is_blocked(
     assert report.feed is None
     assert {"check-timed-out", "fetch-timed-out"} <= set(codes(report))
     assert [stage.state for stage in report.stages][1:] == ["failed", "skipped", "skipped"]
+
+
+class SlowReader(FakeReader):
+    """The address stage's duplicate lookup takes longer than the whole budget."""
+
+    async def fetch_admin_catalog_by_href(
+        self, href: str, derived_id: str
+    ) -> tuple[str, str] | None:
+        await asyncio.sleep(5)
+        return None
+
+
+async def test_running_out_of_time_in_the_address_stage_reports_the_fetch_as_failed() -> None:
+    """`fetch-timed-out` is a fetch error: that stage shows failed, never skipped next to it."""
+    fetcher = FakeFetcher({FEED: answer(FEED, opds())})
+
+    reader: Any = SlowReader()  # implements only what the check reads of AdminReader
+    report = await resolve_feed_check(fetcher, reader, EDITOR, FEED, budget=0.2)
+
+    assert report.verdict == "blocked"
+    assert [(stage.key, stage.state) for stage in report.stages] == [
+        ("address", "warned"),
+        ("fetch", "failed"),
+        ("feed", "skipped"),
+        ("links", "skipped"),
+    ]
+    assert report.stages[0].duration_ms < 1000  # the address stage's own time, not the run's
+
+
+async def test_the_stage_that_runs_out_of_time_reports_its_own_duration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A fake clock: the address stage takes 3 s, the fetch 2 s before the budget ends it. The
+    fetch reports its 2 s, not the 5 s since the check began."""
+    now = [1000.0]
+    monkeypatch.setattr(feed_check_service, "time", SimpleNamespace(monotonic=lambda: now[0]))
+
+    class ClockedReader(FakeReader):
+        async def fetch_admin_catalog_by_href(
+            self, href: str, derived_id: str
+        ) -> tuple[str, str] | None:
+            now[0] += 3
+            return None
+
+    class HangingFetcher(FakeFetcher):
+        async def fetch(self, url: str, *, method: str = "GET", **options: Any) -> FetchResult:
+            now[0] += 2
+            await asyncio.sleep(5)
+            return await super().fetch(url, method=method, **options)
+
+    fetcher = HangingFetcher({FEED: answer(FEED, opds())})
+
+    reader: Any = ClockedReader()  # implements only what the check reads of AdminReader
+    report = await resolve_feed_check(fetcher, reader, EDITOR, FEED, budget=0.2)
+
+    assert [(stage.key, stage.state, stage.duration_ms) for stage in report.stages] == [
+        ("address", "passed", 3000),
+        ("fetch", "failed", 2000),
+        ("feed", "skipped", 0),
+        ("links", "skipped", 0),
+    ]
+    assert report.duration_ms == 5000

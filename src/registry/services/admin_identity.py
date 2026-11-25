@@ -99,7 +99,8 @@ async def verify_admin_token(
             audience=audiences,  # the token's `aud` must hold at least one of them
             issuer=issuer,
             leeway=CLOCK_SKEW_SECONDS,
-            options={"require": ["exp", "iss", "aud"]},
+            # `sub` too: it is what binds a person to one account (an email can be reissued).
+            options={"require": ["exp", "iss", "aud", "sub"]},
         )
     except jwt.PyJWTError as error:
         raise AuthenticationError("The token is not valid.") from error
@@ -107,6 +108,8 @@ async def verify_admin_token(
     email = claims.get("email")
     if not isinstance(email, str) or not email:
         raise AuthenticationError("The token carries no email.")
+    if not isinstance(claims.get("sub"), str) or not claims["sub"]:
+        raise AuthenticationError("The token carries no subject.")
     # Some issuers put the name under the token's custom claims instead of at the top level.
     custom = claims.get("custom")
     return build_identity(

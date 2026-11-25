@@ -132,6 +132,18 @@ class ReadTimeoutError(RegistryError):
     title = "Service Unavailable"
 
 
+class WriteTimeoutError(RegistryError):
+    """A change waited too long on a lock another change held, or ran past its statement timeout.
+    Nothing was written; the caller can simply try again. Its own type, so a client never mistakes
+    it for `unavailable` (the admin side not configured)."""
+
+    status_code = 503
+    title = "Service Unavailable"
+    problem_type = "https://registry.thoriumreader.com/problems/write-timeout"
+    #: Seconds, sent as `Retry-After`: the lock it waited on is usually released by then.
+    retry_after = 2
+
+
 class AuthenticationError(RegistryError):
     """The caller did not prove who they are: no or wrong key, no or invalid token."""
 

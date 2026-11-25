@@ -13,20 +13,16 @@ A draft can be deleted; nothing else can. Unarchiving never lands on published.
 """
 
 from collections.abc import Mapping
-from typing import Final, Literal
+from typing import Final, Literal, get_args
 
 from registry.domain.enums import CatalogStatus
 
-#: Catalog actions in the order the API lists them.
-ACTIONS: Final = (
-    "edit",
-    "publish",
-    "unpublish",
-    "archive",
-    "unarchive",
-    "delete",
-    "recommend",
-)
+#: Catalog actions, in the order the API lists them. A Literal, so the OpenAPI document (and the
+#: back office's generated types) name every action instead of `string`.
+CatalogAction = Literal[
+    "edit", "publish", "unpublish", "archive", "unarchive", "delete", "recommend"
+]
+ACTIONS: Final[tuple[CatalogAction, ...]] = get_args(CatalogAction)
 
 #: What the lifecycle allows from each status, before the caller's role is considered. An archived
 #: catalog is read-only, so it offers no `edit`; `recommend` needs a published catalog.
@@ -37,6 +33,11 @@ STATUS_ACTIONS: Final[Mapping[CatalogStatus, frozenset[str]]] = {
     CatalogStatus.ARCHIVED: frozenset({"unarchive"}),
 }
 
+
+#: Who can see a catalog, by status (the lifecycle contract's visibility table). The public SQL
+#: keeps these as literals (one statement per read, an index predicate); a test pins them here.
+LISTED_STATUSES: Final = frozenset({CatalogStatus.PUBLISHED})  # feed and search
+DIRECT_LINK_STATUSES: Final = frozenset({CatalogStatus.PUBLISHED, CatalogStatus.UNPUBLISHED})
 
 #: The actions `POST /admin/catalogs/{id}/transitions` takes; the others have their own routes.
 TRANSITION_ACTIONS: Final = ("publish", "unpublish", "archive", "unarchive")
@@ -63,7 +64,9 @@ UNDO_ACTIONS: Final[Mapping[tuple[CatalogStatus, str], UndoAction]] = {
 }
 
 
-def build_allowed_actions(status: CatalogStatus, permissions: frozenset[str]) -> list[str]:
+def build_allowed_actions(
+    status: CatalogStatus, permissions: frozenset[str]
+) -> list[CatalogAction]:
     """Actions this caller may take on a catalog in *status* now: lifecycle ∩ role."""
     return [
         action

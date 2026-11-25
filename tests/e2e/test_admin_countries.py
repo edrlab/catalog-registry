@@ -357,7 +357,7 @@ async def test_each_country_read_is_one_statement(
     db_connection: AsyncConnection,
     searchable_catalogs: None,
 ) -> None:
-    """One statement per read. The login is one more statement."""
+    """One statement per read, not counting the login (one statement, or two within the minute)."""
     await become(db_session, "count@edrlab.org", "viewer")
     seen: list[str] = []
 
@@ -371,11 +371,11 @@ async def test_each_country_read_is_one_statement(
         for path in ("/admin/countries", "/admin/countries/FR"):
             seen.clear()
             await admin_client.get(path, headers=admin_headers("count@edrlab.org"))
-            counts.append(len(seen))
+            counts.append(sum("actors" not in statement for statement in seen))
     finally:
         event.remove(db_connection.sync_connection, "before_cursor_execute", record)
 
-    assert counts == [2, 2]
+    assert counts == [1, 1]
 
 
 def test_kind_counts_have_one_field_per_catalog_kind() -> None:

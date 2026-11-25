@@ -147,7 +147,7 @@ async def resolve_feed_check(
         (Stage.FEED, lambda: _check_feed(run)),
         (Stage.LINKS, lambda: _check_links(run, fetcher, started + budget)),
     ]
-    current = Stage.ADDRESS
+    current, stage_started = Stage.ADDRESS, started
     try:
         async with asyncio.timeout(budget):
             for current, check in stages:
@@ -167,7 +167,15 @@ async def resolve_feed_check(
                     url=run.url,
                 )
             )
-        run.states[current] = ("failed" if run.blocked_in(current) else "warned", _ms(started))
+        run.states[current] = (
+            "failed" if run.blocked_in(current) else "warned",
+            _ms(stage_started),
+        )
+        # `fetch-timed-out` is a fetch finding even when the time ran out earlier: a stage that
+        # holds an error is reported failed, never skipped.
+        for stage in Stage:
+            if stage not in run.states and run.blocked_in(stage):
+                run.states[stage] = ("failed", 0)
     return _build_response(run, stored, started)
 
 
