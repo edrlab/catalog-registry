@@ -796,8 +796,45 @@ async def test_running_out_of_time_in_the_address_stage_reports_the_fetch_as_fai
 
     report = await resolve_feed_check(fetcher, SlowReader(), EDITOR, FEED, budget=0.2)
 
-    states = {stage.key: stage.state for stage in report.stages}
     assert report.verdict == "blocked"
-    assert states["fetch"] == "failed"
-    assert {stage.key for stage in report.stages if stage.state == "failed"} >= {"fetch"}
+    assert [(stage.key, stage.state) for stage in report.stages] == [
+        ("address", "warned"),
+        ("fetch", "failed"),
+        ("feed", "skipped"),
+        ("links", "skipped"),
+    ]
     assert report.stages[0].duration_ms < 1000  # the address stage's own time, not the run's
+
+
+async def test_the_stage_that_runs_out_of_time_reports_its_own_duration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A fake clock: the address stage takes 3 s, the fetch 2 s before the budget ends it. The
+    fetch reports its 2 s, not the 5 s since the check began."""
+    now = [1000.0]
+    monkeypatch.setattr(feed_check_service, "time", SimpleNamespace(monotonic=lambda: now[0]))
+
+    class ClockedReader(FakeReader):
+        async def fetch_admin_catalog_by_href(
+            self, href: str, derived_id: str
+        ) -> tuple[str, str] | None:
+            now[0] += 3
+            return None
+
+    class HangingFetcher(FakeFetcher):
+        async def fetch(self, url: str, *, method: str = "GET", **options: Any) -> FetchResult:
+            now[0] += 2
+            await asyncio.sleep(5)
+            return await super().fetch(url, method=method, **options)
+
+    fetcher = HangingFetcher({FEED: answer(FEED, opds())})
+
+    report = await resolve_feed_check(fetcher, ClockedReader(), EDITOR, FEED, budget=0.2)
+
+    assert [(stage.key, stage.state, stage.duration_ms) for stage in report.stages] == [
+        ("address", "passed", 3000),
+        ("fetch", "failed", 2000),
+        ("feed", "skipped", 0),
+        ("links", "skipped", 0),
+    ]
+    assert report.duration_ms == 5000
