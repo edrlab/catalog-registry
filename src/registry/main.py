@@ -33,6 +33,7 @@ from registry.repositories.catalog_repository import (
     READ_CONNECTION_SETTINGS,
     CatalogRepository,
 )
+from registry.repositories.catalog_rows import guard_write_timeouts
 from registry.repositories.search_repository import (
     SEARCH_CONNECTION_SETTINGS,
     CatalogSearchRepository,
@@ -56,12 +57,14 @@ def bind_admin_stores(app: FastAPI) -> None:
     @asynccontextmanager
     async def open_admin_writer() -> AsyncIterator[AdminCatalogWriter]:
         async with app.state.write_session_factory() as session:
-            yield AdminCatalogWriter(session)
+            with guard_write_timeouts():
+                yield AdminCatalogWriter(session)
 
     @asynccontextmanager
     async def open_actor_store() -> AsyncIterator[ActorRepository]:
         async with app.state.write_session_factory() as session:
-            yield ActorRepository(session)
+            with guard_write_timeouts():
+                yield ActorRepository(session)
 
     app.state.open_admin_reader = open_admin_reader
     #: Feed checks request URLs editors type: one client per check, through `network/`,

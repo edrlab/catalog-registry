@@ -132,6 +132,14 @@ class ReadTimeoutError(RegistryError):
     title = "Service Unavailable"
 
 
+class WriteTimeoutError(RegistryError):
+    """A change waited too long on a lock another change held, or ran past its statement timeout.
+    Nothing was written; the caller can simply try again."""
+
+    status_code = 503
+    title = "Service Unavailable"
+
+
 class AuthenticationError(RegistryError):
     """The caller did not prove who they are: no or wrong key, no or invalid token."""
 
