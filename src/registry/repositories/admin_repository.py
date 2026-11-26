@@ -107,6 +107,7 @@ _ROW_COLUMNS: Final = """
 #: statement is the browse link's, the one a person recognises. The search text is split into
 #: words and every word must occur in the folded title, host, city, or any-language country or
 #: subdivision name; `public.fold` is the database's own folding.
+#: The country `none` arrives uppercased with the codes, as `NONE`, and asks for no country.
 _LIST: Final = """
 WITH matched AS (
   SELECT c.id, c.status, lower(c.title) AS sort_name, {sort_kind} AS sort_kind
@@ -119,7 +120,8 @@ WITH matched AS (
      AND (CAST(:publication_types AS text[]) IS NULL OR EXISTS (
            SELECT 1 FROM catalog_publication_types p
             WHERE p.catalog_id = c.id AND p.publication_type::text = ANY (CAST(:publication_types AS text[]))))
-     AND (CAST(:countries AS text[]) IS NULL OR c.country_code = ANY (CAST(:countries AS text[])))
+     AND (CAST(:countries AS text[]) IS NULL OR c.country_code = ANY (CAST(:countries AS text[]))
+          OR (c.country_code IS NULL AND 'NONE' = ANY (CAST(:countries AS text[]))))
      AND (CAST(:languages AS text[]) IS NULL OR EXISTS (
            SELECT 1 FROM catalog_languages l
             WHERE l.catalog_id = c.id AND l.language_tag = ANY (CAST(:languages AS text[]))))

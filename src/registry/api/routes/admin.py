@@ -148,8 +148,12 @@ async def read_admin_catalogs(
     coverage: Annotated[list[CoverageScope] | None, Query()] = None,
     publication_type: Annotated[list[PublicationType] | None, Query()] = None,
     country: Annotated[
-        list[Annotated[str, StringConstraints(pattern=r"^[A-Za-z]{2}$")]] | None,
-        Query(max_length=MAX_FILTER_VALUES),
+        list[Annotated[str, StringConstraints(pattern=r"^(?:[A-Za-z]{2}|none)$")]] | None,
+        Query(
+            max_length=MAX_FILTER_VALUES,
+            description="ISO 3166-1 alpha-2 code, any case, or `none` for catalogs with no "
+            "country. Repeat to match any of them: `country=none&country=FR`.",
+        ),
     ] = None,
     language: Annotated[
         list[Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9-]{1,35}$")]] | None,

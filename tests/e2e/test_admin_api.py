@@ -687,6 +687,18 @@ async def test_filters_combine_and_arrays_repeat(
     assert 0 < recommended["total"] <= SEED_CATALOG_COUNT
 
 
+async def test_country_none_lists_catalogs_without_a_country_and_combines_with_codes(
+    admin_client: AsyncClient, searchable_catalogs: None
+) -> None:
+    nowhere = await list_catalogs(admin_client, country="none")
+    france = await list_catalogs(admin_client, country="FR")
+    either = await list_catalogs(admin_client, country=["none", "fr"])
+
+    assert nowhere["total"] > 0
+    assert all(item["place"]["country"] is None for item in nowhere["items"])
+    assert either["total"] == nowhere["total"] + france["total"]
+
+
 async def test_search_matches_any_word_in_any_language_without_accents(
     admin_client: AsyncClient, searchable_catalogs: None
 ) -> None:
@@ -795,7 +807,15 @@ async def test_every_sort_matches_a_full_sort_and_pages_concatenate(
 
 
 @pytest.mark.parametrize(
-    "bad", [{"page": 0}, {"per_page": 0}, {"sort": "title"}, {"country": "FRA"}, {"coverage": "x"}]
+    "bad",
+    [
+        {"page": 0},
+        {"per_page": 0},
+        {"sort": "title"},
+        {"country": "FRA"},
+        {"country": "NONE"},
+        {"coverage": "x"},
+    ],
 )
 async def test_invalid_parameters_are_refused(
     admin_client: AsyncClient, bad: dict[str, Any]
