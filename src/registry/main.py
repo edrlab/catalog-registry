@@ -26,6 +26,7 @@ from registry.db.session import (
     check_database_connection,
     create_database_engine,
 )
+from registry.network.icon_worker import fetch_catalog_icon, persist_catalog_icon
 from registry.network.safe_client import SafeHttpClient
 from registry.repositories.actor_repository import ActorRepository
 from registry.repositories.admin_repository import AdminCatalogWriter, AdminRepository
@@ -112,6 +113,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         app.state.write_session_factory = build_session_factory(engine)
         bind_admin_stores(app)
+        app.state.persist_catalog_icon = partial(persist_catalog_icon, resolved)
+        app.state.fetch_catalog_icon = fetch_catalog_icon
         # None when no issuer is configured: a token then cannot be checked and is a 401.
         app.state.resolve_admin_key = (
             build_jwks_key_resolver(resolved.admin_jwks_url) if resolved.admin_jwks_url else None

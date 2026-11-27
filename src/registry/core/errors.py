@@ -98,6 +98,14 @@ class DuplicateCatalogError(ConflictError):
     problem_type = "https://registry.thoriumreader.com/problems/duplicate-catalog"
 
 
+class IconTooLargeError(RegistryError):
+    """An uploaded icon is over the size cap. Its own type, so a form can say so plainly."""
+
+    status_code = 413
+    title = "Content Too Large"
+    problem_type = "https://registry.thoriumreader.com/problems/icon-too-large"
+
+
 class ChecksBusyError(RegistryError):
     """This instance is already running its maximum of feed checks. Try again shortly."""
 

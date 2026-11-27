@@ -45,6 +45,8 @@ async def test_the_detail_repeats_the_list_item_and_adds_the_rest(
         "updated_at",
         "published_at",
         "submitter",
+        "icon_stored",
+        "icon_problem",
     }
     assert body["links"], "a seeded catalog has at least its catalog link"
     assert body["links"] == sorted(body["links"], key=lambda link: (link["rel"], link["href"]))

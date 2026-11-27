@@ -10,7 +10,14 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import StringConstraints
 
 from registry.api.admin_dependencies import require_permission
-from registry.core.errors import ChecksBusyError
+from registry.api.admin_log import ICON_PROBLEM_STATE_KEY
+from registry.core.errors import (
+    AdminUnavailableError,
+    ChecksBusyError,
+    FieldValidationError,
+    IconTooLargeError,
+    RegistryError,
+)
 from registry.domain.admin_models import (
     MAX_PAGE,
     MAX_PER_PAGE,
@@ -25,6 +32,8 @@ from registry.domain.enums import (
     CoverageScope,
     PublicationType,
 )
+from registry.domain.fetching import FetchError
+from registry.network.icon_worker import MAX_ICON_BYTES
 from registry.schemas.admin import (
     CatalogCreateRequest,
     CatalogDetail,
@@ -52,10 +61,13 @@ from registry.services.admin_service import (
     apply_admin_catalog_creation,
     apply_admin_catalog_deletion,
     apply_admin_catalog_edit,
+    apply_admin_catalog_icon,
+    apply_admin_catalog_remote_icon,
     apply_admin_name,
     apply_admin_recommendation,
     apply_admin_transition,
     apply_country_subdivision_types,
+    describe_icon_failure,
     resolve_admin_catalog_detail,
     resolve_admin_catalog_list,
     resolve_admin_country_detail,
@@ -95,6 +107,72 @@ router = APIRouter(
 )
 
 NOT_FOUND = "No catalog with this id, or the id is not a UUID (type `catalog-not-found`)."
+
+
+def _is_stored_icon(request: Request, href: str | None) -> bool:
+    """*href* is the registry's own stored icon, not a library's link."""
+    base = request.app.state.settings.icon_base_url
+    return bool(base and href and href.startswith(base.rstrip("/") + "/"))
+
+
+async def _read_detail(request: Request, actor: AdminActor, catalog_id: str) -> CatalogDetail:
+    async with request.app.state.open_admin_reader() as reader:
+        detail = await resolve_admin_catalog_detail(
+            reader, actor, catalog_id, base_url=request.app.state.settings.base_url
+        )
+    return detail.model_copy(update={"icon_stored": _is_stored_icon(request, detail.icon_url)})
+
+
+async def _store_icon_from(
+    request: Request, actor: AdminActor, detail: CatalogDetail, href: str
+) -> CatalogDetail:
+    """Store the library's icon at *href* as the catalog's own; the detail afterwards."""
+    persist = request.app.state.persist_catalog_icon
+    async with request.app.state.open_admin_writer() as writer:
+        await apply_admin_catalog_remote_icon(
+            writer,
+            actor,
+            detail.id,
+            version=detail.version,
+            href=href,
+            fetch_icon=request.app.state.fetch_catalog_icon,
+            store_icon=persist,
+        )
+    return await _read_detail(request, actor, detail.id)
+
+
+async def _store_new_icon(
+    request: Request, actor: AdminActor, detail: CatalogDetail, before: set[str]
+) -> CatalogDetail:
+    """After a save: an icon link it added that is not stored yet is stored, as the back office's
+    upload would. When that fails the save stands, with the library's link and `icon_problem`."""
+    if not request.app.state.settings.icon_base_url:
+        return detail
+    href = next(
+        (
+            link.href
+            for link in detail.links
+            if link.rel == "icon"
+            and link.href not in before
+            and not _is_stored_icon(request, link.href)
+        ),
+        None,
+    )
+    if href is None:
+        return detail
+    try:
+        return await _store_icon_from(request, actor, detail, href)
+    except (FetchError, RegistryError) as error:
+        _note_icon_problem(request, error)
+        return detail.model_copy(update={"icon_problem": describe_icon_failure(error)})
+
+
+def _note_icon_problem(request: Request, error: Exception) -> None:
+    """The technical reason, for the request's log line; the editor gets plain words."""
+    reason = error.errors[0]["message"] if isinstance(error, FieldValidationError) else str(error)
+    code = f"{error.code} " if isinstance(error, FetchError) else ""
+    setattr(request.state, ICON_PROBLEM_STATE_KEY, f"{type(error).__name__}: {code}{reason}")
+
 
 #: A catalog list that names no status shows what readers see.
 DEFAULT_STATUSES = (CatalogStatus.PUBLISHED,)
@@ -189,10 +267,7 @@ async def read_admin_catalog(
     actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
     catalog_id: str,
 ) -> CatalogDetail:
-    async with request.app.state.open_admin_reader() as reader:
-        return await resolve_admin_catalog_detail(
-            reader, actor, catalog_id, base_url=request.app.state.settings.base_url
-        )
+    return await _read_detail(request, actor, catalog_id)
 
 
 @router.get("/filter-options", summary="Every enumeration with labels, and the places in use")
@@ -265,10 +340,7 @@ async def create_admin_catalog_transition(
         normalised, undo_action = await apply_admin_transition(
             writer, actor, catalog_id, action=body.action, version=body.version
         )
-    async with request.app.state.open_admin_reader() as reader:
-        catalog = await resolve_admin_catalog_detail(
-            reader, actor, normalised, base_url=request.app.state.settings.base_url
-        )
+    catalog = await _read_detail(request, actor, normalised)
     return TransitionResponse(catalog=catalog, undo_action=undo_action)
 
 
@@ -294,10 +366,7 @@ async def replace_admin_catalog_recommended(
         normalised = await apply_admin_recommendation(
             writer, actor, catalog_id, recommended=body.recommended, version=body.version
         )
-    async with request.app.state.open_admin_reader() as reader:
-        return await resolve_admin_catalog_detail(
-            reader, actor, normalised, base_url=request.app.state.settings.base_url
-        )
+    return await _read_detail(request, actor, normalised)
 
 
 INVALID_BODY = "The body is invalid; `errors` names each field."
@@ -327,10 +396,9 @@ async def create_admin_catalog(
             body.model_dump(mode="json", exclude={"publish"}),
             publish=body.publish,
         )
-    async with request.app.state.open_admin_reader() as reader:
-        return await resolve_admin_catalog_detail(
-            reader, actor, catalog_id, base_url=request.app.state.settings.base_url
-        )
+    return await _store_new_icon(
+        request, actor, await _read_detail(request, actor, catalog_id), set()
+    )
 
 
 @router.patch(
@@ -353,18 +421,122 @@ async def update_admin_catalog(
     catalog_id: str,
     body: CatalogUpdateRequest,
 ) -> CatalogDetail:
+    changes = body.model_dump(mode="json", exclude_unset=True, exclude={"version"})
+    # Only an icon this edit adds is stored: an ordinary edit downloads nothing.
+    before = (
+        {link.href for link in (await _read_detail(request, actor, catalog_id)).links}
+        if "links" in changes
+        else None
+    )
     async with request.app.state.open_admin_writer() as writer:
         normalised = await apply_admin_catalog_edit(
+            writer, actor, catalog_id, version=body.version, changes=changes
+        )
+    detail = await _read_detail(request, actor, normalised)
+    return detail if before is None else await _store_new_icon(request, actor, detail, before)
+
+
+async def _read_icon(request: Request) -> tuple[bytes, str]:
+    """The uploaded image and its media type, read up to `MAX_ICON_BYTES` and no further."""
+    media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if not media_type.startswith("image/"):
+        raise FieldValidationError([{"field": "body", "message": "Send an image"}])
+    image = bytearray()
+    async for chunk in request.stream():
+        image += chunk
+        if len(image) > MAX_ICON_BYTES:
+            raise IconTooLargeError("The image is over 5 MB.")
+    if not image:
+        raise FieldValidationError([{"field": "body", "message": "Send an image"}])
+    return bytes(image), media_type
+
+
+@router.put(
+    "/catalogs/{catalog_id}/icon",
+    summary="Replace a catalog's icon with an uploaded image, stored as a 512 px PNG",
+    description=(
+        "The body is the image itself (`Content-Type: image/png`, `image/jpeg`, `image/webp` or "
+        "`image/gif`; SVG cannot be converted), at most 5 MB. The catalog's icon links are "
+        "replaced by one link to the stored PNG."
+    ),
+    responses={
+        404: problem_response(NOT_FOUND),
+        409: problem_response(
+            "`version-conflict`: it changed since it was read. "
+            "`archived-read-only`: an archived catalog cannot be edited."
+        ),
+        413: problem_response("`icon-too-large`: the image is over 5 MB."),
+        422: problem_response("Not an image, or not one the image service can read."),
+        503: problem_response("Icon uploads are not configured, or the image service is down."),
+    },
+)
+async def replace_admin_catalog_icon(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    catalog_id: str,
+    version: Annotated[int, Query(ge=1, description="The version the catalog was read at.")],
+) -> CatalogDetail:
+    image, media_type = await _read_icon(request)
+    persist = request.app.state.persist_catalog_icon
+    async with request.app.state.open_admin_writer() as writer:
+        normalised = await apply_admin_catalog_icon(
             writer,
             actor,
             catalog_id,
-            version=body.version,
-            changes=body.model_dump(mode="json", exclude_unset=True, exclude={"version"}),
+            version=version,
+            store_icon=lambda stored_id: persist(stored_id, image, media_type),
         )
-    async with request.app.state.open_admin_reader() as reader:
-        return await resolve_admin_catalog_detail(
-            reader, actor, normalised, base_url=request.app.state.settings.base_url
+    return await _read_detail(request, actor, normalised)
+
+
+@router.post(
+    "/catalogs/{catalog_id}/icon/store",
+    summary="Store the catalog's icon link as the registry's own 512 px PNG",
+    description=(
+        "For an icon that could not be stored when it was saved (the library's site was down, "
+        "say): the registry downloads it again and stores it, as an upload of it would."
+    ),
+    responses={
+        404: problem_response(NOT_FOUND),
+        409: problem_response(
+            "`version-conflict`: it changed since it was read. "
+            "`archived-read-only`: an archived catalog cannot be edited."
+        ),
+        422: problem_response(
+            "`errors[0].field = icon`: no icon link to store, or it could not be downloaded or "
+            "converted; the message says which."
+        ),
+        503: problem_response("Icon storage is not configured, or the image service is down."),
+    },
+)
+async def store_admin_catalog_icon(
+    request: Request,
+    actor: Annotated[AdminActor, Depends(require_permission("catalog.view"))],
+    catalog_id: str,
+    version: Annotated[int, Query(ge=1, description="The version the catalog was read at.")],
+) -> CatalogDetail:
+    if not request.app.state.settings.icon_base_url:
+        raise AdminUnavailableError("Icon uploads are not configured.")
+    detail = await _read_detail(request, actor, catalog_id)
+    href = next(
+        (
+            link.href
+            for link in detail.links
+            if link.rel == "icon" and not _is_stored_icon(request, link.href)
+        ),
+        None,
+    )
+    if href is None:
+        raise FieldValidationError([{"field": "icon", "message": "There is no icon link to store"}])
+    try:
+        return await _store_icon_from(
+            request, actor, detail.model_copy(update={"version": version}), href
         )
+    except (FetchError, FieldValidationError) as error:
+        _note_icon_problem(request, error)
+        raise FieldValidationError(
+            [{"field": "icon", "message": describe_icon_failure(error)}]
+        ) from error
 
 
 @router.delete(
