@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from registry.core.errors import FieldValidationError
+from registry.core.errors import AdminUnavailableError, FieldValidationError
 from registry.domain.fetching import FetchError
 from registry.network.icon_worker import ICON_IS_SVG
 from tests.conftest import admin_headers
@@ -455,3 +455,186 @@ async def test_trying_again_with_a_file_the_worker_refuses_names_the_icon_field(
             "message": SVG_PROBLEM,
         }
     ]
+
+
+@pytest.fixture
+async def removed(admin_app: FastAPI) -> list[str]:
+    """The catalog ids whose stored icon the registry asked the Worker to delete."""
+    calls: list[str] = []
+
+    async def fake_remove(catalog_id: str) -> None:
+        calls.append(catalog_id)
+
+    admin_app.state.remove_catalog_icon = fake_remove
+    return calls
+
+
+async def stored_icon_catalog(client: AsyncClient, catalog: dict[str, Any]) -> dict[str, Any]:
+    """*catalog* after its icon was uploaded: its one icon link is the stored PNG."""
+    response = await upload(client, catalog["id"], catalog["version"])
+    assert response.status_code == 200, response.text
+    detail: dict[str, Any] = response.json()
+    assert detail["icon_stored"] is True
+    return detail
+
+
+def without_icon(body: dict[str, Any]) -> dict[str, Any]:
+    return body | {"links": [link for link in body["links"] if link["rel"] != "icon"]}
+
+
+async def test_a_save_that_keeps_the_stored_icon_drops_any_other_icon_link(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    catalog: dict[str, Any],
+    downloads: Downloads,
+    removed: list[str],
+) -> None:
+    await become(db_session, EDITOR, "editor")
+    stored = await stored_icon_catalog(admin_client, catalog)
+    body = form_body(stored)
+    body["links"].append({"rel": "icon", "href": LIBRARY_ICON, "type": "image/png"})
+
+    response = await edit(admin_client, stored["id"], body)
+
+    assert response.status_code == 200, response.text
+    assert icon_hrefs(response.json()) == icon_hrefs(stored)
+    assert response.json()["version"] == stored["version"]
+    assert (downloads.hrefs, removed) == ([], [])
+
+
+async def test_replacing_the_stored_icon_with_another_stores_that_one(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    catalog: dict[str, Any],
+    downloads: Downloads,
+    removed: list[str],
+) -> None:
+    await become(db_session, EDITOR, "editor")
+    current = await stored_icon_catalog(admin_client, catalog)
+
+    response = await edit(admin_client, current["id"], with_icon(form_body(current), LIBRARY_ICON))
+
+    assert response.status_code == 200, response.text
+    assert downloads.hrefs == [LIBRARY_ICON]
+    assert response.json()["icon_stored"] is True
+    assert removed == []
+
+
+async def test_a_replacement_that_cannot_be_stored_deletes_the_old_file(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    catalog: dict[str, Any],
+    downloads: Downloads,
+    removed: list[str],
+) -> None:
+    await become(db_session, EDITOR, "editor")
+    current = await stored_icon_catalog(admin_client, catalog)
+    downloads.failures[LIBRARY_ICON] = SITE_DOWN
+
+    response = await edit(admin_client, current["id"], with_icon(form_body(current), LIBRARY_ICON))
+
+    assert response.status_code == 200, response.text
+    assert icon_hrefs(response.json()) == [LIBRARY_ICON]
+    assert response.json()["icon_problem"] == COULD_NOT_FETCH
+    assert removed == [current["id"]]
+
+
+async def test_removing_the_stored_icon_deletes_its_file(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    catalog: dict[str, Any],
+    downloads: Downloads,
+    removed: list[str],
+) -> None:
+    await become(db_session, EDITOR, "editor")
+    current = await stored_icon_catalog(admin_client, catalog)
+
+    response = await edit(admin_client, current["id"], without_icon(form_body(current)))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["icon_url"] is None
+    assert removed == [current["id"]]
+
+
+async def test_an_edit_that_keeps_the_stored_icon_deletes_nothing(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    catalog: dict[str, Any],
+    downloads: Downloads,
+    removed: list[str],
+) -> None:
+    await become(db_session, EDITOR, "editor")
+    current = await stored_icon_catalog(admin_client, catalog)
+
+    response = await edit(admin_client, current["id"], form_body(current) | {"name": "Renamed"})
+
+    assert response.status_code == 200, response.text
+    assert removed == []
+
+
+async def delete_draft(client: AsyncClient, detail: dict[str, Any]) -> Any:
+    return await client.delete(
+        f"/admin/catalogs/{detail['id']}",
+        params={"version": detail["version"]},
+        headers=admin_headers(EDITOR),
+    )
+
+
+async def test_deleting_a_draft_deletes_its_stored_icon(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    searchable_catalogs: None,
+    downloads: Downloads,
+    removed: list[str],
+) -> None:
+    await become(db_session, EDITOR, "editor")
+    draft = (await create(admin_client, with_icon(new_catalog(), LIBRARY_ICON))).json()
+    assert draft["icon_stored"] is True
+
+    response = await delete_draft(admin_client, draft)
+
+    assert response.status_code == 204
+    assert removed == [draft["id"]]
+
+
+async def test_deleting_a_draft_with_a_link_icon_deletes_nothing(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    searchable_catalogs: None,
+    downloads: Downloads,
+    removed: list[str],
+) -> None:
+    await become(db_session, EDITOR, "editor")
+    downloads.failures[LIBRARY_ICON] = SITE_DOWN
+    draft = (await create(admin_client, with_icon(new_catalog(), LIBRARY_ICON))).json()
+    assert draft["icon_stored"] is False
+
+    response = await delete_draft(admin_client, draft)
+
+    assert response.status_code == 204
+    assert removed == []
+
+
+async def test_a_file_that_cannot_be_deleted_never_fails_the_change(
+    admin_app: FastAPI,
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    searchable_catalogs: None,
+    downloads: Downloads,
+) -> None:
+    await become(db_session, EDITOR, "editor")
+
+    async def unreachable_worker(catalog_id: str) -> None:
+        raise AdminUnavailableError("The image service answered 405.")
+
+    admin_app.state.remove_catalog_icon = unreachable_worker
+    draft = (await create(admin_client, with_icon(new_catalog(), LIBRARY_ICON))).json()
+
+    response = await delete_draft(admin_client, draft)
+
+    assert response.status_code == 204
+    assert (await read_detail_status(admin_client, draft["id"])) == 404
+
+
+async def read_detail_status(client: AsyncClient, catalog_id: str) -> int:
+    return (await client.get(f"/admin/catalogs/{catalog_id}", headers=admin_headers())).status_code

@@ -22,10 +22,26 @@ back office ──upload──▶ registry ──────────image�
 3. With the catalog row locked, the registry sends the image to the Worker.
 4. The Worker converts it to a 512 px PNG (aspect ratio kept), stores it as `<catalog-id>-icon.png`, and answers with
    the file name and a version tag.
-5. The registry replaces the catalog's icon links with one link to the stored PNG, ending in `?v=<version tag>`, so an
-   app that caches icons by address picks up a replaced one. The catalog's version goes up by one.
+5. The registry replaces the catalog's icon links with one link to the stored PNG, ending in `?v=<version tag>-<time>`,
+   new on every store, so an app or a cache that keeps icons by address picks up a replaced one. The catalog's version
+   goes up by one.
 
 Removing an icon, or going back to an earlier one, is an ordinary catalog edit (`PATCH` with the links).
+
+### One icon per catalog
+
+Once an icon is stored, a save that keeps it drops any other icon link it carries (the library's original icon,
+brought back by a restored draft or the website check): nothing is downloaded and no second icon appears. To use a
+different icon, the save leaves the stored one out and sends the new one, which is then stored over the same file.
+The website check never reports the stored icon as missing from the library's site; the site's own icon is still
+reported, so the back office can offer it as a replacement.
+
+### Removing stored files
+
+When a draft with a stored icon is deleted, or an edit leaves a catalog without its stored icon (removed, or a
+replacement that could not be stored), the registry asks the Worker to delete the file (`DELETE /<catalog-id>`). This
+happens after the change is committed and never fails it; a file that cannot be deleted is noted in the request log.
+An archived catalog keeps its icon. A deleted file can still be served from Cloudflare's cache for a while.
 
 ### Icons saved as links
 

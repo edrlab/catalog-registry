@@ -4,7 +4,7 @@ Every route depends on `require_permission(...)`. A write also checks the permis
 action in the service, where the action is known.
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import StringConstraints
@@ -172,6 +172,25 @@ def _note_icon_problem(request: Request, error: Exception) -> None:
     reason = error.errors[0]["message"] if isinstance(error, FieldValidationError) else str(error)
     code = f"{error.code} " if isinstance(error, FetchError) else ""
     setattr(request.state, ICON_PROBLEM_STATE_KEY, f"{type(error).__name__}: {code}{reason}")
+
+
+def _keep_stored_icon(request: Request, links: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One icon per catalog: a save that keeps the stored icon drops any other icon link (a draft or
+    a website check bringing the library's icon back). Nothing is downloaded for those."""
+    if not any(link["rel"] == "icon" and _is_stored_icon(request, link["href"]) for link in links):
+        return links
+    return [
+        link for link in links if link["rel"] != "icon" or _is_stored_icon(request, link["href"])
+    ]
+
+
+async def _remove_stored_icon(request: Request, catalog_id: str) -> None:
+    """Delete a stored icon nothing uses any more. Housekeeping after the change is committed: a
+    failure is logged and never fails the editor's request."""
+    try:
+        await request.app.state.remove_catalog_icon(catalog_id)
+    except RegistryError as error:
+        _note_icon_problem(request, error)
 
 
 #: A catalog list that names no status shows what readers see.
@@ -426,18 +445,21 @@ async def update_admin_catalog(
     body: CatalogUpdateRequest,
 ) -> CatalogDetail:
     changes = body.model_dump(mode="json", exclude_unset=True, exclude={"version"})
-    # Only an icon this edit adds is stored: an ordinary edit downloads nothing.
-    before = (
-        {link.href for link in (await _read_detail(request, actor, catalog_id)).links}
-        if "links" in changes
-        else None
-    )
+    # Icons are looked at only when the links change: an ordinary edit downloads nothing.
+    previous = await _read_detail(request, actor, catalog_id) if "links" in changes else None
+    if previous is not None and changes["links"] is not None:
+        changes["links"] = _keep_stored_icon(request, changes["links"])
     async with request.app.state.open_admin_writer() as writer:
         normalised = await apply_admin_catalog_edit(
             writer, actor, catalog_id, version=body.version, changes=changes
         )
     detail = await _read_detail(request, actor, normalised)
-    return detail if before is None else await _store_new_icon(request, actor, detail, before)
+    if previous is None:
+        return detail
+    detail = await _store_new_icon(request, actor, detail, {link.href for link in previous.links})
+    if previous.icon_stored and not detail.icon_stored:
+        await _remove_stored_icon(request, normalised)
+    return detail
 
 
 async def _read_icon(request: Request) -> tuple[bytes, str]:
@@ -563,8 +585,11 @@ async def delete_admin_catalog(
     # A query string is text, so not `SeenVersion`, whose strictness is for JSON bodies.
     version: Annotated[int, Query(ge=1)],
 ) -> Response:
+    previous = await _read_detail(request, actor, catalog_id)
     async with request.app.state.open_admin_writer() as writer:
         await apply_admin_catalog_deletion(writer, actor, catalog_id, version=version)
+    if previous.icon_stored:
+        await _remove_stored_icon(request, previous.id)
     return Response(status_code=204)
 
 
@@ -594,7 +619,13 @@ async def create_admin_feed_check(
         request.app.state.open_feed_fetcher() as fetcher,
     ):
         return await resolve_feed_check(
-            fetcher, reader, actor, body.url, catalog_id=body.catalog_id, website=body.website
+            fetcher,
+            reader,
+            actor,
+            body.url,
+            catalog_id=body.catalog_id,
+            website=body.website,
+            stored_icon_base=request.app.state.settings.icon_base_url,
         )
 
 

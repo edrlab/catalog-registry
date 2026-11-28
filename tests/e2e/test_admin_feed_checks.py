@@ -365,3 +365,32 @@ async def test_the_route_is_in_the_openapi_document(admin_client: AsyncClient) -
         report["required"]
     )
     assert json.dumps(report)
+
+
+async def test_a_re_check_never_reports_the_stored_icon_as_removed(
+    admin_client: AsyncClient, editor: str, admin_app: FastAPI
+) -> None:
+    admin_app.state.settings = admin_app.state.settings.model_copy(
+        update={"icon_base_url": "https://icons.example.org"}
+    )
+    feed = (await check(admin_client, {"url": FEED})).json()["feed"]
+    links = [
+        {key: value for key, value in link.items() if key != "active" and value is not None}
+        for link in feed["links"]
+    ]
+    stored_icon = {"rel": "icon", "href": "https://icons.example.org/x-icon.png?v=1"}
+    created = await admin_client.post(
+        "/admin/catalogs",
+        json={"name": "Example Library", "links": [*links, stored_icon], "kinds": ["public"]},
+        headers=admin_headers(EDITOR),
+    )
+    assert created.status_code == 201, created.text
+
+    body = {"url": FEED, "website": "https://www.example.org/", "catalog_id": created.json()["id"]}
+    report = (await check(admin_client, body)).json()
+
+    changes = {change["field"]: change for change in report["changes"]}
+    assert [link["href"] for link in changes["links"]["removed"]] == []
+    assert ("icon", "https://www.example.org/favicon.ico") in [
+        (link["rel"], link["href"]) for link in changes["links"]["added"]
+    ]

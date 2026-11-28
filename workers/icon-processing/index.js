@@ -3,9 +3,10 @@
   //
   // PUT /<catalog-id>, body = the image bytes, header Authorization: Bearer <ICON_WORKER_SECRET>.
   //   200 {"key": "<catalog-id>-icon.png", "etag": "..."}
-  //   400 not a catalog id · 401 no or wrong secret · 405 not PUT · 413 empty or over 5 MB
+  //   400 not a catalog id · 401 no or wrong secret · 405 not PUT or DELETE · 413 empty or over 5 MB
   //   422 not an image that can be read (the caller's file)
   //   500 the Worker is misconfigured · 502 Images or R2 failed (ours, not the caller's)
+  // DELETE /<catalog-id>, same header: removes <catalog-id>-icon.png. 204, also when it was gone.
   //   Errors are RFC 9457 problem details (application/problem+json), like the registry's own.
   //
   // Bindings: Images as IMAGES, R2 bucket `catalog-registry` as ICONS. Secret: ICON_WORKER_SECRET.
@@ -17,7 +18,9 @@
   
   export default {
     async fetch(request, env) {
-      if (request.method !== "PUT") return reply(405, "Method not allowed");
+      if (request.method !== "PUT" && request.method !== "DELETE") {
+        return reply(405, "Method not allowed");
+      }
       if (!env.IMAGES || !env.ICONS) {
         console.error("icon worker: IMAGES or ICONS binding missing");
         return reply(500, "Worker misconfigured");
@@ -26,6 +29,16 @@
   
       const id = new URL(request.url).pathname.slice(1);
       if (!CATALOG_ID.test(id)) return reply(400, "Not a catalog id");
+      const key = `${id}-icon.png`;
+      if (request.method === "DELETE") {
+        try {
+          await env.ICONS.delete(key); // R2 deletes are idempotent: a missing key is not an error
+          return new Response(null, { status: 204 });
+        } catch (error) {
+          console.error("icon worker: deleting failed", key, String(error));
+          return reply(502, "Deleting failed");
+        }
+      }
       const declared = Number(request.headers.get("content-length"));
       if (!(declared > 0) || declared > MAX_BYTES) return reply(413, "Send an image of at most 5 MB");
   
@@ -63,7 +76,6 @@
         return reply(502, "Conversion failed");
       }
   
-      const key = `${id}-icon.png`;
       try {
         const stored = await env.ICONS.put(key, png, { httpMetadata: { contentType: "image/png" } });
         return Response.json({ key, etag: stored.etag });
@@ -105,7 +117,7 @@
   // RFC 9457. `about:blank`: the status says what kind of problem it is; `detail` says which.
   function reply(status, detail) {
     const headers = { "content-type": "application/problem+json" };
-    if (status === 405) headers.allow = "PUT"; // RFC 9110 §15.5.6
+    if (status === 405) headers.allow = "PUT, DELETE"; // RFC 9110 §15.5.6
     const body = { type: "about:blank", title: TITLES[status], status, detail };
     return new Response(JSON.stringify(body), { status, headers });
   }
