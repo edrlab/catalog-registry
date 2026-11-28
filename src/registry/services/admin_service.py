@@ -4,10 +4,11 @@ import dataclasses
 import json
 import re
 import uuid
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from registry.core.errors import (
+    AdminUnavailableError,
     ArchivedReadOnlyError,
     CatalogNotFoundError,
     CountryNotFoundError,
@@ -33,6 +34,7 @@ from registry.domain.catalog_document import (
     build_iso_code_problems,
 )
 from registry.domain.enums import CatalogKind, CatalogStatus
+from registry.domain.fetching import FetchError
 from registry.domain.labels import (
     COLOR_LABELS,
     COVERAGE_LABELS,
@@ -429,6 +431,76 @@ async def apply_admin_catalog_edit(
     await writer.persist_catalog_document(normalised, document)
     await writer.commit_admin_write()
     return normalised
+
+
+async def apply_admin_catalog_icon(
+    writer: AdminWriter,
+    actor: AdminActor,
+    catalog_id: str,
+    *,
+    version: int,
+    store_icon: Callable[[str], Awaitable[str]],
+) -> str:
+    """Replace the catalog's icon links with one icon that *store_icon* stores and returns the URL
+    of. Role, then version, then lifecycle, as an edit. The row stays locked while the image is
+    stored, so a concurrent edit waits rather than being lost or losing the icon."""
+    _require_catalog_permission(actor, "edit")
+    normalised = _normalise_catalog_id(catalog_id)
+    state = await _lock_seen_catalog(writer, normalised, version)
+    _require_lifecycle(state.status, "edit")
+    href = await store_icon(normalised)
+    current = await writer.fetch_catalog_document(normalised)
+    others = [link for link in current["links"] if link.get("rel") != "icon"]
+    document = {
+        "metadata": current["metadata"],
+        "links": [*others, {"rel": "icon", "href": href, "type": "image/png"}],
+    }
+    if _comparable(document) == _comparable(current):
+        return normalised
+    _validate_catalog_document(document)
+    await writer.persist_catalog_document(normalised, document)
+    await writer.commit_admin_write()
+    return normalised
+
+
+async def apply_admin_catalog_remote_icon(
+    writer: AdminWriter,
+    actor: AdminActor,
+    catalog_id: str,
+    *,
+    version: int,
+    href: str,
+    fetch_icon: Callable[[str], Awaitable[tuple[bytes, str]]],
+    store_icon: Callable[[str, bytes, str], Awaitable[str]],
+) -> str:
+    """Store the library's icon at *href* as the catalog's own, as an upload of it would. It is
+    downloaded once the row is locked and the version checked, so a stale call fetches nothing."""
+
+    async def fetch_and_store(stored_id: str) -> str:
+        image, media_type = await fetch_icon(href)
+        return await store_icon(stored_id, image, media_type)
+
+    return await apply_admin_catalog_icon(
+        writer, actor, catalog_id, version=version, store_icon=fetch_and_store
+    )
+
+
+def describe_icon_failure(error: Exception) -> str:
+    """What an editor reads when a library's icon could not be copied: one plain sentence, no status
+    codes or formats (those go to the request log). The library's own icon link stays."""
+    if isinstance(error, FetchError):
+        if error.code == "fetch-too-large":
+            return "This icon is too large to copy, so the library's own icon is used."
+        return (
+            "We couldn't fetch the icon from the library's website just now, so its own icon is "
+            "used for now. Try again later."
+        )
+    if isinstance(error, FieldValidationError):
+        # The image service's refusal, already in plain words (`network/icon_worker.py`).
+        return f"{error.errors[0]['message']}. The library's own icon is used."
+    if isinstance(error, AdminUnavailableError):
+        return "Icons can't be copied right now. Try again later."
+    return "The icon couldn't be copied this time. Try again later."
 
 
 async def apply_admin_catalog_deletion(

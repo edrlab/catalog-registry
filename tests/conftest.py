@@ -251,6 +251,10 @@ def settings(database_url: str) -> Settings:
         seed_file=SEED_FILE,
         environment="test",
         base_url="http://testserver",
+        # A developer's own .env may point at the real image Worker; no test may call it.
+        icon_worker_url=None,
+        icon_worker_secret=None,
+        icon_base_url=None,
     )
 
 

@@ -112,3 +112,24 @@ def test_a_missing_environment_is_production(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.delenv("REGISTRY_ENVIRONMENT", raising=False)
 
     assert build().environment == "production"
+
+
+ICON_URLS = {
+    "icon_worker_url": "https://worker.example.test",
+    "icon_base_url": "https://icons.example.test",
+}
+ICONS: dict[str, Any] = {**ICON_URLS, "icon_worker_secret": SecretStr("s")}
+
+
+@pytest.mark.parametrize("missing", list(ICONS))
+def test_the_icon_settings_come_together(missing: str) -> None:
+    with pytest.raises(ValidationError, match="set together"):
+        build(environment="local", **{**ICONS, missing: None})
+
+
+@pytest.mark.parametrize("field", ["icon_worker_url", "icon_base_url"])
+def test_the_icon_addresses_are_https_outside_local(field: str) -> None:
+    plain = ICON_URLS[field].replace("https://", "http://")
+    assert build(environment="local", **{**ICONS, field: plain})
+    with pytest.raises(ValidationError, match=f"{field.upper()} must be https"):
+        build(environment="production", **{**ICONS, field: plain})

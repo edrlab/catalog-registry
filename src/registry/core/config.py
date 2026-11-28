@@ -94,6 +94,21 @@ class Settings(BaseSettings):
         default=False,
         description="Local development only.",
     )
+    icon_worker_url: str | None = Field(
+        default=None,
+        description=(
+            "The image Worker that turns an uploaded icon into a PNG and stores it in object "
+            "storage. Unset means icon uploads answer 503. Set the three icon settings together."
+        ),
+    )
+    icon_worker_secret: SecretStr | None = Field(
+        default=None,
+        description="Bearer token the image Worker expects. Set it from a secret store.",
+    )
+    icon_base_url: str | None = Field(
+        default=None,
+        description="Public address the stored icons are served from, without a trailing slash.",
+    )
 
     @model_validator(mode="after")
     def _admin_configuration_fails_closed(self) -> "Settings":
@@ -125,6 +140,18 @@ class Settings(BaseSettings):
                 )
             if not self.admin_jwks_url.startswith("https://"):
                 raise ValueError("REGISTRY_ADMIN_JWKS_URL must be https outside local")
+        icon_settings = (self.icon_worker_url, self.icon_worker_secret, self.icon_base_url)
+        if any(icon_settings) and not all(icon_settings):
+            raise ValueError(
+                "REGISTRY_ICON_WORKER_URL, REGISTRY_ICON_WORKER_SECRET and REGISTRY_ICON_BASE_URL "
+                "are set together or not at all"
+            )
+        if deployed and self.icon_worker_url and not self.icon_worker_url.startswith("https://"):
+            # The secret travels with every upload.
+            raise ValueError("REGISTRY_ICON_WORKER_URL must be https outside local")
+        if deployed and self.icon_base_url and not self.icon_base_url.startswith("https://"):
+            # The icon link is served to reading apps and the back office, which load https only.
+            raise ValueError("REGISTRY_ICON_BASE_URL must be https outside local")
         return self
 
     @property

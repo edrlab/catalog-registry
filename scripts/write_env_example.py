@@ -50,6 +50,8 @@ LOCAL_EXAMPLES = {
     # developer sets their own (`openssl rand -base64 32`).
     "service_keys": "",
     "read_only_service_keys": "",
+    # Blank: the three icon settings go together, and a placeholder secret alone fails at boot.
+    "icon_worker_secret": "",
     # Named like secrets, but they are public identifiers.
     "admin_token_issuer": "",
     "admin_token_audience": "",

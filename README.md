@@ -84,6 +84,7 @@ make live-check URL=https://registry.thoriumreader.com ARGS="--deployed"
 | [`docs/performance.md`](docs/performance.md) | Why a search is one database round trip, how to measure it, what compression each client gets |
 | [`docs/search-test-cases.md`](docs/search-test-cases.md) | The searches used to check search and how to run them (`make search-score`) |
 | [`docs/importing.md`](docs/importing.md) | `make add`: import a catalog from its live OPDS feed |
+| [`docs/icons.md`](docs/icons.md) | Catalog icons: upload, conversion to a 512 px PNG by a Cloudflare Worker, storage in R2, errors and settings |
 | [`docs/schemas.md`](docs/schemas.md) | The `schema/` directory: contract, vendored and generated files |
 
 ## Data

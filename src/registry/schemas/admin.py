@@ -150,6 +150,11 @@ class CatalogDetail(CatalogListItem):
     published_at: datetime.datetime | None
     #: Only for a role that reviews submissions; otherwise null. It is a third party's email.
     submitter: Submitter | None
+    #: The icon is the registry's own stored PNG, not a link to the library's site.
+    icon_stored: bool = False
+    #: Only in the answer to a save that added an icon the registry could not store; it says why
+    #: (the site down, a format that cannot be converted). The link was kept.
+    icon_problem: str | None = None
 
 
 class CatalogListResponse(AdminModel):

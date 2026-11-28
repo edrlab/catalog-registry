@@ -43,6 +43,8 @@ def configure_admin_log() -> None:
 
 #: Where the authenticated actor's id is kept for the request's log line.
 ACTOR_STATE_KEY: Final = "admin_actor_id"
+#: Why an icon could not be copied, in technical terms (the editor reads plain words instead).
+ICON_PROBLEM_STATE_KEY: Final = "icon_problem"
 
 
 def log_admin_request(scope: MutableMapping[str, Any], *, status: int) -> None:
@@ -61,6 +63,8 @@ def log_admin_request(scope: MutableMapping[str, Any], *, status: int) -> None:
         "status": status,
         "request_id": state.get("request_id", "-"),
     }
+    if ICON_PROBLEM_STATE_KEY in state:
+        line["icon_problem"] = state[ICON_PROBLEM_STATE_KEY]
     _log.log(logging.ERROR if status >= SERVER_ERROR_FROM else logging.INFO, json.dumps(line))
 
 
