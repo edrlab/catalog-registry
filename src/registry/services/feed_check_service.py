@@ -123,6 +123,7 @@ async def resolve_feed_check(
     *,
     catalog_id: str | None = None,
     website: str | None = None,
+    stored_icon_base: str | None = None,
     budget: float = CHECK_BUDGET_SECONDS,
 ) -> FeedCheckResponse:
     """Check *url* and say what a catalog would get from it. With *catalog_id*, also what changed
@@ -139,6 +140,18 @@ async def resolve_feed_check(
         # One spelling from here on: the duplicate check compares it with the stored id.
         catalog_id = _normalise_checked_id(catalog_id)
         stored = await _fetch_stored_catalog(reader, catalog_id)
+        if stored_icon_base:
+            # The registry's own stored icon is not something the library publishes, so it is never
+            # "removed"; the library's icon is then offered as a replacement (`added`).
+            own = stored_icon_base.rstrip("/") + "/"
+            stored = dataclasses.replace(
+                stored,
+                links=tuple(
+                    link
+                    for link in stored.links
+                    if not (link.rel == LinkRel.ICON.value and link.href.startswith(own))
+                ),
+            )
     started = time.monotonic()
     run = _Run(url=url, address=url, website=website)
     stages: list[tuple[Stage, Callable[[], Awaitable[None]]]] = [

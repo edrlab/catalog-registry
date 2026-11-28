@@ -7,7 +7,10 @@ import pytest
 from registry.core.errors import PermissionDeniedError
 from registry.domain.admin_models import AdminActor
 from registry.domain.enums import ActorRole
-from registry.services.admin_service import apply_country_subdivision_types
+from registry.services.admin_service import (
+    apply_admin_icon_cleanup,
+    apply_country_subdivision_types,
+)
 
 
 async def test_an_editor_cannot_change_the_types_a_country_offers() -> None:
@@ -64,3 +67,53 @@ async def test_a_login_from_another_account_with_the_same_email_is_refused(
     else:
         with pytest.raises(PermissionDeniedError):
             await resolve_admin_actor(store, identity)
+
+
+STORED_ICON = "https://icons.example.org/c-icon.png?v=a-1"
+
+
+class CatalogUnderLock:
+    """A writer holding one catalog, recording the lock before any read of it."""
+
+    def __init__(self, links: list[dict[str, str]] | None) -> None:
+        self.links = links
+        self.calls: list[str] = []
+
+    async def lock_admin_catalog(self, catalog_id: str) -> object | None:
+        self.calls.append("lock")
+        return None if self.links is None else object()
+
+    async def fetch_catalog_document(self, catalog_id: str) -> dict[str, Any]:
+        self.calls.append("read")
+        return {"metadata": {}, "links": self.links}
+
+
+@pytest.mark.parametrize(
+    ("links", "deleted"),
+    [
+        ([{"rel": "icon", "href": STORED_ICON}], False),
+        ([{"rel": "icon", "href": "https://library.example.org/icon.png"}], True),
+        ([], True),
+        (None, True),
+    ],
+    ids=["stored-again-since", "a-library-link", "no-icon", "catalog-deleted"],
+)
+async def test_a_stored_icon_file_is_deleted_only_when_the_locked_catalog_no_longer_uses_it(
+    links: list[dict[str, str]] | None, deleted: bool
+) -> None:
+    writer = CatalogUnderLock(links)
+    removed: list[str] = []
+
+    async def remove(catalog_id: str) -> None:
+        writer.calls.append("delete")
+        removed.append(catalog_id)
+
+    await apply_admin_icon_cleanup(
+        writer,  # type: ignore[arg-type]
+        "c",
+        is_stored=lambda href: href.startswith("https://icons.example.org/"),
+        remove_icon=remove,
+    )
+
+    assert removed == (["c"] if deleted else [])
+    assert writer.calls[0] == "lock"

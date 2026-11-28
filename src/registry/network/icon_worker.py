@@ -6,6 +6,7 @@ or 4xx when the bytes are not an image it can read. The address is ours, from th
 one someone typed, so this does not go through `SafeHttpClient`.
 """
 
+import time
 from typing import Final
 
 import httpx
@@ -38,7 +39,9 @@ async def persist_catalog_icon(
     settings: Settings, catalog_id: str, image: bytes, media_type: str
 ) -> str:
     """Store *image* as the catalog's icon and return its public URL. The URL carries the stored
-    object's etag as `?v=`, so a reader that caches icons by URL picks up a replaced one."""
+    object's etag and the time it was stored as `?v=`, so a reader or a cache that keeps icons by
+    URL picks up a replaced one, and an icon stored again after its file went missing gets a new
+    URL rather than a cached "not found"."""
     worker, secret, base = (
         settings.icon_worker_url,
         settings.icon_worker_secret,
@@ -71,7 +74,25 @@ async def persist_catalog_icon(
         raise AdminUnavailableError("The image service gave an unreadable answer.") from error
     if key != f"{catalog_id}-icon.png" or not isinstance(etag, str) or not etag.isalnum():
         raise AdminUnavailableError("The image service gave an unexpected answer.")
-    return f"{base.rstrip('/')}/{key}?v={etag}"
+    return f"{base.rstrip('/')}/{key}?v={etag}-{int(time.time())}"
+
+
+async def remove_catalog_icon(settings: Settings, catalog_id: str) -> None:
+    """Ask the Worker to delete the catalog's stored icon (`DELETE {worker}/{catalog_id}`). One that
+    is already gone is not an error. Raises `AdminUnavailableError` when it cannot be done."""
+    worker, secret = settings.icon_worker_url, settings.icon_worker_secret
+    if not (worker and secret):
+        raise AdminUnavailableError("Icon uploads are not configured.")
+    try:
+        async with httpx.AsyncClient(timeout=ICON_WORKER_TIMEOUT_SECONDS) as client:
+            response = await client.delete(
+                f"{worker.rstrip('/')}/{catalog_id}",
+                headers={"Authorization": f"Bearer {secret.get_secret_value()}"},
+            )
+    except httpx.HTTPError as error:
+        raise AdminUnavailableError("The image service could not be reached.") from error
+    if response.status_code not in {httpx.codes.OK, httpx.codes.NO_CONTENT}:
+        raise AdminUnavailableError(f"The image service answered {response.status_code}.")
 
 
 async def fetch_catalog_icon(href: str) -> tuple[bytes, str]:

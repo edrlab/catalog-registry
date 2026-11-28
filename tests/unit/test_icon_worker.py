@@ -15,6 +15,7 @@ from registry.network.icon_worker import (
     ICON_TOO_LARGE,
     fetch_catalog_icon,
     persist_catalog_icon,
+    remove_catalog_icon,
 )
 from registry.network.safe_client import SafeHttpClient
 from registry.services.admin_service import describe_icon_failure
@@ -50,9 +51,11 @@ async def test_the_image_goes_to_the_worker_and_the_url_carries_the_stored_versi
         httpx.Response(200, json={"key": f"{CATALOG_ID}-icon.png", "etag": "abc123"}),
     )
 
+    monkeypatch.setattr("registry.network.icon_worker.time.time", lambda: 1_790_000_000.5)
+
     url = await persist_catalog_icon(SETTINGS, CATALOG_ID, b"bytes", "image/webp")
 
-    assert url == f"https://icons.example.org/{CATALOG_ID}-icon.png?v=abc123"
+    assert url == f"https://icons.example.org/{CATALOG_ID}-icon.png?v=abc123-1790000000"
     (request,) = seen
     assert (request.method, str(request.url)) == ("PUT", f"https://worker.example.org/{CATALOG_ID}")
     assert request.headers["authorization"] == "Bearer worker-secret"
@@ -223,3 +226,38 @@ async def test_a_site_that_does_not_answer_200_is_a_fetch_error_naming_the_statu
         await fetch_catalog_icon(LIBRARY_ICON)
 
     assert raised.value.detail == "The site answered 503."
+
+
+@pytest.mark.parametrize("status", [200, 204])
+async def test_removing_an_icon_asks_the_worker_to_delete_it(
+    monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    sent = answer_with(monkeypatch, httpx.Response(status))
+
+    await remove_catalog_icon(SETTINGS, CATALOG_ID)
+
+    (request,) = sent
+    assert request.method == "DELETE"
+    assert str(request.url) == f"https://worker.example.org/{CATALOG_ID}"
+    assert request.headers["authorization"] == "Bearer worker-secret"
+
+
+@pytest.mark.parametrize("status", [401, 405, 502])
+async def test_a_worker_that_does_not_delete_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    answer_with(monkeypatch, httpx.Response(status))
+
+    with pytest.raises(AdminUnavailableError):
+        await remove_catalog_icon(SETTINGS, CATALOG_ID)
+
+
+async def test_removing_without_a_worker_configured_sends_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent = answer_with(monkeypatch, httpx.Response(204))
+    bare = SETTINGS.model_copy(update={"icon_worker_url": None, "icon_worker_secret": None})
+
+    with pytest.raises(AdminUnavailableError):
+        await remove_catalog_icon(bare, CATALOG_ID)
+    assert sent == []
