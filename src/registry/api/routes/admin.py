@@ -63,6 +63,7 @@ from registry.services.admin_service import (
     apply_admin_catalog_edit,
     apply_admin_catalog_icon,
     apply_admin_catalog_remote_icon,
+    apply_admin_icon_cleanup,
     apply_admin_name,
     apply_admin_recommendation,
     apply_admin_transition,
@@ -188,7 +189,13 @@ async def _remove_stored_icon(request: Request, catalog_id: str) -> None:
     """Delete a stored icon nothing uses any more. Housekeeping after the change is committed: a
     failure is logged and never fails the editor's request."""
     try:
-        await request.app.state.remove_catalog_icon(catalog_id)
+        async with request.app.state.open_admin_writer() as writer:
+            await apply_admin_icon_cleanup(
+                writer,
+                catalog_id,
+                is_stored=lambda href: _is_stored_icon(request, href),
+                remove_icon=request.app.state.remove_catalog_icon,
+            )
     except RegistryError as error:
         _note_icon_problem(request, error)
 

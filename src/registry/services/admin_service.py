@@ -485,6 +485,23 @@ async def apply_admin_catalog_remote_icon(
     )
 
 
+async def apply_admin_icon_cleanup(
+    writer: AdminWriter,
+    catalog_id: str,
+    *,
+    is_stored: Callable[[str], bool],
+    remove_icon: Callable[[str], Awaitable[None]],
+) -> None:
+    """Delete the catalog's stored icon file when the catalog no longer uses it. Checked again with
+    the row locked as an icon upload locks it, and the lock is held through the delete, so an icon
+    stored since the change that dropped it is never deleted. A deleted catalog has no uploads."""
+    if await writer.lock_admin_catalog(catalog_id) is not None:
+        links = (await writer.fetch_catalog_document(catalog_id))["links"]
+        if any(link.get("rel") == "icon" and is_stored(link["href"]) for link in links):
+            return
+    await remove_icon(catalog_id)
+
+
 def describe_icon_failure(error: Exception) -> str:
     """What an editor reads when a library's icon could not be copied: one plain sentence, no status
     codes or formats (those go to the request log). The library's own icon link stays."""
